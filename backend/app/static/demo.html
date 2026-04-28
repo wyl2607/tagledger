@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Label OCR Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f0e8;
+      color: #1d2528;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #f6d6a8 0, transparent 34rem), #f4f0e8; }
+    header { padding: 42px 24px 20px; max-width: 1120px; margin: 0 auto; }
+    nav { display: flex; gap: 10px; margin-bottom: 22px; }
+    nav a { display: inline-flex; align-items: center; min-height: 38px; border-radius: 8px; padding: 0 14px; color: #1d2528; text-decoration: none; font-weight: 900; border: 1px solid rgba(29, 37, 40, .16); background: rgba(255, 255, 255, .7); }
+    nav a[aria-current="page"] { background: #1d2528; color: #fff; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .14em; color: #7b4f23; font-weight: 800; font-size: 12px; }
+    h1 { font-size: clamp(34px, 5vw, 68px); line-height: .94; max-width: 780px; margin: 12px 0; }
+    .subtitle { font-size: 18px; max-width: 720px; color: #506165; }
+    main { max-width: 1120px; margin: 0 auto; padding: 10px 24px 48px; display: grid; grid-template-columns: 1.05fr .95fr; gap: 20px; }
+    .panel { background: rgba(255, 255, 255, .82); border: 1px solid rgba(29, 37, 40, .12); border-radius: 8px; box-shadow: 0 18px 55px rgba(54, 43, 28, .12); padding: 22px; backdrop-filter: blur(18px); }
+    h2 { margin: 0 0 16px; font-size: 22px; }
+    label { display: block; font-size: 13px; font-weight: 800; color: #39484b; margin: 14px 0 7px; }
+    input, select, button { width: 100%; min-height: 44px; border-radius: 8px; border: 1px solid #c9d0cf; padding: 12px 13px; font-size: 16px; background: white; color: #1d2528; }
+    input[readonly] { background: #f2f5f4; color: #566266; }
+    button { border: 0; cursor: pointer; font-weight: 900; background: #1d2528; color: #fff; transition: transform .12s ease, opacity .12s ease; }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .secondary { background: #e7ecea; color: #1d2528; }
+    .danger { background: #8d2b20; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+    .status { min-height: 22px; font-weight: 700; color: #7b4f23; margin-top: 12px; }
+    .alert { border: 1px solid #d8dddc; border-radius: 8px; padding: 12px; margin-top: 14px; font-size: 14px; font-weight: 800; line-height: 1.45; }
+    .alert[hidden] { display: none; }
+    .alert-red { background: #fff1ef; border-color: #e19b91; color: #8d2b20; }
+    .alert-yellow { background: #fff7d8; border-color: #e1bf5c; color: #6b4a00; }
+    .alert-blue { background: #eef6ff; border-color: #8db8e8; color: #143d66; }
+    .alert-title { display: block; margin-bottom: 6px; font-size: 15px; }
+    .record { border: 1px solid #d8dddc; background: #fbfcfb; border-radius: 8px; padding: 13px; margin-bottom: 10px; text-align: left; }
+    .record strong { display: block; font-size: 15px; }
+    .record span { display: block; font-size: 13px; color: #5d6a6d; margin-top: 2px; overflow-wrap: anywhere; }
+    .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 9px; background: #f1d3a4; color: #583710; font-size: 12px; font-weight: 900; margin-bottom: 8px; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .muted { color: #697579; font-size: 13px; }
+    .barcode-panel { border: 1px solid #d8dddc; background: #fbfcfb; border-radius: 8px; padding: 13px; margin-bottom: 14px; }
+    .barcode-panel h3 { margin: 0 0 9px; font-size: 16px; }
+    .barcode-row { display: grid; grid-template-columns: 86px 1fr auto auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid #e7ecea; }
+    .barcode-row:first-child { border-top: 0; }
+    .barcode-data { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #273134; }
+    .mini-button { width: auto; padding: 7px 9px; border-radius: 8px; font-size: 12px; white-space: nowrap; background: #e7ecea; color: #1d2528; }
+    .processing { border: 1px solid #d8dddc; border-radius: 8px; padding: 18px; margin-top: 20px; background: #fbfcfb; text-align: center; }
+    .processing[hidden] { display: none; }
+    .spinner { width: 34px; height: 34px; margin: 0 auto 12px; border: 4px solid #dfe6e4; border-top-color: #1d2528; border-radius: 50%; animation: spin .8s linear infinite; }
+    .processing strong { display: block; font-size: 18px; margin-bottom: 6px; }
+    .processing span { color: #697579; font-size: 14px; }
+    details { margin-top: 18px; border: 1px solid #d8dddc; border-radius: 8px; background: #fbfcfb; padding: 12px; }
+    summary { cursor: pointer; font-weight: 900; color: #39484b; }
+    details ol { margin: 12px 0 0 20px; padding: 0; color: #4f5d60; font-size: 14px; line-height: 1.7; }
+    .retry-row { margin-top: 10px; }
+    .duplicate-list { display: grid; gap: 8px; margin-top: 8px; }
+    .duplicate-item { border: 1px solid rgba(20, 61, 102, .22); border-radius: 8px; background: rgba(255, 255, 255, .72); padding: 10px; }
+    .duplicate-item span { display: block; overflow-wrap: anywhere; margin-top: 2px; }
+    .top-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+    .top-actions .mini-button { min-height: 36px; }
+    .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .mode-tab { background: #e7ecea; color: #1d2528; }
+    .mode-tab.active { background: #1d2528; color: #fff; }
+    .mode-panel[hidden] { display: none; }
+    .batch-toolbar { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+    .progress { height: 10px; border-radius: 999px; background: #dfe6e4; overflow: hidden; margin: 12px 0 8px; }
+    .progress span { display: block; height: 100%; width: 0%; background: #287a51; transition: width .18s ease; }
+    .batch-list { display: grid; gap: 10px; margin-top: 14px; }
+    .batch-file, .batch-card { display: grid; grid-template-columns: 76px 1fr auto; gap: 12px; align-items: center; border: 1px solid #d8dddc; border-radius: 8px; background: #fbfcfb; padding: 10px; }
+    .batch-card { grid-template-columns: 90px 1fr; align-items: start; }
+    .thumb { width: 76px; height: 58px; border-radius: 6px; object-fit: cover; background: #e7ecea; border: 1px solid #d8dddc; }
+    .batch-card .thumb { width: 90px; height: 72px; }
+    .batch-meta strong { display: block; overflow-wrap: anywhere; }
+    .batch-meta span { display: block; color: #5d6a6d; font-size: 13px; margin-top: 3px; }
+    .batch-status { min-width: 92px; text-align: right; font-weight: 900; color: #39484b; }
+    .batch-confirm { display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 10px; align-items: end; }
+    .batch-confirm label { margin-top: 0; }
+    .batch-confirm button { white-space: nowrap; }
+    .batch-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .batch-empty { border: 1px dashed #c9d0cf; border-radius: 8px; padding: 14px; color: #697579; font-size: 14px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 860px) {
+      header, main { max-width: 480px; }
+      main { grid-template-columns: 1fr; padding-bottom: 112px; }
+      header { padding-left: 18px; padding-right: 18px; }
+      main { padding-left: 18px; padding-right: 18px; }
+      .grid, .actions, .split, .batch-toolbar, .batch-confirm, .batch-confirm-actions { grid-template-columns: 1fr; }
+      .batch-file, .batch-card { grid-template-columns: 72px 1fr; }
+      .batch-status { grid-column: 2; text-align: left; }
+      .barcode-row { grid-template-columns: 1fr; }
+      header { padding-top: 28px; }
+      h1 { font-size: 34px; }
+      .subtitle { font-size: 16px; }
+      .sticky-actions { position: sticky; bottom: 0; z-index: 5; background: rgba(255, 255, 255, .96); border-top: 1px solid #d8dddc; margin: 18px -22px 0; padding: 12px 22px; box-shadow: 0 -10px 22px rgba(29, 37, 40, .08); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav aria-label="主导航">
+      <a href="/" aria-current="page">演示录入</a>
+      <a href="/mobile">手机录入</a>
+      <a href="/history">历史记录</a>
+    </nav>
+    <div class="eyebrow">Local-first OCR Intake Demo</div>
+    <h1>机器标签拍照上传，OCR 自动入库演示</h1>
+    <p class="subtitle">这版专为 macOS 本机演示准备：不依赖 Windows，不接 SaaS。上传图片后自动抽取条码与 Model / VIN-BIN / SN，再人工确认写入 SQLite。</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1. 上传标签图片</h2>
+      <div class="mode-tabs" role="tablist" aria-label="上传模式">
+        <button class="mode-tab active" type="button" id="singleTab" aria-selected="true">单张上传</button>
+        <button class="mode-tab" type="button" id="batchTab" aria-selected="false">批量上传</button>
+      </div>
+      <div class="mode-panel" id="singlePanel">
+        <form id="uploadForm">
+          <label for="category">品类</label>
+          <select id="category" name="category" required>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </select>
+          <label for="file">标签图片</label>
+          <input id="file" name="file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+          <div class="actions sticky-actions">
+            <button type="submit" id="uploadBtn">上传并识别</button>
+            <button class="secondary" type="button" id="refreshBtn">刷新记录</button>
+          </div>
+          <div class="status" id="uploadStatus" role="status" aria-live="polite"></div>
+          <div class="alert alert-red" id="uploadAlert" role="alert" hidden></div>
+          <details>
+            <summary>拍照要求</summary>
+            <ol>
+              <li>一张照片只拍一个标签</li>
+              <li>标签完整出现在画面中</li>
+              <li>Model / VIN/BIN / SN 必须清晰可见</li>
+              <li>尽量正对标签，避免反光、阴影、斜拍</li>
+              <li>识别失败可以手动填写</li>
+            </ol>
+          </details>
+        </form>
+      </div>
+      <div class="mode-panel" id="batchPanel" hidden>
+        <form id="batchForm">
+          <div class="batch-toolbar">
+            <div>
+              <label for="batchCategory">品类</label>
+              <select id="batchCategory" name="category" required>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+              </select>
+            </div>
+            <button class="secondary" type="button" id="batchClearBtn">清空</button>
+          </div>
+          <label for="batchFiles">标签图片</label>
+          <input id="batchFiles" name="files" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+          <div class="progress" aria-hidden="true"><span id="batchProgressBar"></span></div>
+          <div class="status" id="batchStatus" role="status" aria-live="polite"></div>
+          <div class="alert alert-red" id="batchAlert" role="alert" hidden></div>
+          <div id="batchFileList" class="batch-list">
+            <div class="batch-empty">选择多张图片后，会按顺序上传并识别。</div>
+          </div>
+          <div class="actions sticky-actions">
+            <button type="submit" id="batchUploadBtn">批量上传并识别</button>
+            <button class="secondary" type="button" id="batchRefreshBtn">刷新记录</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="processing" id="processingBox" role="status" aria-live="polite" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <strong id="processingTitle">识别中…</strong>
+        <span id="processingElapsed">已用 0 秒</span>
+      </div>
+
+      <div id="confirmBox" hidden>
+        <div class="top-actions">
+          <button class="mini-button" type="button" id="retakeTopBtn">重新拍照/重传</button>
+        </div>
+        <h2 style="margin-top:28px">2. 人工确认</h2>
+        <input id="recordId" type="hidden">
+        <div class="alert alert-yellow" id="reviewAlert" role="alert" hidden>识别不清晰，请检查照片或手动填写</div>
+        <div class="alert alert-blue" id="duplicateNotice" role="alert" hidden></div>
+        <div class="barcode-panel">
+          <h3>条码识别</h3>
+          <div id="barcodeResults" class="muted">未识别到条码</div>
+        </div>
+        <div class="grid">
+          <div>
+            <label for="model">Model</label>
+            <input id="model" autocomplete="off">
+          </div>
+          <div>
+            <label for="vin">VIN/BIN</label>
+            <input id="vin" autocomplete="off">
+          </div>
+          <div>
+            <label for="sn">SN</label>
+            <input id="sn" autocomplete="off">
+          </div>
+        </div>
+        <label for="packageCode">包装码</label>
+        <input id="packageCode" autocomplete="off" readonly>
+        <div class="split">
+          <div>
+            <label for="confirmCategory">确认品类</label>
+            <select id="confirmCategory">
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+            </select>
+          </div>
+          <div>
+            <label for="duplicateAction">重复时处理</label>
+            <select id="duplicateAction">
+              <option value="abandon">放弃新记录</option>
+              <option value="overwrite">覆盖旧记录</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions sticky-actions">
+          <button type="button" id="confirmBtn">确认入库</button>
+          <button class="danger" type="button" id="abandonBtn">重复时放弃新记录</button>
+          <button class="secondary" type="button" id="retakeBtn">重新拍照/重传</button>
+        </div>
+        <div class="status" id="confirmStatus" role="status" aria-live="polite"></div>
+      </div>
+
+      <div id="batchConfirmBox" hidden>
+        <h2 style="margin-top:28px">2. 批量确认</h2>
+        <div class="batch-confirm-actions">
+          <button type="button" id="confirmAllBatchBtn">全部确认</button>
+          <button class="secondary" type="button" id="skipUnrecognizedBtn">跳过未识别</button>
+        </div>
+        <div class="status" id="batchConfirmStatus" role="status" aria-live="polite"></div>
+        <div id="batchConfirmList" class="batch-list"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>记录看板</h2>
+      <div class="actions">
+        <button class="secondary" type="button" data-status="ocr_done">待确认</button>
+        <button class="secondary" type="button" data-status="confirmed">已确认</button>
+      </div>
+      <div class="actions">
+        <button class="secondary" type="button" data-status="needs_review">需复核</button>
+        <button class="secondary" type="button" data-status="duplicate">重复/放弃</button>
+      </div>
+      <div class="actions">
+        <button type="button" id="exportBtn">导出已确认 CSV</button>
+      </div>
+      <p class="muted">点击记录可重新载入确认表单。</p>
+      <div id="records"></div>
+    </section>
+  </main>
+
+  <script>
+    const uploadForm = document.querySelector('#uploadForm');
+    const uploadStatus = document.querySelector('#uploadStatus');
+    const confirmStatus = document.querySelector('#confirmStatus');
+    const confirmBox = document.querySelector('#confirmBox');
+    const records = document.querySelector('#records');
+    const uploadBtn = document.querySelector('#uploadBtn');
+    const uploadAlert = document.querySelector('#uploadAlert');
+    const processingBox = document.querySelector('#processingBox');
+    const processingTitle = document.querySelector('#processingTitle');
+    const processingElapsed = document.querySelector('#processingElapsed');
+    const reviewAlert = document.querySelector('#reviewAlert');
+    const duplicateNotice = document.querySelector('#duplicateNotice');
+    const fileInput = document.querySelector('#file');
+    const singleTab = document.querySelector('#singleTab');
+    const batchTab = document.querySelector('#batchTab');
+    const singlePanel = document.querySelector('#singlePanel');
+    const batchPanel = document.querySelector('#batchPanel');
+    const batchForm = document.querySelector('#batchForm');
+    const batchFiles = document.querySelector('#batchFiles');
+    const batchUploadBtn = document.querySelector('#batchUploadBtn');
+    const batchStatus = document.querySelector('#batchStatus');
+    const batchAlert = document.querySelector('#batchAlert');
+    const batchFileList = document.querySelector('#batchFileList');
+    const batchProgressBar = document.querySelector('#batchProgressBar');
+    const batchConfirmBox = document.querySelector('#batchConfirmBox');
+    const batchConfirmList = document.querySelector('#batchConfirmList');
+    const batchConfirmStatus = document.querySelector('#batchConfirmStatus');
+    let batchItems = [];
+    let batchItemId = 0;
+    let pollTimer = null;
+    let activePollJobId = null;
+
+    function setStatus(node, message) {
+      node.textContent = message || '';
+    }
+
+    function setAlert(node, type, html) {
+      node.className = `alert alert-${type}`;
+      node.innerHTML = html || '';
+      node.hidden = !html;
+    }
+
+    function clearResultAlerts() {
+      reviewAlert.hidden = true;
+      duplicateNotice.hidden = true;
+      duplicateNotice.innerHTML = '';
+    }
+
+    function resetUploadButton() {
+      uploadBtn.disabled = false;
+      uploadBtn.removeAttribute('aria-busy');
+      uploadBtn.textContent = '上传并识别';
+    }
+
+    function resetBatchButton() {
+      batchUploadBtn.disabled = false;
+      batchUploadBtn.removeAttribute('aria-busy');
+      batchUploadBtn.textContent = '批量上传并识别';
+    }
+
+    function showProcessing(elapsedSeconds = 0) {
+      processingBox.hidden = false;
+      processingTitle.textContent = '识别中…';
+      processingElapsed.textContent = `已用 ${elapsedSeconds} 秒`;
+    }
+
+    function hideProcessing() {
+      processingBox.hidden = true;
+    }
+
+    function stopPolling() {
+      if (pollTimer) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      activePollJobId = null;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    function renderBarcodes(barcodes = []) {
+      const container = document.querySelector('#barcodeResults');
+      container.innerHTML = '';
+      if (!barcodes.length) {
+        container.textContent = '未识别到条码';
+        container.className = 'muted';
+        return;
+      }
+      container.className = '';
+      for (const barcode of barcodes) {
+        const row = document.createElement('div');
+        row.className = 'barcode-row';
+        row.innerHTML = `
+          <strong>${escapeHtml(barcode.type || 'BARCODE')}</strong>
+          <span class="barcode-data">${escapeHtml(barcode.data)}</span>
+          <button class="mini-button" type="button" data-target="vin">填到 SKU</button>
+          <button class="mini-button" type="button" data-target="sn">填到 SN</button>
+        `;
+        row.querySelectorAll('button').forEach((button) => {
+          button.addEventListener('click', () => {
+            const type = String(barcode.type || '').toUpperCase();
+            if (type === 'EAN13' || type === 'EAN-13') {
+              document.querySelector('#packageCode').value = barcode.data || '';
+              return;
+            }
+            const target = button.dataset.target === 'sn' ? '#sn' : '#vin';
+            document.querySelector(target).value = barcode.data || '';
+          });
+        });
+        container.appendChild(row);
+      }
+    }
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { detail: text || `HTTP ${response.status}` };
+      }
+      if (!response.ok) {
+        const error = new Error(data?.detail || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    }
+
+    function uploadWithProgress(formData) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload');
+        xhr.upload.addEventListener('progress', (event) => {
+          if (!event.lengthComputable) {
+            uploadBtn.textContent = '上传中…';
+            setStatus(uploadStatus, '上传中…');
+            return;
+          }
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          uploadBtn.textContent = `上传中… ${percent}%`;
+          setStatus(uploadStatus, `上传中… ${percent}%`);
+        });
+        xhr.addEventListener('load', () => {
+          let data = null;
+          try {
+            data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+          } catch {
+            data = { detail: xhr.responseText || `HTTP ${xhr.status}` };
+          }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+            return;
+          }
+          const error = new Error(data?.detail || `HTTP ${xhr.status}`);
+          error.status = xhr.status;
+          reject(error);
+        });
+        xhr.addEventListener('error', () => {
+          const error = new Error('network');
+          error.status = 0;
+          reject(error);
+        });
+        xhr.addEventListener('timeout', () => {
+          const error = new Error('timeout');
+          error.status = 0;
+          reject(error);
+        });
+        xhr.timeout = 30000;
+        xhr.send(formData);
+      });
+    }
+
+    function uploadBatchJobWithProgress(item, onProgress) {
+      return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('category', document.querySelector('#batchCategory').value);
+        formData.append('files', item.file, item.file.name);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload/batch');
+        xhr.upload.addEventListener('progress', (event) => {
+          if (!event.lengthComputable) {
+            onProgress(null);
+            return;
+          }
+          onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        });
+        xhr.addEventListener('load', () => {
+          let data = null;
+          try {
+            data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+          } catch {
+            data = { detail: xhr.responseText || `HTTP ${xhr.status}` };
+          }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+            return;
+          }
+          const error = new Error(data?.detail || `HTTP ${xhr.status}`);
+          error.status = xhr.status;
+          reject(error);
+        });
+        xhr.addEventListener('error', () => reject(new Error('network')));
+        xhr.addEventListener('timeout', () => reject(new Error('timeout')));
+        xhr.timeout = 30000;
+        xhr.send(formData);
+      });
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => {
+        pollTimer = window.setTimeout(resolve, ms);
+      });
+    }
+
+    async function pollJobUntilReady(id) {
+      const startedAt = Date.now();
+      activePollJobId = id;
+      showProcessing(0);
+      while (Date.now() - startedAt < 30000) {
+        const record = await requestJson(`/jobs/${id}`);
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        showProcessing(elapsed);
+        if (record.status !== 'uploaded') {
+          stopPolling();
+          return record;
+        }
+        await sleep(800);
+        if (activePollJobId !== id) {
+          throw new Error('polling cancelled');
+        }
+      }
+      stopPolling();
+      throw new Error('识别超时，请重试或联系运维');
+    }
+
+    function isEmptyOcrResult(record) {
+      return !record.model && !record.vin_or_bin && !record.serial_number;
+    }
+
+    function renderDuplicateNotice(record, fallbackDuplicates = []) {
+      const duplicates = (record.duplicates && record.duplicates.length) ? record.duplicates : fallbackDuplicates;
+      const summary = duplicates.length
+        ? `<div class="duplicate-list">${duplicates.map((item) => `
+            <div class="duplicate-item">
+              <strong>旧记录 #${escapeHtml(item.id)} · ${escapeHtml(item.status)}</strong>
+              <span>Model: ${escapeHtml(item.model || '-')}</span>
+              <span>VIN/BIN: ${escapeHtml(item.vin_or_bin || '-')}</span>
+              <span>SN: ${escapeHtml(item.serial_number || '-')}</span>
+            </div>
+          `).join('')}</div>`
+        : '<div class="muted">未返回旧记录详情，可在右侧重复列表查看。</div>';
+      setAlert(duplicateNotice, 'blue', `
+        <span class="alert-title">发现重复记录</span>
+        ${summary}
+        <div class="actions">
+          <button type="button" id="overwriteDuplicateBtn">覆盖</button>
+          <button class="secondary" type="button" id="dropDuplicateBtn">重复时放弃新记录</button>
+        </div>
+      `);
+      duplicateNotice.querySelector('#overwriteDuplicateBtn').addEventListener('click', () => {
+        document.querySelector('#duplicateAction').value = 'overwrite';
+        document.querySelector('#confirmBtn').click();
+      });
+      duplicateNotice.querySelector('#dropDuplicateBtn').addEventListener('click', () => {
+        document.querySelector('#duplicateAction').value = 'abandon';
+        document.querySelector('#confirmBtn').click();
+      });
+    }
+
+    function fillConfirm(record, fallbackDuplicates = []) {
+      document.querySelector('#recordId').value = record.id;
+      document.querySelector('#model').value = record.model || '';
+      document.querySelector('#vin').value = record.vin_or_bin || '';
+      document.querySelector('#sn').value = record.serial_number || '';
+      document.querySelector('#packageCode').value = '';
+      document.querySelector('#confirmCategory').value = record.category;
+      renderBarcodes(record.barcodes || []);
+      clearResultAlerts();
+      if (record.status === 'needs_review' && isEmptyOcrResult(record)) {
+        setAlert(reviewAlert, 'yellow', '识别不清晰，请检查照片或手动填写');
+      }
+      if (record.status === 'duplicate') {
+        renderDuplicateNotice(record, fallbackDuplicates);
+      }
+      confirmBox.hidden = false;
+      hideProcessing();
+      setStatus(confirmStatus, `已载入记录 #${record.id}，状态：${record.status}`);
+    }
+
+    function setMode(mode) {
+      const batch = mode === 'batch';
+      singlePanel.hidden = batch;
+      batchPanel.hidden = !batch;
+      singleTab.classList.toggle('active', !batch);
+      batchTab.classList.toggle('active', batch);
+      singleTab.setAttribute('aria-selected', String(!batch));
+      batchTab.setAttribute('aria-selected', String(batch));
+    }
+
+    function updateBatchProgress() {
+      const total = batchItems.length || 1;
+      const finished = batchItems.filter((item) => ['OK', '错误'].includes(item.status)).length;
+      const percent = Math.round((finished / total) * 100);
+      batchProgressBar.style.width = `${percent}%`;
+      setStatus(batchStatus, batchItems.length ? `${finished}/${batchItems.length} 已完成` : '');
+    }
+
+    function renderBatchFiles() {
+      batchFileList.innerHTML = '';
+      if (!batchItems.length) {
+        batchFileList.innerHTML = '<div class="batch-empty">选择多张图片后，会按顺序上传并识别。</div>';
+        updateBatchProgress();
+        return;
+      }
+      for (const item of batchItems) {
+        const row = document.createElement('div');
+        row.className = 'batch-file';
+        row.innerHTML = `
+          <img class="thumb" src="${item.previewUrl}" alt="">
+          <div class="batch-meta">
+            <strong>${escapeHtml(item.file.name)}</strong>
+            <span>${Math.round(item.file.size / 1024)} KB</span>
+          </div>
+          <div class="batch-status">${escapeHtml(item.progressLabel || item.status)}</div>
+        `;
+        batchFileList.appendChild(row);
+      }
+      updateBatchProgress();
+    }
+
+    function createBatchItems(files) {
+      for (const item of batchItems) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      batchItems = Array.from(files).map((file) => ({
+        id: ++batchItemId,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: '等待',
+        progressLabel: '等待',
+        jobId: null,
+        record: null,
+        error: '',
+        skipped: false,
+      }));
+      batchConfirmBox.hidden = true;
+      setAlert(batchAlert, 'red', '');
+      renderBatchFiles();
+    }
+
+    function isRecognized(record) {
+      return Boolean(record && (record.model || record.vin_or_bin || record.serial_number));
+    }
+
+    function renderBatchConfirm() {
+      batchConfirmList.innerHTML = '';
+      const readyItems = batchItems.filter((item) => item.record || item.error);
+      if (!readyItems.length) {
+        batchConfirmList.innerHTML = '<div class="batch-empty">暂无可确认记录</div>';
+        return;
+      }
+      for (const item of readyItems) {
+        const record = item.record;
+        const card = document.createElement('div');
+        card.className = 'batch-card';
+        card.dataset.itemId = item.id;
+        if (!record) {
+          card.innerHTML = `
+            <img class="thumb" src="${item.previewUrl}" alt="">
+            <div>
+              <div class="batch-meta">
+                <strong>${escapeHtml(item.file.name)}</strong>
+                <span>错误：${escapeHtml(item.error || '上传失败')}</span>
+              </div>
+              <div class="retry-row">
+                <button class="secondary mini-button" type="button" data-action="retry">重传</button>
+              </div>
+            </div>
+          `;
+          card.querySelector('[data-action="retry"]').addEventListener('click', () => retryBatchItem(item.id));
+          batchConfirmList.appendChild(card);
+          continue;
+        }
+        card.innerHTML = `
+          <img class="thumb" src="${item.previewUrl}" alt="">
+          <div>
+            <div class="batch-meta">
+              <strong>#${record.id} ${escapeHtml(item.file.name)}</strong>
+              <span>状态：${escapeHtml(record.status)}${isRecognized(record) ? '' : ' · 未识别'}</span>
+            </div>
+            <div class="batch-confirm">
+              <div>
+                <label>Model</label>
+                <input data-field="model" value="${escapeHtml(record.model || '')}" autocomplete="off">
+              </div>
+              <div>
+                <label>VIN/BIN</label>
+                <input data-field="vin_or_bin" value="${escapeHtml(record.vin_or_bin || '')}" autocomplete="off">
+              </div>
+              <div>
+                <label>SN</label>
+                <input data-field="serial_number" value="${escapeHtml(record.serial_number || '')}" autocomplete="off">
+              </div>
+              <div>
+                <label>品类</label>
+                <select data-field="category">
+                  <option value="A"${record.category === 'A' ? ' selected' : ''}>A</option>
+                  <option value="B"${record.category === 'B' ? ' selected' : ''}>B</option>
+                  <option value="C"${record.category === 'C' ? ' selected' : ''}>C</option>
+                </select>
+              </div>
+              <button type="button" data-action="confirm"${item.confirmed || item.skipped ? ' disabled' : ''}>${item.skipped ? '已跳过' : (item.confirmed ? '已确认' : '确认')}</button>
+            </div>
+            <div class="retry-row">
+              <button class="secondary mini-button" type="button" data-action="retry">重传</button>
+            </div>
+          </div>
+        `;
+        card.querySelector('[data-action="confirm"]').addEventListener('click', () => confirmBatchItem(item.id));
+        card.querySelector('[data-action="retry"]').addEventListener('click', () => retryBatchItem(item.id));
+        batchConfirmList.appendChild(card);
+      }
+    }
+
+    async function loadJob(id) {
+      const record = await requestJson(`/jobs/${id}`);
+      fillConfirm(record);
+      await loadRecords('ocr_done');
+    }
+
+    async function loadRecords(status = 'ocr_done') {
+      const rows = await requestJson(`/jobs?status=${encodeURIComponent(status)}&limit=30&offset=0`);
+      records.innerHTML = '';
+      if (!rows.length) {
+        records.innerHTML = '<p class="muted">暂无记录</p>';
+        return;
+      }
+      for (const row of rows) {
+        const div = document.createElement('button');
+        div.type = 'button';
+        div.className = 'record';
+        div.innerHTML = `<span class="pill">${row.status}</span><strong>#${row.id} ${row.model || '未识别 Model'}</strong><span>VIN/BIN: ${row.vin_or_bin || '-'}</span><span>SN: ${row.serial_number || '-'}</span><span>品类: ${row.category}</span>`;
+        div.addEventListener('click', () => loadJob(row.id));
+        records.appendChild(div);
+      }
+    }
+
+    async function processBatchItem(item) {
+      item.status = '上传中';
+      item.progressLabel = '上传中 0%';
+      renderBatchFiles();
+      const result = await uploadBatchJobWithProgress(item, (percent) => {
+        item.progressLabel = percent === null ? '上传中' : `上传中 ${percent}%`;
+        renderBatchFiles();
+      });
+      const job = result.jobs[0];
+      item.jobId = job.job_id;
+      item.status = '识别中';
+      item.progressLabel = '识别中';
+      renderBatchFiles();
+      item.record = job.status === 'uploaded'
+        ? await pollJobUntilReady(job.job_id)
+        : await requestJson(`/jobs/${job.job_id}`);
+      item.status = 'OK';
+      item.progressLabel = 'OK';
+      item.error = '';
+      renderBatchFiles();
+    }
+
+    async function runBatchUpload() {
+      if (!batchItems.length) {
+        setAlert(batchAlert, 'red', '请先选择图片');
+        return;
+      }
+      stopPolling();
+      batchUploadBtn.disabled = true;
+      batchUploadBtn.setAttribute('aria-busy', 'true');
+      batchUploadBtn.textContent = '批量处理中…';
+      batchConfirmBox.hidden = true;
+      setAlert(batchAlert, 'red', '');
+      setStatus(batchConfirmStatus, '');
+      try {
+        for (const item of batchItems) {
+          if (item.record) continue;
+          try {
+            await processBatchItem(item);
+          } catch (error) {
+            item.status = '错误';
+            item.progressLabel = '错误';
+            item.error = error.status === 415 ? '只支持 jpg/jpeg/png/webp' : error.message;
+            renderBatchFiles();
+          }
+        }
+        hideProcessing();
+        batchConfirmBox.hidden = false;
+        renderBatchConfirm();
+        setStatus(batchConfirmStatus, '批量识别完成，请集中确认');
+        await loadRecords('ocr_done');
+      } finally {
+        stopPolling();
+        hideProcessing();
+        resetBatchButton();
+      }
+    }
+
+    function findBatchCard(itemId) {
+      return batchConfirmList.querySelector(`[data-item-id="${itemId}"]`);
+    }
+
+    async function confirmBatchItem(itemId) {
+      const item = batchItems.find((candidate) => candidate.id === itemId);
+      if (!item || !item.record || item.confirmed || item.skipped) return;
+      const card = findBatchCard(itemId);
+      const payload = {
+        category: card.querySelector('[data-field="category"]').value,
+        model: card.querySelector('[data-field="model"]').value,
+        vin_or_bin: card.querySelector('[data-field="vin_or_bin"]').value,
+        serial_number: card.querySelector('[data-field="serial_number"]').value,
+        duplicate_action: 'overwrite',
+      };
+      setStatus(batchConfirmStatus, `确认 #${item.record.id}...`);
+      const result = await requestJson(`/confirm/${item.record.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      item.confirmed = true;
+      item.record.status = result.status;
+      renderBatchConfirm();
+      setStatus(batchConfirmStatus, `#${item.record.id} 确认完成`);
+      await loadRecords('confirmed');
+    }
+
+    async function retryBatchItem(itemId) {
+      const item = batchItems.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+      item.status = '等待';
+      item.progressLabel = '等待';
+      item.jobId = null;
+      item.record = null;
+      item.error = '';
+      item.confirmed = false;
+      renderBatchFiles();
+      try {
+        await processBatchItem(item);
+        batchConfirmBox.hidden = false;
+        renderBatchConfirm();
+        setStatus(batchConfirmStatus, `${item.file.name} 重传完成`);
+      } catch (error) {
+        item.status = '错误';
+        item.progressLabel = '错误';
+        item.error = error.status === 415 ? '只支持 jpg/jpeg/png/webp' : error.message;
+        renderBatchFiles();
+        renderBatchConfirm();
+      } finally {
+        stopPolling();
+        hideProcessing();
+      }
+    }
+
+    uploadForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      stopPolling();
+      uploadBtn.disabled = true;
+      uploadBtn.setAttribute('aria-busy', 'true');
+      uploadBtn.textContent = '上传中… 0%';
+      setStatus(uploadStatus, '上传中… 0%');
+      setAlert(uploadAlert, 'red', '');
+      clearResultAlerts();
+      confirmBox.hidden = true;
+      hideProcessing();
+      try {
+        const formData = new FormData(uploadForm);
+        const result = await uploadWithProgress(formData);
+        uploadBtn.textContent = '识别中…';
+        setStatus(uploadStatus, `上传完成，job #${result.job_id}`);
+        showProcessing(0);
+        processingBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const record = result.status === 'uploaded'
+          ? await pollJobUntilReady(result.job_id)
+          : await requestJson(`/jobs/${result.job_id}`);
+        fillConfirm(record, result.duplicates || []);
+        await loadRecords(record.status);
+      } catch (error) {
+        stopPolling();
+        hideProcessing();
+        if (error.message === 'polling cancelled') {
+          return;
+        } else if (error.status === 415) {
+          setAlert(uploadAlert, 'red', '只支持 jpg/jpeg/png/webp');
+          setStatus(uploadStatus, '');
+        } else if (error.message === '识别超时，请重试或联系运维') {
+          setAlert(uploadAlert, 'red', '识别超时，请重试或联系运维');
+          setStatus(uploadStatus, '');
+        } else {
+          setAlert(uploadAlert, 'red', '上传失败，点击重试<div class="retry-row"><button class="secondary" type="button" id="retryUploadBtn">重试</button></div>');
+          document.querySelector('#retryUploadBtn').addEventListener('click', () => {
+            resetUploadButton();
+            uploadForm.requestSubmit();
+          });
+          setStatus(uploadStatus, '');
+        }
+      } finally {
+        resetUploadButton();
+      }
+    });
+
+    batchForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await runBatchUpload();
+    });
+
+    batchFiles.addEventListener('change', () => {
+      createBatchItems(batchFiles.files);
+    });
+
+    document.querySelector('#batchClearBtn').addEventListener('click', () => {
+      createBatchItems([]);
+      batchFiles.value = '';
+      batchConfirmBox.hidden = true;
+      setAlert(batchAlert, 'red', '');
+      setStatus(batchStatus, '');
+      setStatus(batchConfirmStatus, '');
+    });
+
+    singleTab.addEventListener('click', () => setMode('single'));
+    batchTab.addEventListener('click', () => setMode('batch'));
+
+    document.querySelector('#confirmBtn').addEventListener('click', async () => {
+      const id = document.querySelector('#recordId').value;
+      if (!id) return;
+      setStatus(confirmStatus, '确认中...');
+      try {
+        const payload = {
+          category: document.querySelector('#confirmCategory').value,
+          model: document.querySelector('#model').value,
+          vin_or_bin: document.querySelector('#vin').value,
+          serial_number: document.querySelector('#sn').value,
+          duplicate_action: document.querySelector('#duplicateAction').value,
+        };
+        const result = await requestJson(`/confirm/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setStatus(confirmStatus, `确认完成，状态：${result.status}`);
+        await loadRecords('confirmed');
+      } catch (error) {
+        setStatus(confirmStatus, `确认失败：${error.message}`);
+      }
+    });
+
+    document.querySelector('#abandonBtn').addEventListener('click', () => {
+      document.querySelector('#duplicateAction').value = 'abandon';
+      document.querySelector('#confirmBtn').click();
+    });
+
+    function retake() {
+      stopPolling();
+      confirmBox.hidden = true;
+      hideProcessing();
+      clearResultAlerts();
+      setAlert(uploadAlert, 'red', '');
+      setStatus(uploadStatus, '');
+      setStatus(confirmStatus, '');
+      document.querySelector('#recordId').value = '';
+      fileInput.value = '';
+      resetUploadButton();
+      fileInput.focus();
+    }
+
+    document.querySelector('#retakeBtn').addEventListener('click', retake);
+    document.querySelector('#retakeTopBtn').addEventListener('click', retake);
+
+    document.querySelector('#confirmAllBatchBtn').addEventListener('click', async () => {
+      for (const item of batchItems) {
+        if (!item.record || item.confirmed || item.skipped) continue;
+        await confirmBatchItem(item.id);
+      }
+      setStatus(batchConfirmStatus, '可确认记录已全部处理');
+    });
+
+    document.querySelector('#skipUnrecognizedBtn').addEventListener('click', () => {
+      for (const item of batchItems) {
+        if (item.record && !isRecognized(item.record) && !item.confirmed) {
+          item.skipped = true;
+        }
+      }
+      renderBatchConfirm();
+      setStatus(batchConfirmStatus, '已跳过未识别记录');
+    });
+
+    document.querySelector('#refreshBtn').addEventListener('click', () => loadRecords('ocr_done'));
+    document.querySelector('#batchRefreshBtn').addEventListener('click', () => loadRecords('ocr_done'));
+    document.querySelector('#exportBtn').addEventListener('click', () => {
+      window.location.href = '/export.csv?status=confirmed';
+    });
+    document.querySelectorAll('[data-status]').forEach((button) => {
+      button.addEventListener('click', () => loadRecords(button.dataset.status));
+    });
+
+    loadRecords('ocr_done').catch((error) => setStatus(uploadStatus, error.message));
+  </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Phase 4 placeholder selectors. Replace these after inspecting the real SaaS.
+saas:
+  login_url: "https://example.com/login"
+  form_url: "https://example.com/equipment/new"
+  selectors:
+    login:
+      username: "#username"
+      password: "#password"
+      submit: "button[type=submit]"
+    form:
+      model: "#model"
+      vin_or_bin: "#vin"
+      serial_number: "#sn"
+      category_a: "input[value=A]"
+      category_b: "input[value=B]"
+      category_c: "input[value=C]"
+      image_upload: "input[type=file][name=label]"
+      submit: "button.submit-record"
+    success_indicator: ".alert-success"

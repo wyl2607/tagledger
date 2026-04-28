@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Machine Label OCR History</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f7f4;
+      color: #1d2528;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #f6f7f4; }
+    header, main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 32px; }
+    nav { display: flex; gap: 10px; margin-bottom: 18px; }
+    nav a { display: inline-flex; align-items: center; min-height: 38px; border-radius: 8px; padding: 0 14px; color: #1d2528; text-decoration: none; font-weight: 900; border: 1px solid #d5dcda; background: #fff; }
+    nav a[aria-current="page"] { background: #1d2528; color: #fff; }
+    h1 { margin: 0 0 8px; font-size: 34px; line-height: 1.05; }
+    .muted { color: #647174; font-size: 14px; }
+    .toolbar { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(220px, 1fr) minmax(150px, .7fr) minmax(150px, .7fr) auto; gap: 12px; align-items: end; background: #fff; border: 1px solid #d5dcda; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 900; color: #39484b; margin-bottom: 6px; }
+    input, select, button { width: 100%; min-height: 42px; border-radius: 8px; border: 1px solid #c9d0cf; padding: 10px 12px; font-size: 15px; background: #fff; color: #1d2528; }
+    select { min-height: 112px; }
+    button { border: 0; cursor: pointer; font-weight: 900; background: #1d2528; color: #fff; white-space: nowrap; }
+    button.secondary { background: #e7ecea; color: #1d2528; }
+    button.mini { width: auto; min-height: 34px; padding: 7px 10px; font-size: 12px; }
+    .export-actions { display: grid; gap: 8px; }
+    .table-wrap { background: #fff; border: 1px solid #d5dcda; border-radius: 8px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 1040px; }
+    th, td { border-bottom: 1px solid #edf0ef; padding: 10px 12px; text-align: left; vertical-align: middle; font-size: 14px; }
+    th { position: sticky; top: 0; background: #f9fbfa; z-index: 1; color: #39484b; font-size: 12px; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    .thumb { width: 72px; height: 54px; border-radius: 6px; object-fit: cover; background: #e7ecea; border: 1px solid #d5dcda; cursor: zoom-in; }
+    .status { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 900; background: #e7ecea; color: #39484b; }
+    .status-confirmed { background: #daf2e4; color: #14613a; }
+    .status-submitted { background: #dcecff; color: #174f87; }
+    .status-submission_failed { background: #ffe1dd; color: #8d2b20; }
+    .status-duplicate { background: #ffe5bf; color: #824900; }
+    .status-needs_review { background: #fff3bd; color: #6b4a00; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+    .pager div { display: flex; gap: 8px; }
+    .empty { padding: 28px; text-align: center; color: #647174; }
+    dialog { border: 0; border-radius: 8px; padding: 0; max-width: min(960px, calc(100vw - 32px)); background: #fff; box-shadow: 0 24px 70px rgba(29, 37, 40, .22); }
+    dialog::backdrop { background: rgba(29, 37, 40, .55); }
+    .modal-body { padding: 14px; }
+    .modal-body img { display: block; max-width: 100%; max-height: 76vh; border-radius: 6px; }
+    .raw-text { white-space: pre-wrap; max-width: 720px; max-height: 60vh; overflow: auto; margin: 0; padding: 14px; background: #f6f7f4; border-radius: 6px; color: #1d2528; }
+    .modal-actions { display: flex; justify-content: flex-end; padding: 0 14px 14px; }
+    @media (max-width: 900px) {
+      header, main { padding-left: 16px; padding-right: 16px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .pager { align-items: stretch; flex-direction: column; }
+      .pager div { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav aria-label="主导航">
+      <a href="/">演示录入</a>
+      <a href="/mobile">手机录入</a>
+      <a href="/history" aria-current="page">历史记录</a>
+    </nav>
+    <h1>历史记录</h1>
+    <p class="muted">查看全部已入库和处理中记录，支持状态、关键字和日期筛选。</p>
+  </header>
+
+  <main>
+    <section class="toolbar" aria-label="筛选">
+      <div>
+        <label for="keyword">关键字</label>
+        <input id="keyword" placeholder="Model / VIN / SN / ID">
+      </div>
+      <div>
+        <label for="statuses">状态</label>
+        <select id="statuses" multiple>
+          <option value="uploaded">uploaded</option>
+          <option value="ocr_done">ocr_done</option>
+          <option value="needs_review">needs_review</option>
+          <option value="confirmed">confirmed</option>
+          <option value="submitted">submitted</option>
+          <option value="submission_failed">submission_failed</option>
+          <option value="duplicate">duplicate</option>
+        </select>
+      </div>
+      <div>
+        <label for="dateFrom">开始日期</label>
+        <input id="dateFrom" type="date">
+      </div>
+      <div>
+        <label for="dateTo">结束日期</label>
+        <input id="dateTo" type="date">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="exportBtn" type="button" data-endpoint="/export.csv">导出筛选结果 CSV</button>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>缩略图</th>
+            <th>ID</th>
+            <th>品类</th>
+            <th>Model</th>
+            <th>VIN</th>
+            <th>SN</th>
+            <th>状态</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="9" class="empty">加载中...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="pager">
+      <span class="muted" id="pageInfo">第 1 页</span>
+      <div>
+        <button class="secondary" id="prevBtn" type="button">上一页</button>
+        <button class="secondary" id="nextBtn" type="button">下一页</button>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="modal">
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="secondary mini" id="closeModalBtn" type="button">关闭</button>
+    </div>
+  </dialog>
+
+  <script>
+    const pageSize = 20;
+    const rows = document.querySelector('#rows');
+    const keyword = document.querySelector('#keyword');
+    const statuses = document.querySelector('#statuses');
+    const dateFrom = document.querySelector('#dateFrom');
+    const dateTo = document.querySelector('#dateTo');
+    const pageInfo = document.querySelector('#pageInfo');
+    const prevBtn = document.querySelector('#prevBtn');
+    const nextBtn = document.querySelector('#nextBtn');
+    const modal = document.querySelector('#modal');
+    const modalBody = document.querySelector('#modalBody');
+    let page = 0;
+    let records = [];
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    async function requestJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function selectedStatuses() {
+      return Array.from(statuses.selectedOptions).map((option) => option.value);
+    }
+
+    function dateOnly(value) {
+      return value ? value.slice(0, 10) : '';
+    }
+
+    function passesFilters(record) {
+      const statusFilter = selectedStatuses();
+      if (statusFilter.length && !statusFilter.includes(record.status)) return false;
+      const term = keyword.value.trim().toLowerCase();
+      if (term) {
+        const haystack = [
+          record.id,
+          record.category,
+          record.model,
+          record.vin_or_bin,
+          record.serial_number,
+          record.status,
+        ].join(' ').toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      const created = dateOnly(record.created_at);
+      if (dateFrom.value && created < dateFrom.value) return false;
+      if (dateTo.value && created > dateTo.value) return false;
+      return true;
+    }
+
+    function filteredRecords() {
+      return records.filter(passesFilters);
+    }
+
+    function statusClass(status) {
+      return `status status-${String(status).replace(/[^a-z_]/g, '')}`;
+    }
+
+    function formatTime(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString();
+    }
+
+    function render() {
+      const filtered = filteredRecords();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (page >= totalPages) page = totalPages - 1;
+      const start = page * pageSize;
+      const visible = filtered.slice(start, start + pageSize);
+      rows.innerHTML = '';
+      if (!visible.length) {
+        rows.innerHTML = '<tr><td colspan="9" class="empty">暂无匹配记录</td></tr>';
+      }
+      for (const record of visible) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><img class="thumb" src="/records/${record.id}/image" alt="" data-action="image" data-id="${record.id}"></td>
+          <td>#${record.id}</td>
+          <td>${escapeHtml(record.category)}</td>
+          <td>${escapeHtml(record.model || '-')}</td>
+          <td>${escapeHtml(record.vin_or_bin || '-')}</td>
+          <td>${escapeHtml(record.serial_number || '-')}</td>
+          <td><span class="${statusClass(record.status)}">${escapeHtml(record.status)}</span></td>
+          <td>${escapeHtml(formatTime(record.created_at))}</td>
+          <td>
+            <div class="actions">
+              <button class="secondary mini" type="button" data-action="image" data-id="${record.id}">查看原图</button>
+              <button class="secondary mini" type="button" data-action="copy-sn" data-sn="${escapeHtml(record.serial_number || '')}">复制 SN</button>
+              <button class="secondary mini" type="button" data-action="raw" data-id="${record.id}">raw OCR</button>
+            </div>
+          </td>
+        `;
+        rows.appendChild(tr);
+      }
+      pageInfo.textContent = `第 ${page + 1} 页 / 共 ${totalPages} 页 · ${filtered.length} 条`;
+      prevBtn.disabled = page === 0;
+      nextBtn.disabled = page >= totalPages - 1;
+    }
+
+    async function loadRecords() {
+      const data = await requestJson('/jobs?limit=500&offset=0');
+      records = data;
+      render();
+    }
+
+    function openImage(id) {
+      modalBody.innerHTML = `<img src="/records/${id}/image" alt="record ${id}">`;
+      modal.showModal();
+    }
+
+    async function openRawText(id) {
+      const record = await requestJson(`/jobs/${id}`);
+      modalBody.innerHTML = `<pre class="raw-text">${escapeHtml(record.raw_ocr_text || '无 raw OCR 文本')}</pre>`;
+      modal.showModal();
+    }
+
+    function exportFilteredCsv() {
+      const statusFilter = selectedStatuses();
+      const params = new URLSearchParams();
+      for (const status of statusFilter) {
+        params.append('status', status);
+      }
+      if (keyword.value.trim()) params.set('keyword', keyword.value.trim());
+      if (dateFrom.value) params.set('date_from', dateFrom.value);
+      if (dateTo.value) params.set('date_to', dateTo.value);
+      window.location.href = `/export.csv${params.toString() ? `?${params.toString()}` : ''}`;
+    }
+
+    rows.addEventListener('click', async (event) => {
+      const target = event.target.closest('[data-action]');
+      if (!target) return;
+      const action = target.dataset.action;
+      if (action === 'image') {
+        openImage(target.dataset.id);
+      } else if (action === 'copy-sn') {
+        await navigator.clipboard.writeText(target.dataset.sn || '');
+      } else if (action === 'raw') {
+        await openRawText(target.dataset.id);
+      }
+    });
+
+    document.querySelector('#closeModalBtn').addEventListener('click', () => modal.close());
+    document.querySelector('#exportBtn').addEventListener('click', exportFilteredCsv);
+    prevBtn.addEventListener('click', () => { page = Math.max(0, page - 1); render(); });
+    nextBtn.addEventListener('click', () => { page += 1; render(); });
+    [keyword, statuses, dateFrom, dateTo].forEach((control) => {
+      control.addEventListener('input', () => { page = 0; render(); });
+      control.addEventListener('change', () => { page = 0; render(); });
+    });
+
+    loadRecords().catch((error) => {
+      rows.innerHTML = `<tr><td colspan="9" class="empty">加载失败：${escapeHtml(error.message)}</td></tr>`;
+    });
+    window.setInterval(() => {
+      loadRecords().catch(() => {});
+    }, 10000);
+  </script>
+</body>
+</html>
