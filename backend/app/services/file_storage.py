@@ -5,7 +5,6 @@ from fastapi import UploadFile
 
 from backend.app.config import get_settings
 
-
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 

@@ -9,7 +9,6 @@ from backend.app.schemas import ConfirmRequest, ConfirmResponse
 from backend.app.services.dedup import find_duplicates, serialize_duplicates
 from backend.app.workers.submit_worker import run as run_submit_worker
 
-
 router = APIRouter()
 
 

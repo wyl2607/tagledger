@@ -1,202 +1,341 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>手机录入 - Machine Label OCR</title>
+  <title>Mobile Capture - Machine Label OCR</title>
+  <link rel="stylesheet" href="/static/ui.css">
   <style>
-    :root {
-      color-scheme: light;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f8f5;
-      color: #172124;
+    body { min-height: 100svh; overflow-x: hidden; }
+    .mobile-nav {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(254,254,254,.98);
+      border-bottom: 1px solid var(--line);
+      padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
     }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #f7f8f5; }
-    a { color: inherit; text-decoration: none; }
-    header { position: sticky; top: 0; z-index: 10; background: rgba(247, 248, 245, .96); border-bottom: 1px solid #dce2df; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; backdrop-filter: blur(14px); }
-    nav { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; max-width: 520px; margin: 0 auto; }
-    .brand { font-weight: 950; font-size: 18px; }
-    .nav-link { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #d0d8d5; border-radius: 8px; padding: 0 10px; background: #fff; font-size: 13px; font-weight: 900; }
-    main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(100px + env(safe-area-inset-bottom)); }
-    .panel { background: #fff; border: 1px solid #dce2df; border-radius: 8px; padding: 16px; margin-bottom: 14px; box-shadow: 0 12px 28px rgba(23, 33, 36, .06); }
-    h1, h2 { margin: 0; line-height: 1.1; }
-    h1 { font-size: 26px; }
-    h2 { font-size: 19px; margin-bottom: 12px; }
-    .muted { color: #657275; font-size: 13px; line-height: 1.45; }
-    label { display: block; font-size: 13px; font-weight: 900; color: #344245; margin: 13px 0 7px; }
-    input, select, button, textarea { width: 100%; min-height: 48px; border-radius: 8px; border: 1px solid #c8d1ce; padding: 12px 13px; font-size: 17px; background: #fff; color: #172124; }
-    input[type="file"].visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
-    button { border: 0; background: #172124; color: #fff; cursor: pointer; font-weight: 950; }
-    button.secondary { background: #e9eeec; color: #172124; }
-    button.danger { background: #8d2b20; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    .hero { display: grid; gap: 10px; }
-    .hero p { margin: 0; }
-    .preview { width: 100%; aspect-ratio: 4 / 3; border: 1px dashed #bac5c1; border-radius: 8px; background: #eef2f0; display: grid; place-items: center; overflow: hidden; color: #657275; font-weight: 800; text-align: center; padding: 12px; }
-    .preview img { width: 100%; height: 100%; object-fit: contain; background: #111; }
-    .capture-actions { display: grid; grid-template-columns: 1.35fr .9fr; gap: 10px; margin-top: 12px; }
-    .capture-primary { min-height: 64px; font-size: 22px; }
-    .auto-note { margin-top: 8px; font-size: 13px; color: #657275; font-weight: 800; }
-    .status-card { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; border-radius: 8px; padding: 12px; background: #eef6ff; color: #153e66; font-weight: 900; margin-top: 12px; }
-    .status-card[hidden], .alert[hidden], .result[hidden], .recent[hidden] { display: none; }
-    .spinner { width: 24px; height: 24px; border: 3px solid rgba(21, 62, 102, .2); border-top-color: #153e66; border-radius: 999px; animation: spin .8s linear infinite; }
-    .alert { border-radius: 8px; padding: 12px; margin-top: 12px; font-weight: 850; line-height: 1.45; }
-    .alert-red { background: #fff0ee; color: #8d2b20; border: 1px solid #e7aaa2; }
-    .alert-yellow { background: #fff5c9; color: #6b4a00; border: 1px solid #e5c55e; }
-    .alert-blue { background: #eef6ff; color: #153e66; border: 1px solid #9fc4ed; }
-    .result { display: grid; gap: 12px; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .pill { display: inline-flex; align-items: center; min-height: 28px; border-radius: 999px; padding: 4px 9px; background: #e9eeec; color: #344245; font-size: 12px; font-weight: 950; }
-    .pill-green { background: #daf2e4; color: #14613a; }
-    .pill-yellow { background: #fff3bd; color: #6b4a00; }
-    .pill-red { background: #ffe1dd; color: #8d2b20; }
-    .pill-blue { background: #dceeff; color: #153e66; }
-    .barcode-list { display: grid; gap: 8px; }
-    .barcode { border: 1px solid #dce2df; border-radius: 8px; padding: 10px; background: #fbfcfb; }
-    .barcode strong, .record strong { display: block; overflow-wrap: anywhere; }
-    .barcode span, .record span { display: block; margin-top: 2px; color: #657275; font-size: 13px; overflow-wrap: anywhere; }
+    .mobile-nav-inner {
+      max-width: 480px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .step-title {
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      background: var(--soft);
+      font-size: 22px;
+      font-weight: 950;
+    }
+    .lang-switch { grid-column: 1 / -1; width: 100%; grid-template-columns: 1fr 1fr 1fr; }
+    main {
+      max-width: 480px;
+      min-height: calc(100svh - 140px);
+      padding: 0 0 calc(96px + env(safe-area-inset-bottom));
+    }
+    .wizard-step { display: none; }
+    .wizard-step.active { display: block; }
+    .capture-stage {
+      min-height: calc(100svh - 156px);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 16px;
+      padding: 16px;
+      background: #0a0a0a;
+      color: #fff;
+    }
+    .capture-top {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: end;
+    }
+    .capture-top label { color: #fff; margin-top: 0; }
+    .capture-top select { background: #fff; color: var(--ink); }
+    .runtime-meta { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .locator {
+      position: relative;
+      min-height: 420px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+    .locator img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #0a0a0a;
+    }
+    .locator-label {
+      z-index: 2;
+      max-width: 260px;
+      text-align: center;
+      color: #fff;
+      font-size: 24px;
+      font-weight: 950;
+      line-height: 1.25;
+    }
+    .corner {
+      position: absolute;
+      z-index: 3;
+      width: 54px;
+      height: 54px;
+      border-color: #fff;
+      border-style: solid;
+      pointer-events: none;
+    }
+    .corner-tl { top: 24px; left: 24px; border-width: 6px 0 0 6px; }
+    .corner-tr { top: 24px; right: 24px; border-width: 6px 6px 0 0; }
+    .corner-bl { bottom: 24px; left: 24px; border-width: 0 0 6px 6px; }
+    .corner-br { right: 24px; bottom: 24px; border-width: 0 6px 6px 0; }
+    .capture-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .capture-buttons button { min-height: 64px; }
+    .photo-guide {
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 16px;
+      padding: 16px;
+      background: rgba(255,255,255,.08);
+      color: #fff;
+    }
+    .photo-guide h2 { margin: 0 0 8px; color: #fff; font-size: 22px; }
+    .photo-guide ol { margin: 0 0 0 24px; padding: 0; line-height: 1.5; font-weight: 850; }
+    .operator-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+    .step-card {
+      margin: 16px;
+      padding: 24px;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--line);
+    }
+    .scan-box { min-height: 280px; display: grid; place-items: center; text-align: center; }
+    .scan-box .spinner { width: 56px; height: 56px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    .result-grid { display: grid; gap: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .barcode-list, .recent-list { display: grid; gap: 8px; margin-top: 8px; }
+    .barcode, .record, .empty, details.raw-ocr, .summary-line {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      padding: 12px;
+    }
+    .barcode strong, .record strong, .summary-line strong { display: block; overflow-wrap: anywhere; }
+    .barcode span, .record span, .summary-line span { display: block; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
     .barcode-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-    .barcode-actions button { min-height: 38px; font-size: 13px; }
-    .sticky-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(247, 248, 245, .96); border-top: 1px solid #dce2df; backdrop-filter: blur(14px); }
-    .sticky-actions-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 520px; margin: 0 auto; }
+    .barcode-actions button { min-height: 56px; font-size: 18px; }
+    .material-match-list { display: grid; gap: 8px; }
+    .material-match {
+      border: 2px solid #22c55e;
+      border-radius: 16px;
+      background: #f0fdf4;
+      padding: 12px;
+    }
+    .material-match strong { display: block; font-size: 18px; overflow-wrap: anywhere; }
+    .material-match span { display: block; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
+    .material-match-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .material-match-actions button { min-height: 56px; font-size: 18px; }
+    details.raw-ocr summary { min-height: 56px; display: flex; align-items: center; cursor: pointer; font-weight: 950; }
+    .raw-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; max-height: 260px; overflow: auto; color: var(--muted); font-size: 18px; line-height: 1.45; }
+    .sticky-actions {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+      background: rgba(254,254,254,.98);
+      border-top: 1px solid var(--line);
+    }
+    .sticky-actions-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
     .sticky-actions-inner.single { grid-template-columns: 1fr; }
-    .recent-list { display: grid; gap: 8px; }
-    .record { text-align: left; border: 1px solid #dce2df; background: #fbfcfb; border-radius: 8px; padding: 11px; }
-    .empty { border: 1px dashed #c8d1ce; border-radius: 8px; padding: 13px; color: #657275; font-size: 14px; text-align: center; }
-    details.raw-ocr { border: 1px solid #dce2df; border-radius: 8px; background: #fbfcfb; padding: 11px; }
-    details.raw-ocr summary { cursor: pointer; font-weight: 950; color: #344245; }
-    .raw-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; max-height: 260px; overflow: auto; color: #4d5b5e; font-size: 13px; line-height: 1.45; }
-    .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (max-width: 360px) {
-      h1 { font-size: 23px; }
-      input, select, button { font-size: 16px; }
-      .row, .capture-actions, .sticky-actions-inner { grid-template-columns: 1fr; }
+    .record { text-align: left; }
+    .empty { color: var(--muted); text-align: center; }
+    @media (max-width: 380px) {
+      .capture-top, .capture-buttons, .row, .sticky-actions-inner { grid-template-columns: 1fr; }
+      .locator { min-height: 360px; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <nav aria-label="主导航">
-      <a class="brand" href="/mobile" aria-current="page">手机录入</a>
-      <a class="nav-link" href="/">桌面版</a>
-      <a class="nav-link" href="/history">历史</a>
+  <header class="mobile-nav">
+    <nav class="mobile-nav-inner" aria-label="Navigation">
+      <a class="nav-button" href="/" data-i18n="nav.back">Back</a>
+      <div class="step-title" id="stepTitle" data-i18n="mobile.step.capture">Capture</div>
+      <div class="lang-switch" aria-label="Language">
+        <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+        <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+        <button type="button" data-locale="zh" data-i18n="language.zh">ZH</button>
+      </div>
+      <span hidden data-i18n="nav.mobile">Mobile</span>
     </nav>
   </header>
 
   <main>
-    <section class="panel hero">
-      <h1>拍标签，确认入库</h1>
-      <p class="muted">手机测试版：先跑通现场拍照、OCR、人工修正和确认入库。</p>
-      <div class="meta">
-        <span class="pill">局域网 Web</span>
-        <span class="pill">Tesseract / 条码</span>
-        <span class="pill">SQLite 入库</span>
+    <section class="wizard-step capture-stage" data-step="capture">
+      <div class="capture-top">
+        <div>
+          <label for="category" data-i18n="form.category.title">Category</label>
+          <select id="category" name="category" required>
+            <option value="A" data-i18n="form.category.a">A</option>
+            <option value="B" data-i18n="form.category.b">B</option>
+            <option value="C" data-i18n="form.category.c">C</option>
+          </select>
+        </div>
+        <div class="runtime-meta" id="runtimeMeta" aria-label="Runtime"></div>
       </div>
-      <div class="meta" id="runtimeMeta" aria-label="运行状态"></div>
-    </section>
-
-    <section class="panel">
-      <h2>1. 拍照上传</h2>
       <form id="uploadForm">
-        <label for="category">品类</label>
-        <select id="category" name="category" required>
-          <option value="A">A</option>
-          <option value="B">B</option>
-          <option value="C">C</option>
-        </select>
-
-        <label>标签照片</label>
         <input id="cameraFile" class="visually-hidden" name="cameraFile" type="file" accept="image/*,.jpg,.jpeg,.png,.webp" capture="environment">
         <input id="galleryFile" class="visually-hidden" name="galleryFile" type="file" accept="image/*,.jpg,.jpeg,.png,.webp">
-        <div class="capture-actions">
-          <button class="capture-primary" id="cameraBtn" type="button">拍照识别</button>
-          <button class="secondary" id="galleryBtn" type="button">选择图片</button>
-        </div>
-        <div class="auto-note">拍照确认后会自动上传识别；选择图片后可先预览，再点底部上传。</div>
-        <div class="preview" id="preview">拍一张清晰、完整、正对标签的照片</div>
-
-        <div class="status-card" id="processing" hidden>
-          <div class="spinner" aria-hidden="true"></div>
-          <div id="processingText">识别中...</div>
-        </div>
-        <div class="alert alert-red" id="errorBox" role="alert" hidden></div>
       </form>
+      <div class="locator" id="preview">
+        <span class="corner corner-tl"></span>
+        <span class="corner corner-tr"></span>
+        <span class="corner corner-bl"></span>
+        <span class="corner corner-br"></span>
+        <div class="locator-label" data-i18n="mobile.capture.locator">Place label inside the corners</div>
+      </div>
+      <div class="capture-buttons">
+        <button class="capture-primary" id="cameraBtn" type="button" data-i18n="mobile.capture.camera">Take photo</button>
+        <button class="secondary" id="galleryBtn" type="button" data-i18n="mobile.capture.gallery">Choose image</button>
+      </div>
+      <section class="photo-guide" aria-labelledby="mobilePhotoGuideTitle">
+        <h2 id="mobilePhotoGuideTitle" data-i18n="guide.title">Photo guide</h2>
+        <ol>
+          <li data-i18n="guide.item1">Capture one label per photo.</li>
+          <li data-i18n="guide.item2">Keep the full label inside the frame.</li>
+          <li data-i18n="guide.item3">Make Model / VIN-BIN / SN sharp and readable.</li>
+          <li data-i18n="guide.item4">Face the label straight on and avoid glare, shadows and tilt.</li>
+          <li data-i18n="guide.item5">If OCR fails, fill the fields manually.</li>
+        </ol>
+      </section>
     </section>
 
-    <section class="panel result" id="resultPanel" hidden>
-      <div>
-        <h2>2. 核对结果</h2>
-        <div class="meta" id="recordMeta"></div>
-      </div>
-      <input id="recordId" type="hidden">
-      <div class="alert alert-yellow" id="reviewBox" hidden></div>
-      <div class="alert alert-blue" id="statusHelpBox" hidden></div>
-      <div class="alert alert-blue" id="duplicateBox" hidden></div>
-
-      <div>
-        <label for="model">Model</label>
-        <input id="model" autocomplete="off" inputmode="text">
-      </div>
-      <div>
-        <label for="vin">VIN/BIN</label>
-        <input id="vin" autocomplete="off" inputmode="text">
-      </div>
-      <div>
-        <label for="sn">SN</label>
-        <input id="sn" autocomplete="off" inputmode="text">
-      </div>
-      <div class="row">
+    <section class="wizard-step" data-step="scan">
+      <div class="step-card scan-box">
         <div>
-          <label for="confirmCategory">确认品类</label>
-          <select id="confirmCategory">
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="C">C</option>
-          </select>
+          <div class="spinner" aria-hidden="true"></div>
+          <h1 data-i18n="mobile.scan.title">Scanning label</h1>
+          <p class="muted" id="processingText" data-i18n="ocr.processing">Scanning...</p>
         </div>
-        <div>
-          <label for="duplicateAction">重复处理</label>
-          <select id="duplicateAction">
-            <option value="abandon">放弃新记录</option>
-            <option value="overwrite">覆盖旧记录</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label>条码识别</label>
-        <div class="barcode-list" id="barcodes">
-          <div class="empty">未识别到条码</div>
-        </div>
-      </div>
-      <details class="raw-ocr">
-        <summary>OCR 原文</summary>
-        <pre class="raw-text" id="rawOcrText">暂无 OCR 原文</pre>
-      </details>
-      <div class="result-actions">
-        <button class="secondary" id="retakeInlineBtn" type="button">重拍</button>
-        <a class="nav-link" href="/history">查看历史</a>
       </div>
     </section>
 
-    <section class="panel recent" id="recentPanel">
-      <h2>最近记录</h2>
-      <div class="recent-list" id="recentRecords">
-        <div class="empty">暂无记录</div>
+    <section class="wizard-step" data-step="edit">
+      <div class="step-card result-grid">
+        <div>
+          <h1 data-i18n="mobile.edit.title">Correct fields</h1>
+          <div class="meta" id="recordMeta"></div>
+        </div>
+        <input id="recordId" type="hidden">
+        <div class="alert alert-yellow" id="reviewBox" hidden></div>
+        <div class="alert alert-blue" id="statusHelpBox" hidden></div>
+        <div>
+          <label for="model" data-i18n="form.field.model">Model</label>
+          <input id="model" autocomplete="off" inputmode="text">
+        </div>
+        <div>
+          <label for="vin" data-i18n="form.field.vinOrBin">VIN/BIN</label>
+          <input id="vin" autocomplete="off" inputmode="text">
+        </div>
+        <div>
+          <label for="sn" data-i18n="form.field.serialNumber">SN</label>
+          <input id="sn" autocomplete="off" inputmode="text">
+        </div>
+        <div class="row">
+          <div>
+            <label for="confirmCategory" data-i18n="form.field.confirmCategory">Confirm category</label>
+            <select id="confirmCategory">
+              <option value="A" data-i18n="form.category.a">A</option>
+              <option value="B" data-i18n="form.category.b">B</option>
+              <option value="C" data-i18n="form.category.c">C</option>
+            </select>
+          </div>
+          <div>
+            <label for="duplicateAction" data-i18n="form.field.duplicateAction">Duplicate handling</label>
+            <select id="duplicateAction">
+              <option value="abandon" data-i18n="duplicate.action.discardNew">Discard new on duplicate</option>
+              <option value="overwrite" data-i18n="duplicate.action.overwrite">Overwrite old record</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label data-i18n="material.title">Material match</label>
+          <div class="material-match-list" id="materialMatches">
+            <div class="empty" data-i18n="material.none">No material match</div>
+          </div>
+        </div>
+        <div>
+          <label data-i18n="barcode.title">Barcode scan</label>
+          <div class="barcode-list" id="barcodes">
+            <div class="empty" data-i18n="barcode.none">No barcode detected</div>
+          </div>
+        </div>
+        <details class="raw-ocr">
+          <summary data-i18n="ocr.raw">Raw OCR</summary>
+          <pre class="raw-text" id="rawOcrText" data-i18n="ocr.raw.empty">No raw OCR text</pre>
+        </details>
+      </div>
+    </section>
+
+    <section class="wizard-step" data-step="confirm">
+      <div class="step-card result-grid">
+        <div>
+          <h1 data-i18n="mobile.confirm.title">Confirm record</h1>
+          <p class="muted" data-i18n="mobile.confirm.hint">Check the fields, duplicate policy and barcode data before saving.</p>
+        </div>
+        <div class="summary-line"><strong data-i18n="form.field.model">Model</strong><span id="summaryModel">-</span></div>
+        <div class="summary-line"><strong data-i18n="form.field.vinOrBin">VIN/BIN</strong><span id="summaryVin">-</span></div>
+        <div class="summary-line"><strong data-i18n="form.field.serialNumber">SN</strong><span id="summarySn">-</span></div>
+        <div class="summary-line"><strong data-i18n="form.field.duplicateAction">Duplicate handling</strong><span id="summaryDuplicate">-</span></div>
+        <div class="alert alert-blue" id="duplicateBox" hidden></div>
+      </div>
+    </section>
+
+    <section class="wizard-step" data-step="done">
+      <div class="step-card result-grid">
+        <div>
+          <h1 data-i18n="mobile.done.title">Record saved</h1>
+          <p class="muted" data-i18n="mobile.done.hint">Continue with the next machine when the label is attached.</p>
+          <div class="meta" id="doneMeta"></div>
+        </div>
+        <section>
+          <h2 data-i18n="mobile.recent.title">Recent records</h2>
+          <div class="operator-summary" id="operatorSummary"></div>
+          <div class="recent-list" id="recentRecords">
+            <div class="empty" data-i18n="mobile.recent.empty">No records</div>
+          </div>
+        </section>
       </div>
     </section>
   </main>
 
   <div class="sticky-actions">
     <div class="sticky-actions-inner" id="stickyActions">
-      <button id="primaryBtn" type="button">上传并识别</button>
-      <button class="secondary" id="nextBtn" type="button">继续拍下一台</button>
+      <button id="primaryBtn" type="button" data-i18n="mobile.action.upload">Upload and scan</button>
+      <button class="secondary" id="nextBtn" type="button" data-i18n="mobile.action.next">Next machine</button>
     </div>
   </div>
+  <div id="toast" class="toast toast-info" role="status" aria-live="polite" hidden></div>
 
+  <script src="/static/i18n.js"></script>
   <script>
     const uploadForm = document.querySelector('#uploadForm');
     const cameraFile = document.querySelector('#cameraFile');
@@ -204,54 +343,91 @@
     const cameraBtn = document.querySelector('#cameraBtn');
     const galleryBtn = document.querySelector('#galleryBtn');
     const preview = document.querySelector('#preview');
-    const processing = document.querySelector('#processing');
     const processingText = document.querySelector('#processingText');
-    const errorBox = document.querySelector('#errorBox');
-    const resultPanel = document.querySelector('#resultPanel');
+    const errorBox = document.querySelector('#toast');
     const recordMeta = document.querySelector('#recordMeta');
     const reviewBox = document.querySelector('#reviewBox');
     const statusHelpBox = document.querySelector('#statusHelpBox');
     const duplicateBox = document.querySelector('#duplicateBox');
     const rawOcrText = document.querySelector('#rawOcrText');
     const barcodes = document.querySelector('#barcodes');
+    const materialMatches = document.querySelector('#materialMatches');
     const recentRecords = document.querySelector('#recentRecords');
+    const operatorSummary = document.querySelector('#operatorSummary');
     const runtimeMeta = document.querySelector('#runtimeMeta');
     const primaryBtn = document.querySelector('#primaryBtn');
     const nextBtn = document.querySelector('#nextBtn');
-    const retakeInlineBtn = document.querySelector('#retakeInlineBtn');
     const stickyActions = document.querySelector('#stickyActions');
-    let mode = 'upload';
+    const stepTitle = document.querySelector('#stepTitle');
+    const doneMeta = document.querySelector('#doneMeta');
+    const tr = (key, vars) => window.I18n.t(key, vars);
+    const stepKeyMap = {
+      capture: 'mobile.step.capture',
+      scan: 'mobile.step.scan',
+      edit: 'mobile.step.edit',
+      confirm: 'mobile.step.confirm',
+      done: 'mobile.step.done',
+    };
+    const statusKeyMap = {
+      uploaded: 'status.uploaded',
+      ocr_done: 'status.ocrDone',
+      confirmed: 'status.confirmed',
+      submitted: 'status.submitted',
+      submission_failed: 'status.submissionFailed',
+      duplicate: 'status.duplicate',
+      needs_review: 'status.needsReview',
+    };
+    const statusHelpKeyMap = {
+      uploaded: 'status.help.uploaded',
+      ocr_done: 'status.help.ocrDone',
+      confirmed: 'status.help.confirmed',
+      submitted: 'status.help.submitted',
+      submission_failed: 'status.help.submissionFailed',
+      duplicate: 'status.help.duplicate',
+      needs_review: 'status.help.needsReview',
+    };
+    let step = 'capture';
     let selectedPreviewUrl = null;
     let selectedFile = null;
     let currentRecord = null;
     let pollTimer = null;
     let uploadInFlight = false;
     let lastAutoUploadedSignature = '';
+    let toastTimer = null;
+
+    function getOperatorId() {
+      const key = 'machineLabelOperatorId';
+      let value = '';
+      try { value = localStorage.getItem(key); } catch { value = ''; }
+      if (!value) {
+        const random = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : String(Date.now()).slice(-8);
+        value = `phone-${random}`;
+        try { localStorage.setItem(key, value); } catch {}
+      }
+      return value;
+    }
+
+    const operatorId = getOperatorId();
 
     function escapeHtml(value) {
       return String(value || '').replace(/[&<>"']/g, (char) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       }[char]));
     }
 
-    function setAlert(node, html) {
-      node.innerHTML = html || '';
-      node.hidden = !html;
+    function statusLabel(status) {
+      return tr(statusKeyMap[status] || 'status.unknown');
+    }
+
+    function statusPill(record) {
+      return `<span class="pill status-pill status-${escapeHtml(String(record.status || '').replace(/[^a-z_]/g, ''))}">${escapeHtml(statusLabel(record.status))}</span>`;
     }
 
     async function requestJson(url, options) {
       const response = await fetch(url, options);
       const text = await response.text();
       let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = { detail: text || `HTTP ${response.status}` };
-      }
+      try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }
       if (!response.ok) {
         const error = new Error(data?.detail || `HTTP ${response.status}`);
         error.status = response.status;
@@ -260,36 +436,66 @@
       return data;
     }
 
-    function setMode(nextMode) {
-      mode = nextMode;
-      if (mode === 'confirm') {
-        primaryBtn.textContent = '确认本地入库';
-        nextBtn.hidden = false;
-        stickyActions.classList.remove('single');
-      } else {
-        primaryBtn.textContent = '上传并识别';
-        nextBtn.hidden = true;
-        stickyActions.classList.add('single');
-      }
+    function showToast(message, type = 'info') {
+      if (!message) return;
+      if (toastTimer) window.clearTimeout(toastTimer);
+      errorBox.className = `toast toast-${type}`;
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+      toastTimer = window.setTimeout(() => {
+        errorBox.hidden = true;
+      }, 4000);
     }
 
-    function renderRuntimeStatus(settings) {
-      const saasText = settings.enable_saas_submit ? 'SaaS 提交开' : 'SaaS 提交关';
-      const dryRunText = settings.dry_run ? 'dry-run' : '真实提交';
-      runtimeMeta.innerHTML = `
-        <span class="pill pill-blue">OCR: ${escapeHtml(settings.ocr_provider || 'unknown')}</span>
-        <span class="pill ${settings.enable_barcode ? 'pill-green' : 'pill-yellow'}">条码: ${settings.enable_barcode ? '开' : '关'}</span>
-        <span class="pill ${settings.enable_saas_submit ? 'pill-yellow' : 'pill-green'}">${saasText}</span>
-        <span class="pill">${dryRunText}</span>
-      `;
+    function setAlert(node, html, type = 'info') {
+      if (node === errorBox) {
+        if (html) showToast(String(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(), type);
+        return;
+      }
+      node.className = `alert alert-${type === 'warning' ? 'yellow' : (type === 'error' ? 'red' : 'blue')}`;
+      node.innerHTML = html || '';
+      node.hidden = !html;
     }
 
-    async function loadRuntimeStatus() {
-      try {
-        renderRuntimeStatus(await requestJson('/runtime/status'));
-      } catch {
-        runtimeMeta.innerHTML = '<span class="pill pill-yellow">运行状态读取失败</span>';
+    function currentHashStep() {
+      const candidate = window.location.hash.replace(/^#/, '');
+      return Object.prototype.hasOwnProperty.call(stepKeyMap, candidate) ? candidate : 'capture';
+    }
+
+    function routeTo(nextStep, replace = false) {
+      const hash = `#${nextStep}`;
+      if (replace) window.location.replace(hash);
+      else if (window.location.hash !== hash) window.location.hash = hash;
+      applyStep(nextStep);
+    }
+
+    function updateSummary() {
+      document.querySelector('#summaryModel').textContent = document.querySelector('#model').value || '-';
+      document.querySelector('#summaryVin').textContent = document.querySelector('#vin').value || '-';
+      document.querySelector('#summarySn').textContent = document.querySelector('#sn').value || '-';
+      document.querySelector('#summaryDuplicate').textContent = document.querySelector('#duplicateAction').selectedOptions[0]?.textContent || '-';
+    }
+
+    function applyStep(nextStep) {
+      step = nextStep;
+      document.querySelectorAll('[data-step]').forEach((section) => {
+        section.classList.toggle('active', section.dataset.step === step);
+      });
+      stepTitle.textContent = tr(stepKeyMap[step]);
+      nextBtn.hidden = step === 'capture' || step === 'scan' || step === 'edit';
+      stickyActions.classList.toggle('single', nextBtn.hidden);
+      primaryBtn.disabled = false;
+      if (step === 'capture') primaryBtn.textContent = tr('mobile.action.upload');
+      if (step === 'scan') {
+        primaryBtn.textContent = tr('ocr.processing');
+        primaryBtn.disabled = true;
       }
+      if (step === 'edit') primaryBtn.textContent = tr('common.confirm');
+      if (step === 'confirm') {
+        updateSummary();
+        primaryBtn.textContent = tr('mobile.action.confirm');
+      }
+      if (step === 'done') primaryBtn.textContent = tr('mobile.action.next');
     }
 
     function clearPolling() {
@@ -324,28 +530,23 @@
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
               if (!blob) {
-                reject(new Error('压缩失败'));
+                reject(new Error(tr('error.compressFailed')));
                 return;
               }
-              const compressed = new File([blob], file.name, { type: 'image/jpeg' });
-              resolve(compressed);
+              resolve(new File([blob], file.name, { type: 'image/jpeg' }));
             }, 'image/jpeg', quality);
           };
-          img.onerror = () => reject(new Error('图片加载失败'));
+          img.onerror = () => reject(new Error(tr('error.imageLoadFailed')));
           img.src = e.target.result;
         };
-        reader.onerror = () => reject(new Error('文件读取失败'));
+        reader.onerror = () => reject(new Error(tr('error.fileReadFailed')));
         reader.readAsDataURL(file);
       });
     }
 
     function showProcessing(message) {
-      processing.hidden = false;
       processingText.textContent = message;
-    }
-
-    function hideProcessing() {
-      processing.hidden = true;
+      routeTo('scan');
     }
 
     function uploadWithProgress(formData) {
@@ -354,29 +555,24 @@
         xhr.open('POST', '/upload');
         xhr.upload.addEventListener('progress', (event) => {
           if (!event.lengthComputable) {
-            showProcessing('上传中...');
+            showProcessing(tr('upload.progress.uploading'));
             return;
           }
           const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
-          showProcessing(`上传中 ${percent}%`);
+          showProcessing(tr('upload.progress.uploadingPercent', { percent }));
         });
         xhr.addEventListener('load', () => {
           let data = null;
-          try {
-            data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
-          } catch {
-            data = { detail: xhr.responseText || `HTTP ${xhr.status}` };
-          }
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(data);
-          } else {
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch { data = { detail: xhr.responseText || `HTTP ${xhr.status}` }; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else {
             const error = new Error(data?.detail || `HTTP ${xhr.status}`);
             error.status = xhr.status;
             reject(error);
           }
         });
-        xhr.addEventListener('error', () => reject(new Error('网络错误')));
-        xhr.addEventListener('timeout', () => reject(new Error('上传超时')));
+        xhr.addEventListener('error', () => reject(new Error(tr('error.networkError'))));
+        xhr.addEventListener('timeout', () => reject(new Error(tr('error.uploadGeneric'))));
         xhr.timeout = 45000;
         xhr.send(formData);
       });
@@ -392,7 +588,7 @@
       const startedAt = Date.now();
       while (Date.now() - startedAt < 45000) {
         const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-        showProcessing(`识别中，已用 ${elapsed} 秒`);
+        showProcessing(tr('ocr.elapsed', { seconds: elapsed }));
         const record = await requestJson(`/jobs/${id}`);
         if (record.status !== 'uploaded') {
           clearPolling();
@@ -400,44 +596,40 @@
         }
         await sleep(900);
       }
-      throw new Error('识别超时，请重拍或稍后重试');
+      throw new Error(tr('error.ocrTimeout'));
     }
 
-    function statusPill(record) {
-      const tone = record.status === 'ocr_done' || record.status === 'confirmed'
-        ? 'pill-green'
-        : (record.status === 'needs_review' ? 'pill-yellow' : 'pill-red');
-      return `<span class="pill ${tone}">${escapeHtml(record.status)}</span>`;
+    function renderRuntimeStatus(settings) {
+      const saasText = settings.enable_saas_submit ? tr('mobile.runtime.saasOn') : tr('mobile.runtime.saasOff');
+      const dryRunText = settings.dry_run ? tr('mobile.runtime.dryRun') : tr('mobile.runtime.realSubmit');
+      runtimeMeta.innerHTML = `
+        <span class="pill pill-blue">OCR: ${escapeHtml(settings.ocr_provider || 'unknown')}</span>
+        <span class="pill ${settings.enable_barcode ? 'pill-green' : 'pill-yellow'}">${escapeHtml(settings.enable_barcode ? tr('mobile.runtime.barcodeOn') : tr('mobile.runtime.barcodeOff'))}</span>
+        <span class="pill ${settings.enable_saas_submit ? 'pill-yellow' : 'pill-green'}">${escapeHtml(saasText)}</span>
+        <span class="pill">${escapeHtml(dryRunText)}</span>
+      `;
     }
 
-    function completionButtonText(status) {
-      if (status === 'confirmed') return '已入库';
-      if (status === 'duplicate') return '已标记重复';
-      if (status === 'submitted') return '已提交';
-      return '已处理';
-    }
-
-    function statusHelp(record) {
-      const messages = {
-        uploaded: '图片已上传，正在等待 OCR。',
-        ocr_done: '已完成本地 OCR，请核对字段后确认本地入库。',
-        needs_review: '识别结果不完整，建议重拍或手动补齐字段。',
-        duplicate: '发现重复记录。测试时出现 duplicate 是正常的，可按需要覆盖或放弃。',
-        confirmed: '已完成本地入库。SaaS 提交当前默认关闭，不影响手机测试。',
-        submitted: '已提交到 SaaS。',
-        submission_failed: 'SaaS 提交失败或 dry-run 环境缺失；本地 OCR/入库测试仍可继续。',
-      };
-      return messages[record.status] || `当前状态：${record.status}`;
+    async function loadRuntimeStatus() {
+      try {
+        renderRuntimeStatus(await requestJson('/runtime/status'));
+      } catch {
+        runtimeMeta.innerHTML = `<span class="pill pill-yellow">${escapeHtml(tr('mobile.runtime.failed'))}</span>`;
+      }
     }
 
     function isEmptyResult(record) {
       return !record.model && !record.vin_or_bin && !record.serial_number;
     }
 
+    function statusHelp(record) {
+      return tr(statusHelpKeyMap[record.status] || 'status.unknown');
+    }
+
     function renderBarcodes(items) {
       barcodes.innerHTML = '';
       if (!items || !items.length) {
-        barcodes.innerHTML = '<div class="empty">未识别到条码</div>';
+        barcodes.innerHTML = `<div class="empty">${escapeHtml(tr('barcode.none'))}</div>`;
         return;
       }
       for (const item of items) {
@@ -447,8 +639,8 @@
           <strong>${escapeHtml(item.type || 'BARCODE')}</strong>
           <span>${escapeHtml(item.data)}</span>
           <div class="barcode-actions">
-            <button class="secondary" type="button" data-target="vin">填到 VIN</button>
-            <button class="secondary" type="button" data-target="sn">填到 SN</button>
+            <button class="secondary" type="button" data-target="vin">${escapeHtml(tr('barcode.fillVin'))}</button>
+            <button class="secondary" type="button" data-target="sn">${escapeHtml(tr('barcode.fillSn'))}</button>
           </div>
         `;
         div.querySelector('[data-target="vin"]').addEventListener('click', () => {
@@ -461,6 +653,34 @@
       }
     }
 
+    function renderMaterialMatches(items) {
+      materialMatches.innerHTML = '';
+      if (!items || !items.length) {
+        materialMatches.innerHTML = `<div class="empty">${escapeHtml(tr('material.none'))}</div>`;
+        return;
+      }
+      for (const item of items) {
+        const div = document.createElement('div');
+        div.className = 'material-match';
+        div.innerHTML = `
+          <strong>${escapeHtml(tr('material.ruiyun'))}: ${escapeHtml(item.ruiyun_part_number || '-')}</strong>
+          <strong>${escapeHtml(tr('material.sku'))}: ${escapeHtml(item.sku || '-')}</strong>
+          <span>${escapeHtml(tr('material.matchedInput'))}: ${escapeHtml(item.matched_input || '-')}</span>
+          <div class="material-match-actions">
+            <button class="secondary" type="button" data-fill="ruiyun">${escapeHtml(tr('material.fillRuiyun'))}</button>
+            <button class="secondary" type="button" data-fill="sku">${escapeHtml(tr('material.fillSku'))}</button>
+          </div>
+        `;
+        div.querySelector('[data-fill="ruiyun"]').addEventListener('click', () => {
+          document.querySelector('#vin').value = item.ruiyun_part_number || '';
+        });
+        div.querySelector('[data-fill="sku"]').addEventListener('click', () => {
+          document.querySelector('#sn').value = item.sku || '';
+        });
+        materialMatches.appendChild(div);
+      }
+    }
+
     function renderDuplicate(record, fallbackDuplicates = []) {
       const duplicates = record.duplicates && record.duplicates.length ? record.duplicates : fallbackDuplicates;
       if (!duplicates.length && record.status !== 'duplicate') {
@@ -468,9 +688,9 @@
         return;
       }
       const detail = duplicates.length
-        ? duplicates.map((item) => `#${item.id} ${item.model || '-'} / ${item.vin_or_bin || '-'} / ${item.serial_number || '-'}`).join('<br>')
-        : '发现重复记录，请选择覆盖旧记录或放弃新记录。';
-      setAlert(duplicateBox, `<strong>重复提醒</strong><br>${detail}`);
+        ? duplicates.map((item) => `#${item.id} ${escapeHtml(item.model || '-')} / ${escapeHtml(item.vin_or_bin || '-')} / ${escapeHtml(item.serial_number || '-')}`).join('<br>')
+        : escapeHtml(tr('status.help.duplicate'));
+      setAlert(duplicateBox, `<strong>${escapeHtml(tr('duplicate.title'))}</strong><br>${detail}`, 'info');
     }
 
     function fillRecord(record, fallbackDuplicates = []) {
@@ -480,58 +700,49 @@
       document.querySelector('#vin').value = record.vin_or_bin || '';
       document.querySelector('#sn').value = record.serial_number || '';
       document.querySelector('#confirmCategory').value = record.category;
-      recordMeta.innerHTML = `${statusPill(record)}<span class="pill">#${record.id}</span><span class="pill">品类 ${record.category}</span>`;
+      recordMeta.innerHTML = `${statusPill(record)}<span class="pill">#${record.id}</span><span class="pill">${escapeHtml(tr('form.field.category'))} ${escapeHtml(record.category)}</span>`;
+      renderMaterialMatches(record.material_matches || []);
       renderBarcodes(record.barcodes || []);
       renderDuplicate(record, fallbackDuplicates);
-      rawOcrText.textContent = record.raw_ocr_text || '暂无 OCR 原文';
+      rawOcrText.textContent = record.raw_ocr_text || tr('ocr.raw.empty');
       setAlert(statusHelpBox, statusHelp(record));
-      if (record.status === 'needs_review' || isEmptyResult(record)) {
-        setAlert(reviewBox, '识别结果不完整，请核对照片、重拍，或手动补字段。');
-      } else {
-        setAlert(reviewBox, '');
-      }
-      resultPanel.hidden = false;
-      resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setMode('confirm');
+      if (record.status === 'needs_review' || isEmptyResult(record)) setAlert(reviewBox, tr('ocr.reviewNeeded'), 'warning');
+      else setAlert(reviewBox, '');
+      routeTo('edit');
     }
 
     async function uploadCurrentPhoto() {
       if (uploadInFlight) return;
       if (!selectedFile) {
-        setAlert(errorBox, '请先拍照或选择一张标签图片。');
+        showToast(tr('error.noPhoto'), 'error');
         return;
       }
       uploadInFlight = true;
       primaryBtn.disabled = true;
       cameraBtn.disabled = true;
       galleryBtn.disabled = true;
-      setAlert(errorBox, '');
-      setAlert(reviewBox, '');
-      setAlert(statusHelpBox, '');
-      setAlert(duplicateBox, '');
-      resultPanel.hidden = true;
       try {
+        showProcessing(tr('mobile.processing.compress'));
         const originalFile = selectedFile;
-        showProcessing('压缩图片...');
         const compressedFile = await compressImage(originalFile);
         const sizeNote = originalFile !== compressedFile
-          ? ` (${(originalFile.size/1024/1024).toFixed(1)}MB → ${(compressedFile.size/1024).toFixed(0)}KB)`
+          ? ` (${(originalFile.size / 1024 / 1024).toFixed(1)}MB -> ${(compressedFile.size / 1024).toFixed(0)}KB)`
           : '';
         const formData = new FormData();
         formData.append('category', document.querySelector('#category').value);
+        formData.append('operator_id', operatorId);
         formData.append('file', compressedFile, originalFile.name);
         const upload = await uploadWithProgress(formData);
-        showProcessing(`上传完成${sizeNote}，记录 #${upload.job_id}`);
+        showProcessing(tr('upload.progress.uploadedJob', { id: `${upload.job_id}${sizeNote}` }));
         const record = upload.status === 'uploaded'
           ? await pollJobUntilReady(upload.job_id)
           : await requestJson(`/jobs/${upload.job_id}`);
-        hideProcessing();
         fillRecord(record, upload.duplicates || []);
         await loadRecent();
       } catch (error) {
-        hideProcessing();
-        const message = error.status === 415 ? '只支持 jpg/jpeg/png/webp 图片。' : error.message;
-        setAlert(errorBox, message || '上传失败，请重试。');
+        routeTo('capture');
+        const message = error.status === 415 ? tr('error.upload415') : error.message;
+        showToast(message || tr('error.uploadGeneric'), 'error');
       } finally {
         uploadInFlight = false;
         primaryBtn.disabled = false;
@@ -543,7 +754,6 @@
     async function confirmCurrentRecord() {
       const id = document.querySelector('#recordId').value;
       if (!id) return;
-      setAlert(errorBox, '');
       const payload = {
         category: document.querySelector('#confirmCategory').value,
         model: document.querySelector('#model').value,
@@ -552,7 +762,8 @@
         duplicate_action: document.querySelector('#duplicateAction').value,
       };
       if (!payload.vin_or_bin.trim() && !payload.serial_number.trim()) {
-        setAlert(errorBox, 'VIN/BIN 和 SN 至少填一个，再确认入库。');
+        showToast(tr('error.missingFields'), 'error');
+        routeTo('edit');
         return;
       }
       primaryBtn.disabled = true;
@@ -562,52 +773,54 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        setAlert(reviewBox, '');
-        setAlert(duplicateBox, result.duplicates && result.duplicates.length ? '已按重复策略处理。' : '');
-        const finalRecord = { ...currentRecord, id: result.id, status: result.status };
-        recordMeta.innerHTML = `${statusPill(finalRecord)}<span class="pill">#${result.id}</span>`;
-        currentRecord = { ...currentRecord, status: result.status };
-        primaryBtn.textContent = completionButtonText(result.status);
-        primaryBtn.disabled = true;
+        currentRecord = { ...currentRecord, id: result.id, status: result.status };
+        doneMeta.innerHTML = `${statusPill(currentRecord)}<span class="pill">#${result.id}</span><span class="pill">${escapeHtml(completionButtonText(result.status))}</span>`;
         await loadRecent(result.status === 'confirmed' ? 'confirmed' : '');
+        routeTo('done');
       } catch (error) {
-        setAlert(errorBox, `确认失败：${error.message}`);
+        showToast(tr('form.status.confirmFailed', { message: error.message }), 'error');
       } finally {
-        primaryBtn.disabled = ['confirmed', 'duplicate', 'submitted'].includes(currentRecord?.status);
+        primaryBtn.disabled = false;
       }
+    }
+
+    function completionButtonText(status) {
+      if (status === 'confirmed') return tr('mobile.done.confirmed');
+      if (status === 'duplicate') return tr('mobile.done.duplicate');
+      if (status === 'submitted') return tr('mobile.done.submitted');
+      return tr('mobile.done.processed');
     }
 
     function resetForNext() {
       clearPolling();
-      hideProcessing();
-      setAlert(errorBox, '');
-      setAlert(reviewBox, '');
-      setAlert(statusHelpBox, '');
-      setAlert(duplicateBox, '');
-      resultPanel.hidden = true;
       uploadForm.reset();
       currentRecord = null;
       selectedFile = null;
       lastAutoUploadedSignature = '';
-      primaryBtn.disabled = false;
-      cameraBtn.disabled = false;
-      galleryBtn.disabled = false;
       if (selectedPreviewUrl) {
         URL.revokeObjectURL(selectedPreviewUrl);
         selectedPreviewUrl = null;
       }
-      preview.innerHTML = '拍一张清晰、完整、正对标签的照片';
-      setMode('upload');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      cameraBtn.focus();
+      preview.querySelectorAll('img').forEach((img) => img.remove());
+      setAlert(reviewBox, '');
+      setAlert(statusHelpBox, '');
+      setAlert(duplicateBox, '');
+      routeTo('capture');
     }
 
     async function loadRecent(status = '') {
-      const query = status ? `status=${encodeURIComponent(status)}&` : '';
-      const rows = await requestJson(`/jobs?${query}limit=5&offset=0`);
+      const params = new URLSearchParams({ operator_id: operatorId, limit: '5', offset: '0' });
+      if (status) params.set('status', status);
+      const rows = await requestJson(`/jobs?${params.toString()}`);
+      const allMine = await requestJson(`/jobs?operator_id=${encodeURIComponent(operatorId)}&limit=500&offset=0`);
+      operatorSummary.innerHTML = `
+        <span class="pill">${escapeHtml(operatorId)}</span>
+        <span class="pill status-uploaded">${escapeHtml(tr('mobile.mine.uploaded'))}: ${allMine.length}</span>
+        <a class="pill status-submitted" href="/history?operator_id=${encodeURIComponent(operatorId)}">${escapeHtml(tr('mobile.mine.history'))}</a>
+      `;
       recentRecords.innerHTML = '';
       if (!rows.length) {
-        recentRecords.innerHTML = '<div class="empty">暂无记录</div>';
+        recentRecords.innerHTML = `<div class="empty">${escapeHtml(tr('mobile.recent.empty'))}</div>`;
         return;
       }
       for (const record of rows) {
@@ -616,14 +829,11 @@
         button.className = 'record';
         button.innerHTML = `
           ${statusPill(record)}
-          <strong>#${record.id} ${escapeHtml(record.model || '未识别 Model')}</strong>
+          <strong>#${record.id} ${escapeHtml(record.model || tr('ocr.unrecognized'))}</strong>
           <span>VIN/BIN: ${escapeHtml(record.vin_or_bin || '-')}</span>
           <span>SN: ${escapeHtml(record.serial_number || '-')}</span>
         `;
-        button.addEventListener('click', async () => {
-          const full = await requestJson(`/jobs/${record.id}`);
-          fillRecord(full);
-        });
+        button.addEventListener('click', async () => fillRecord(await requestJson(`/jobs/${record.id}`)));
         recentRecords.appendChild(button);
       }
     }
@@ -637,15 +847,17 @@
         URL.revokeObjectURL(selectedPreviewUrl);
         selectedPreviewUrl = null;
       }
+      preview.querySelectorAll('img').forEach((img) => img.remove());
       if (!file) {
         selectedFile = null;
-        preview.innerHTML = '拍一张清晰、完整、正对标签的照片';
         return;
       }
       selectedFile = file;
       selectedPreviewUrl = URL.createObjectURL(file);
-      preview.innerHTML = `<img src="${selectedPreviewUrl}" alt="标签照片预览">`;
-      setAlert(errorBox, '');
+      const img = document.createElement('img');
+      img.src = selectedPreviewUrl;
+      img.alt = tr('upload.file.label');
+      preview.appendChild(img);
       if (options.autoUpload) {
         const signature = fileSignature(file);
         if (signature && signature !== lastAutoUploadedSignature) {
@@ -655,30 +867,40 @@
       }
     }
 
-    cameraBtn.addEventListener('click', () => {
-      cameraFile.click();
-    });
-
-    galleryBtn.addEventListener('click', () => {
-      galleryFile.click();
-    });
-
+    cameraBtn.addEventListener('click', () => cameraFile.click());
+    galleryBtn.addEventListener('click', () => galleryFile.click());
     cameraFile.addEventListener('change', () => handleFileSelected(cameraFile.files[0], { autoUpload: true }));
     galleryFile.addEventListener('change', () => handleFileSelected(galleryFile.files[0]));
-
     primaryBtn.addEventListener('click', () => {
-      if (mode === 'confirm') {
-        confirmCurrentRecord();
-      } else {
-        uploadCurrentPhoto();
-      }
+      if (step === 'capture') uploadCurrentPhoto();
+      else if (step === 'edit') routeTo('confirm');
+      else if (step === 'confirm') confirmCurrentRecord();
+      else if (step === 'done') resetForNext();
     });
     nextBtn.addEventListener('click', resetForNext);
-    retakeInlineBtn.addEventListener('click', resetForNext);
+    window.addEventListener('hashchange', () => applyStep(currentHashStep()));
+    window.addEventListener('i18n:change', () => {
+      I18n.applyDom(document);
+      applyStep(step);
+      renderBarcodes(currentRecord?.barcodes || []);
+      renderMaterialMatches(currentRecord?.material_matches || []);
+      if (currentRecord) {
+        recordMeta.innerHTML = `${statusPill(currentRecord)}<span class="pill">#${currentRecord.id}</span><span class="pill">${escapeHtml(tr('form.field.category'))} ${escapeHtml(currentRecord.category)}</span>`;
+        setAlert(statusHelpBox, statusHelp(currentRecord));
+        renderDuplicate(currentRecord);
+      } else {
+        renderMaterialMatches([]);
+      }
+      loadRuntimeStatus();
+      loadRecent().catch(() => {});
+    });
 
-    setMode('upload');
-    loadRuntimeStatus();
-    loadRecent().catch(() => {});
+    I18n.init().then(() => {
+      if (!window.location.hash) routeTo('capture', true);
+      else applyStep(currentHashStep());
+      loadRuntimeStatus();
+      loadRecent().catch(() => {});
+    });
   </script>
 </body>
 </html>

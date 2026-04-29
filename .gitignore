@@ -2,11 +2,17 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.omx/
 data/uploads/*
 !data/uploads/.gitkeep
+data/uploads/*.preprocessed.png
 data/screenshots/*
 !data/screenshots/.gitkeep
 data/app.db
+data/*.xlsx
+data/~$*.xlsx
+data/outbound/*
+data/ocr-scratch/*
 data/storage_state.json
 logs/
 .DS_Store
@@ -15,3 +21,4 @@ build/
 dist/
 .coverage
 .env
+.env.*

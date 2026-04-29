@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Outbound Reconciliation</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--soft); font-weight: 950; }
+    .table-wrap { overflow: auto; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .kpi { border: 1px solid var(--line); border-radius: 16px; padding: 16px; background: #fff; }
+    .kpi span { display: block; color: var(--muted); }
+    .kpi strong { font-size: 28px; }
+    .order-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .order-choice { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #fff; font-weight: 850; }
+    .scan-result { margin-top: 12px; border-radius: 16px; border: 1px solid var(--line); background: #fff; padding: 16px; }
+    .scan-ok { border-color: #22c55e; background: #f0fdf4; }
+    .scan-miss { border-color: #f59e0b; background: #fffbeb; }
+    .scan-none { border-color: #ef4444; background: #fef2f2; }
+    .status-matched { color: #15803d; font-weight: 950; }
+    .status-over_shipped, .status-shipping_extra { color: #b45309; font-weight: 950; }
+    .status-under_shipped, .status-cutting_missing_shipping { color: #b91c1c; font-weight: 950; }
+    @media (max-width: 800px) { .kpis { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/"><span class="logo">ML</span><span><strong>出库核对</strong><span>剪料表 / 发货单</span></span></a>
+      <div class="nav-actions">
+        <a class="nav-button" href="/">录入</a>
+        <a class="nav-button" href="/mobile">手机</a>
+        <a class="nav-button" href="/history">历史</a>
+      </div>
+    </div>
+  </div>
+  <header class="page-head">
+    <h1>出库核对</h1>
+    <p class="muted">使用发货单后两个工作表：多物料订单发货单 + 拣货单。输入配件编码 / 瑞云料号 / SKU 查询对应出库单。</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>选择当前要核对的出库单号</h2>
+      <p class="muted">可以选一个，也可以选多个。下面扫描/输入编码时，会判断是不是属于这些单号。</p>
+      <div class="actions">
+        <button id="selectAllOrdersBtn" class="secondary" type="button">全选</button>
+        <button id="clearOrdersBtn" class="secondary" type="button">清空</button>
+      </div>
+      <div id="orderPicker" class="order-picker"></div>
+    </section>
+    <section class="card">
+      <label for="codeQuery">配件编码 / 瑞云料号 / SKU</label>
+      <div class="actions">
+        <input id="codeQuery" placeholder="例如 C.P.XS.000142004 或 MTL24LUM1US02">
+        <button id="queryBtn" type="button">扫描/查询</button>
+      </div>
+      <div id="queryResult" class="status"></div>
+    </section>
+    <section class="card">
+      <h2>总览</h2>
+      <div class="kpis" id="kpis"></div>
+      <div class="status" id="orderSummary"></div>
+    </section>
+    <section class="card">
+      <h2>按备件编码核对数量</h2>
+      <div class="table-wrap"><table><thead><tr><th>备件编码</th><th>备件名称</th><th>剪料数量</th><th>发货数量</th><th>差异</th><th>状态</th></tr></thead><tbody id="partRows"></tbody></table></div>
+    </section>
+  </main>
+  <script>
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const displayValue = (value, fallback = '-') => (value === null || value === undefined || value === '' ? fallback : value);
+    const statusText = { matched: '一致', over_shipped: '多发', under_shipped: '少发', shipping_extra: '发货多出', cutting_missing_shipping: '剪料未发', quantity_unreadable: '数量不可读' };
+    let latestSummary = null;
+    async function requestJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+    function renderKpis(payload) {
+      const counts = payload.counts || {};
+      const partStatus = counts.part_status || {};
+      document.querySelector('#kpis').innerHTML = `
+        <div class="kpi"><span>剪料编码行</span><strong>${counts.cutting_part_rows || 0}</strong></div>
+        <div class="kpi"><span>发货明细行</span><strong>${counts.shipping_items || 0}</strong></div>
+        <div class="kpi"><span>发货单号</span><strong>${(payload.order_numbers?.shipping || []).length}</strong></div>
+        <div class="kpi"><span>异常编码</span><strong>${(payload.part_rows || []).filter((row) => row.status !== 'matched').length}</strong></div>
+      `;
+      document.querySelector('#orderSummary').textContent = `${payload.order_numbers?.note || ''} 发货单号：${(payload.order_numbers?.shipping || []).join(', ') || '无'}；编码一致：${partStatus.matched || 0}；多发：${partStatus.over_shipped || 0}；少发：${partStatus.under_shipped || 0}；发货多出：${partStatus.shipping_extra || 0}；剪料未发：${partStatus.cutting_missing_shipping || 0}`;
+    }
+    function selectedOrders() {
+      return Array.from(document.querySelectorAll('[data-order-choice]:checked')).map((node) => node.value);
+    }
+    function renderOrderPicker(orderNumbers) {
+      document.querySelector('#orderPicker').innerHTML = (orderNumbers || []).map((order) => `
+        <label class="order-choice"><input type="checkbox" data-order-choice value="${escapeHtml(order)}">${escapeHtml(order)}</label>
+      `).join('');
+    }
+    function renderPartRows(rows) {
+      document.querySelector('#partRows').innerHTML = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.part_code)}</td>
+          <td>${escapeHtml(displayValue(row.name))}</td>
+          <td>${escapeHtml(displayValue(row.cutting_qty))}</td>
+          <td>${escapeHtml(displayValue(row.shipping_qty))}</td>
+          <td>${escapeHtml(displayValue(row.difference))}</td>
+          <td class="status-${escapeHtml(row.status)}">${escapeHtml(statusText[row.status] || row.status)}</td>
+        </tr>
+      `).join('');
+    }
+    function renderQuery(payload) {
+      const rows = payload.shipping_orders || [];
+      if (!rows.length) {
+        document.querySelector('#queryResult').innerHTML = '<div class="scan-result scan-none"><strong>没有在今天发货单里找到这个编码。</strong><br>请确认是否扫到 VIN/设备号；当前版本只支持配件编码、瑞云料号、SKU。</div>';
+        return;
+      }
+      const selected = payload.selected_order_numbers || [];
+      const matchedSelected = payload.matching_selected_orders || [];
+      const resultClass = selected.length ? (payload.belongs_to_selected ? 'scan-ok' : 'scan-miss') : 'scan-result';
+      const resultTitle = !selected.length
+        ? '已找到编码，请先选择出库单号可判断是否属于当前单。'
+        : (payload.belongs_to_selected ? '属于当前选择的出库单。' : '不属于当前选择的出库单。');
+      const selectedHtml = matchedSelected.length
+        ? `<h3>当前选择内命中</h3>${matchedSelected.map((row) => `<div>出库单 ${escapeHtml(row.order_no)}，数量 ${escapeHtml(displayValue(row.quantity))}，${escapeHtml(row.part_code)} / ${escapeHtml(displayValue(row.name))}</div>`).join('')}`
+        : '';
+      const allHtml = rows.map((row) => `<div>出库单 ${escapeHtml(row.order_no)}，数量 ${escapeHtml(displayValue(row.quantity))}，${escapeHtml(row.part_code)} / ${escapeHtml(displayValue(row.name))}</div>`).join('');
+      const totalHtml = (payload.rows || []).map((row) => `<div>总量核对：剪料 ${escapeHtml(displayValue(row.cutting_qty))} / 发货 ${escapeHtml(displayValue(row.shipping_qty))} / 差异 ${escapeHtml(displayValue(row.difference))} / ${escapeHtml(statusText[row.status] || row.status)}</div>`).join('');
+      document.querySelector('#queryResult').innerHTML = `<div class="scan-result ${resultClass}"><strong>${escapeHtml(resultTitle)}</strong>${selectedHtml}<h3>今天所有相关出库单</h3>${allHtml}${totalHtml ? `<h3>数量核对</h3>${totalHtml}` : ''}</div>`;
+    }
+    async function loadSummary() {
+      const payload = await requestJson('/api/outbound/summary');
+      latestSummary = payload;
+      renderKpis(payload);
+      renderOrderPicker(payload.order_numbers?.shipping || []);
+      renderPartRows(payload.part_rows || []);
+    }
+    document.querySelector('#queryBtn').addEventListener('click', async () => {
+      const code = document.querySelector('#codeQuery').value.trim();
+      if (!code) return;
+      const params = new URLSearchParams({ code });
+      for (const order of selectedOrders()) params.append('order_no', order);
+      renderQuery(await requestJson(`/api/outbound/query?${params.toString()}`));
+    });
+    document.querySelector('#codeQuery').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') document.querySelector('#queryBtn').click();
+    });
+    document.querySelector('#selectAllOrdersBtn').addEventListener('click', () => {
+      document.querySelectorAll('[data-order-choice]').forEach((node) => { node.checked = true; });
+    });
+    document.querySelector('#clearOrdersBtn').addEventListener('click', () => {
+      document.querySelectorAll('[data-order-choice]').forEach((node) => { node.checked = false; });
+    });
+    loadSummary().catch((error) => { document.querySelector('#orderSummary').textContent = error.message; });
+  </script>
+</body>
+</html>

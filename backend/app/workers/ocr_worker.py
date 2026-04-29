@@ -13,7 +13,7 @@ from backend.app.ocr.factory import (
 )
 from backend.app.ocr.parser import parse_label_text
 from backend.app.services.dedup import find_duplicates
-
+from backend.app.services.material_mapping import find_material_matches, material_matches_to_text
 
 TESSERACT_UNAVAILABLE_MESSAGE = "Tesseract 未安装，已跳过 OCR，仅条码可用"
 
@@ -29,12 +29,8 @@ def process_record_ocr(session: Session, record: Record) -> None:
         except Exception:
             barcode_results = []
 
-    barcode_payload = [
-        {"type": barcode.type, "data": barcode.data} for barcode in barcode_results
-    ]
-    barcode_lines = "".join(
-        f"BARCODE: {barcode['data']}\n" for barcode in barcode_payload
-    )
+    barcode_payload = [{"type": barcode.type, "data": barcode.data} for barcode in barcode_results]
+    barcode_lines = "".join(f"BARCODE: {barcode['data']}\n" for barcode in barcode_payload)
 
     provider = get_ocr_provider()
     last_error = None
@@ -52,18 +48,26 @@ def process_record_ocr(session: Session, record: Record) -> None:
 
     merged_text = barcode_lines + result.text
     parsed = parse_label_text(merged_text)
+    material_matches = find_material_matches(merged_text)
+    next_vin_or_bin = parsed.vin_or_bin
+    next_serial_number = parsed.serial_number
+    if material_matches:
+        match = material_matches[0]
+        next_vin_or_bin = match.ruiyun_part_number
+        next_serial_number = match.sku
     duplicates = find_duplicates(
         session,
-        vin_or_bin=parsed.vin_or_bin,
-        serial_number=parsed.serial_number,
+        vin_or_bin=next_vin_or_bin,
+        serial_number=next_serial_number,
         exclude_id=record.id,
     )
-    record.raw_ocr_text = merged_text
+    match_text = material_matches_to_text(material_matches)
+    record.raw_ocr_text = f"{merged_text}\n\n{match_text}" if match_text else merged_text
     record.barcodes_json = json.dumps(barcode_payload, ensure_ascii=False)
     record.confidence_score = result.confidence
     record.model = parsed.model
-    record.vin_or_bin = parsed.vin_or_bin
-    record.serial_number = parsed.serial_number
+    record.vin_or_bin = next_vin_or_bin
+    record.serial_number = next_serial_number
     if duplicates:
         record.status = RecordStatus.duplicate
     elif needs_review:

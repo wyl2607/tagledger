@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contribution Dashboard - Machine Label OCR</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    .dashboard-head { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 24px; }
+    .dashboard-head h1 { margin: 0; font-size: 32px; }
+    .updated { color: var(--muted, #525252); font-weight: 800; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi { border: 1px solid var(--line, #e5e5e5); border-radius: 16px; padding: 20px; background: #fff; box-shadow: var(--shadow, 0 4px 12px rgba(0,0,0,.06)); }
+    .kpi span { display: block; color: var(--muted, #525252); font-weight: 900; }
+    .kpi strong { display: block; margin-top: 12px; font-size: 38px; line-height: 1; }
+    .chart-grid { display: grid; grid-template-columns: 1.35fr .9fr; gap: 16px; margin-bottom: 24px; }
+    .metric-card { border: 1px solid var(--line, #e5e5e5); border-radius: 16px; padding: 20px; background: #fff; box-shadow: var(--shadow, 0 4px 12px rgba(0,0,0,.06)); }
+    .metric-card h2 { margin-top: 0; font-size: 24px; }
+    .chart { width: 100%; min-height: 260px; }
+    .stat-table { width: 100%; border-collapse: collapse; }
+    .stat-table th, .stat-table td { border-bottom: 1px solid var(--line, #e5e5e5); padding: 12px; text-align: left; }
+    .stat-table th { background: var(--soft, #f6f6f6); }
+    .actions-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+    .status-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .status-counts .status-pill { width: 100%; justify-content: space-between; gap: 12px; border: 0; }
+    @media (max-width: 900px) {
+      .kpi-grid, .chart-grid { grid-template-columns: 1fr; }
+      .dashboard-head { align-items: start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">ML</span>
+        <span><strong>Machine Label OCR</strong><span>Contribution Dashboard</span></span>
+      </a>
+      <div class="nav-actions">
+        <a class="nav-button" href="/">Capture</a>
+        <a class="nav-button" href="/history">History</a>
+        <a class="nav-button" href="/dashboard" aria-current="page">Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <section class="dashboard-head">
+      <div>
+        <h1>Contribution Metrics</h1>
+        <p class="muted">Back-office view for total intake output, duplicate prevention and estimated time savings. Phone operators see only their own uploads through the mobile history link.</p>
+      </div>
+      <div class="updated" id="updatedAt">Loading...</div>
+    </section>
+
+    <section class="kpi-grid" aria-label="KPI cards">
+      <div class="kpi"><span>Confirmed devices</span><strong id="confirmedCount">0</strong></div>
+      <div class="kpi"><span>SaaS submitted</span><strong id="submittedCount">0</strong></div>
+      <div class="kpi"><span>Duplicates prevented</span><strong id="duplicatesCaught">0</strong></div>
+      <div class="kpi"><span>Saved hours est.</span><strong id="savedHours">0</strong></div>
+    </section>
+
+    <section class="chart-grid">
+      <div class="metric-card">
+        <h2>Last 30 Days Throughput</h2>
+        <svg class="chart" id="throughputChart" role="img" aria-label="Daily throughput chart"></svg>
+      </div>
+      <div class="metric-card">
+        <h2>OCR Confidence</h2>
+        <svg class="chart" id="qualityChart" role="img" aria-label="OCR confidence chart"></svg>
+      </div>
+    </section>
+
+    <section class="metric-card">
+      <h2>Processing Time and Status</h2>
+      <table class="stat-table">
+        <tbody>
+          <tr><th>Average upload to confirm</th><td id="uploadToConfirm">-</td></tr>
+          <tr><th>Average confirm to submit</th><td id="confirmToSubmit">-</td></tr>
+          <tr><th>Manual baseline assumption</th><td id="manualAssumption">90 seconds per record</td></tr>
+          <tr><th>Status distribution</th><td><div class="status-counts" id="statusCounts"></div></td></tr>
+        </tbody>
+      </table>
+      <div class="actions-row">
+        <button type="button" onclick="alert('Phase 6 will support PDF export')">Export contribution PDF</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = { lastLoadedAt: null };
+
+    function fmtNumber(value) {
+      return new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value || 0);
+    }
+
+    function fmtSeconds(value) {
+      if (value === null || value === undefined) return '-';
+      return `${fmtNumber(value)} s`;
+    }
+
+    async function requestJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+
+    function renderLineChart(rows) {
+      const svg = document.querySelector('#throughputChart');
+      const width = 760;
+      const height = 260;
+      const pad = 28;
+      const maxValue = Math.max(1, ...rows.map((row) => row.uploaded));
+      const points = rows.map((row, index) => {
+        const x = pad + (rows.length <= 1 ? 0 : (index / (rows.length - 1)) * (width - pad * 2));
+        const y = height - pad - (row.uploaded / maxValue) * (height - pad * 2);
+        return [x, y];
+      });
+      const path = points.map(([x, y], index) => `${index ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      svg.innerHTML = `
+        <rect width="${width}" height="${height}" rx="16" fill="#f6f6f6"></rect>
+        <path d="${path}" fill="none" stroke="var(--color-primary, #ff6b35)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+        ${points.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4" fill="var(--color-primary, #ff6b35)"></circle>`).join('')}
+      `;
+    }
+
+    function describeArc(cx, cy, r, startAngle, endAngle) {
+      const start = polarToCartesian(cx, cy, r, endAngle);
+      const end = polarToCartesian(cx, cy, r, startAngle);
+      const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
+      return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y} Z`;
+    }
+
+    function polarToCartesian(cx, cy, r, angle) {
+      const radians = (angle - 90) * Math.PI / 180;
+      return { x: cx + r * Math.cos(radians), y: cy + r * Math.sin(radians) };
+    }
+
+    function renderQualityChart(quality) {
+      const svg = document.querySelector('#qualityChart');
+      const high = quality.high_confidence_pct || 0;
+      const low = quality.low_confidence_pct || 0;
+      const mid = Math.max(1 - high - low, 0);
+      const segments = [
+        { label: '>= 90%', value: high, color: '#16a34a' },
+        { label: '70-90%', value: mid, color: '#facc15' },
+        { label: '< 70%', value: low, color: '#dc2626' },
+      ];
+      let angle = 0;
+      svg.setAttribute('viewBox', '0 0 360 260');
+      const slices = segments.map((segment) => {
+        const span = segment.value * 360;
+        const path = span <= 0 ? '' : `<path d="${describeArc(120, 120, 82, angle, angle + span)}" fill="${segment.color}"></path>`;
+        angle += span;
+        return path;
+      }).join('');
+      const legend = segments.map((segment, index) => `
+        <g transform="translate(230 ${70 + index * 42})">
+          <rect width="22" height="22" rx="5" fill="${segment.color}"></rect>
+          <text x="32" y="17" font-size="18" font-weight="800">${segment.label}: ${Math.round(segment.value * 100)}%</text>
+        </g>
+      `).join('');
+      svg.innerHTML = `<rect width="360" height="260" rx="16" fill="#f6f6f6"></rect>${slices}<circle cx="120" cy="120" r="42" fill="#fff"></circle>${legend}`;
+    }
+
+    function renderStatusCounts(byStatus) {
+      const container = document.querySelector('#statusCounts');
+      container.innerHTML = Object.entries(byStatus).map(([status, count]) => `
+        <span class="status-pill status-${status.replace(/[^a-z_]/g, '')}"><span>${status}</span><strong>${count}</strong></span>
+      `).join('');
+    }
+
+    function updateTicker() {
+      if (!state.lastLoadedAt) return;
+      const seconds = Math.max(Math.floor((Date.now() - state.lastLoadedAt) / 1000), 0);
+      document.querySelector('#updatedAt').textContent = `Updated ${seconds}s ago`;
+    }
+
+    async function loadDashboard() {
+      const payload = await requestJson('/api/metrics/all?days=30');
+      const summary = payload.summary;
+      document.querySelector('#confirmedCount').textContent = fmtNumber(summary.confirmed_count);
+      document.querySelector('#submittedCount').textContent = fmtNumber(summary.submitted_count);
+      document.querySelector('#duplicatesCaught').textContent = fmtNumber(summary.duplicates_caught);
+      document.querySelector('#savedHours').textContent = fmtNumber((payload.savings.total_saved_minutes || 0) / 60);
+      document.querySelector('#uploadToConfirm').textContent = fmtSeconds(payload.processing_time.upload_to_confirm_seconds);
+      document.querySelector('#confirmToSubmit').textContent = fmtSeconds(payload.processing_time.confirm_to_submit_seconds);
+      document.querySelector('#manualAssumption').textContent = `${payload.savings.assume_manual_seconds_per_entry} seconds per record`;
+      renderStatusCounts(summary.by_status);
+      renderLineChart(payload.throughput);
+      renderQualityChart(payload.ocr_quality);
+      state.lastLoadedAt = Date.now();
+      updateTicker();
+    }
+
+    loadDashboard().catch((error) => {
+      document.querySelector('#updatedAt').textContent = `Load failed: ${error.message}`;
+    });
+    window.setInterval(loadDashboard, 30000);
+    window.setInterval(updateTicker, 1000);
+  </script>
+</body>
+</html>

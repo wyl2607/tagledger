@@ -18,10 +18,18 @@ class BarcodeRead(BaseModel):
     data: str
 
 
+class MaterialMatchRead(BaseModel):
+    ruiyun_part_number: str
+    sku: str
+    matched_input: str
+    matched_field: str
+
+
 class RecordRead(BaseModel):
     id: int
     image_path: str
     category: Category
+    operator_id: str
     model: str | None
     vin_or_bin: str | None
     serial_number: str | None
@@ -30,6 +38,7 @@ class RecordRead(BaseModel):
     status: RecordStatus
     last_error: str | None
     barcodes: list[BarcodeRead] = []
+    material_matches: list[MaterialMatchRead] = []
     created_at: datetime
     updated_at: datetime
     duplicates: list[DuplicateRecord] = []
@@ -39,6 +48,7 @@ class RecordListItem(BaseModel):
     id: int
     image_path: str
     category: Category
+    operator_id: str
     model: str | None
     vin_or_bin: str | None
     serial_number: str | None

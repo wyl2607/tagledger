@@ -52,10 +52,28 @@ PORT=8010 ./scripts/run_mac_demo.sh
 
 ## 手机测试
 
-启动 API 后，用手机访问：
+推荐用手机测试脚本启动，它会自动监听局域网并打印 iPhone 可访问地址：
+
+```bash
+./scripts/run_mobile_test.sh
+```
+
+然后用手机访问脚本打印的 `/mobile` 地址，例如：
 
 ```text
-http://<电脑局域网IP>:8000/mobile
+http://<电脑局域网IP>:8001/mobile
+```
+
+端口被占用时：
+
+```bash
+PORT=8010 ./scripts/run_mobile_test.sh
+```
+
+开发时如需热重载：
+
+```bash
+RELOAD=1 ./scripts/run_mobile_test.sh
 ```
 
 ADB 有线调试时可用反向端口映射：
@@ -124,6 +142,12 @@ Windows 一键安装依赖并跑测试：
 ```powershell
 .\scripts\smoke_phase1.ps1
 ```
+
+## 语言支持
+
+三个静态页面 `/`、`/mobile`、`/history` 支持 English、Deutsch、中文三语切换。页面启动时会按浏览器语言自动选择：`zh*` 使用中文，`de*` 使用德文，其他语言使用英文；用户在顶部 `🌐 EN | DE | 中` 切换后会写入 `localStorage`，后续页面保持同一语言。
+
+翻译文件位于 `backend/app/static/i18n/`，中文 `zh.json` 是 source of truth。新增用户可见文本时，先在 `zh.json` 增加扁平 key，再同步到 `en.json` 和 `de.json`，HTML 用 `data-i18n="key"`，占位符用 `data-i18n-placeholder="key"`。
 
 ## 示例 API
 
@@ -194,3 +218,28 @@ print([(item.type, item.data) for item in results])
 ```
 
 当前支持 QR / EAN-13 / CODE128；底层使用 pyzbar，可识别 pyzbar 支持的其他码制。
+
+## 语言切换
+
+页面右上角提供 `EN | DE | 中文` 切换，覆盖 `/`、`/history`、`/mobile` 三个静态页面。选择会保存到浏览器 `localStorage`；也可以用 `?lang=en`、`?lang=de`、`?lang=zh` 指定首次打开语言。
+
+## 贡献仪表板
+
+`/dashboard` 展示已入库数量、SaaS 提交数量、重复入库拦截、估算节省工时、OCR 质量和 30 天吞吐趋势。指标 API 位于 `/api/metrics/*`，计算公式见 `docs/CONTRIBUTION_METRICS.md`。
+
+## 脱敏 Release 包
+
+生成可上传/下载的脱敏源码包：
+
+```bash
+VERSION=0.1.0 ./scripts/make_release.sh
+```
+
+Windows:
+
+```powershell
+$env:VERSION='0.1.0'
+.\scripts\make_release.ps1
+```
+
+输出位于 `dist/release/`。包内不包含本地数据库、上传图片、截图、日志、`.env`、虚拟环境或 git/OMX 元数据。完整说明见 `docs/RELEASE_PACKAGING.md`。

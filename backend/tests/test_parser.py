@@ -1,6 +1,5 @@
 from backend.app.ocr.parser import parse_label_text
 
-
 MAMMOTION_LABEL_TEXT = """
 Product Name: YUKA mini
 Model: 500
@@ -28,9 +27,7 @@ def test_parse_label_text_extracts_common_fields() -> None:
 
 
 def test_parse_label_text_accepts_serial_number_label() -> None:
-    parsed = parse_label_text(
-        "Model # M450\nBIN NO. BIN777888\nSerial Number: s12345"
-    )
+    parsed = parse_label_text("Model # M450\nBIN NO. BIN777888\nSerial Number: s12345")
 
     assert parsed.model == "M450"
     assert parsed.vin_or_bin == "BIN777888"

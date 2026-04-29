@@ -1,11 +1,10 @@
-from functools import lru_cache
 import logging
 import os
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
-
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 logger = logging.getLogger(__name__)
@@ -25,6 +24,13 @@ class Settings(BaseModel):
     saas_selectors_path: str = "config/saas_selectors.yaml"
     saas_storage_state: str = "data/storage_state.json"
     playwright_log: str = "logs/playwright.log"
+    metrics_manual_seconds_per_entry: int = 90
+    material_mapping_path: str = "data/material_mapping.xlsx"
+    outbound_workbook_path: str = "data/outbound/发货0422.xlsx"
+    outbound_shipping_sheet: str = "21单830个物料发货单-多物料订单"
+    outbound_cutting_sheet: str = "拣货单-多物料订单"
+    outbound_cutting_text_path: str = "data/outbound/cutting.txt"
+    outbound_shipping_text_path: str = "data/outbound/shipping.txt"
 
     @property
     def database_path(self) -> Path:
@@ -52,6 +58,22 @@ class Settings(BaseModel):
     def playwright_log_path(self) -> Path:
         return ROOT_DIR / self.playwright_log
 
+    @property
+    def material_mapping_file(self) -> Path:
+        return ROOT_DIR / self.material_mapping_path
+
+    @property
+    def outbound_workbook_file(self) -> Path:
+        return ROOT_DIR / self.outbound_workbook_path
+
+    @property
+    def outbound_cutting_text_file(self) -> Path:
+        return ROOT_DIR / self.outbound_cutting_text_path
+
+    @property
+    def outbound_shipping_text_file(self) -> Path:
+        return ROOT_DIR / self.outbound_shipping_text_path
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -59,15 +81,19 @@ def get_settings() -> Settings:
     payload = {}
     if config_path.exists():
         payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    app_config = payload.get("app", {})
-    settings = Settings(
-        **app_config,
-        saas_username=os.getenv("SAAS_USERNAME") or app_config.get("saas_username"),
-        saas_password=os.getenv("SAAS_PASSWORD") or app_config.get("saas_password"),
+    app_config = dict(payload.get("app", {}))
+    metrics_config = payload.get("metrics", {}) or {}
+    app_config.setdefault(
+        "metrics_manual_seconds_per_entry",
+        metrics_config.get(
+            "manual_seconds",
+            metrics_config.get("manual_seconds_per_entry", 90),
+        ),
     )
+    app_config["saas_username"] = os.getenv("SAAS_USERNAME") or app_config.get("saas_username")
+    app_config["saas_password"] = os.getenv("SAAS_PASSWORD") or app_config.get("saas_password")
+    settings = Settings(**app_config)
     if not settings.dry_run and (not settings.saas_username or not settings.saas_password):
-        logger.warning(
-            "SAAS_USERNAME/SAAS_PASSWORD are not set; forcing SaaS dry_run=True"
-        )
+        logger.warning("SAAS_USERNAME/SAAS_PASSWORD are not set; forcing SaaS dry_run=True")
         settings.dry_run = True
     return settings

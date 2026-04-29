@@ -1,3 +1,9 @@
+# ⚠️ 占位符 — Phase 5 投产前必须替换为真实 SaaS URL 和 selector
+# ⚠️ 替换清单:
+#   login_url: SaaS 登录页地址
+#   form_url: 新增设备/记录表单页地址
+#   selectors.*: 表单字段的 CSS/XPATH selector
+#   替换后必须先用 DRY_RUN=true 跑 5+ 条人工核对截图
 # Phase 4 placeholder selectors. Replace these after inspecting the real SaaS.
 saas:
   login_url: "https://example.com/login"

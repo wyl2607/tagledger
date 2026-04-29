@@ -1,6 +1,7 @@
-from concurrent.futures import ThreadPoolExecutor
+import atexit
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sqlmodel import Session, select
@@ -8,7 +9,11 @@ from sqlmodel import Session, select
 from backend.app.config import get_settings
 from backend.app.database import engine
 from backend.app.models import Record, RecordStatus, utc_now
-from backend.app.saas.client import PlaywrightNotInstalledError, SaaSClient, SaaSSubmissionError
+from backend.app.saas.client import (
+    PlaywrightNotInstalledError,
+    SaaSClient,
+    SaaSSubmissionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +21,25 @@ BACKOFF_SECONDS = (5, 30, 120)
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="submit-worker")
 
 
+def _shutdown_executor() -> None:
+    _executor.shutdown(wait=False)
+
+
+atexit.register(_shutdown_executor)
+
+
 def enqueue_submission(record_id: int) -> None:
-    _executor.submit(run, record_id)
+    try:
+        _executor.submit(run, record_id)
+    except RuntimeError:
+        logger.warning(
+            "submit worker pool is shut down; record %s will be retried on restart", record_id
+        )
 
 
 def enqueue_pending_confirmed() -> int:
     with Session(engine) as session:
-        records = session.exec(
-            select(Record).where(Record.status == RecordStatus.confirmed)
-        ).all()
+        records = session.exec(select(Record).where(Record.status == RecordStatus.confirmed)).all()
         for record in records:
             if record.id is not None:
                 enqueue_submission(record.id)
@@ -113,7 +128,9 @@ def _attempt_submission(record_id: int, settings) -> bool:
             return record.status == RecordStatus.confirmed
 
         record.error_screenshot = result.screenshot_path
-        record.last_error = "dry-run complete; real SaaS submit was not clicked" if result.dry_run else None
+        record.last_error = (
+            "dry-run complete; real SaaS submit was not clicked" if result.dry_run else None
+        )
         if result.dry_run:
             record.updated_at = utc_now()
         else:

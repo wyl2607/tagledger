@@ -7,7 +7,6 @@ from sqlmodel import Session, select
 
 from backend.app.models import Record, RecordStatus
 
-
 CSV_FIELDS = [
     "id",
     "category",

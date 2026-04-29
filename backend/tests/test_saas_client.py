@@ -1,6 +1,6 @@
+import importlib.util
 from pathlib import Path
 from unittest.mock import Mock
-import importlib.util
 
 import pytest
 import yaml
@@ -8,7 +8,6 @@ import yaml
 from backend.app.config import Settings
 from backend.app.models import Category, Record, RecordStatus
 from backend.app.saas.client import SaaSClient, SaaSLoginError
-
 
 PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright") is not None
 
@@ -109,6 +108,7 @@ def test_login_failure_raises_clear_error(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(not PLAYWRIGHT_AVAILABLE, reason="playwright optional dependency not installed")
 def test_dry_run_submit_never_clicks_submit_with_file_page(tmp_path: Path) -> None:
+    from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
 
     fixture = Path(__file__).parent / "fixtures" / "fake_saas.html"
@@ -119,7 +119,10 @@ def test_dry_run_submit_never_clicks_submit_with_file_page(tmp_path: Path) -> No
     client = SaaSClient(make_settings(tmp_path, selectors), dry_run=True)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except PlaywrightError as exc:
+            pytest.skip(f"playwright browser cannot launch in this environment: {exc}")
         try:
             page = browser.new_page()
             result = client.submit_record_on_page(page, make_record(), image_path)

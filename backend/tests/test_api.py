@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from backend.app.models import Category, Record, RecordStatus
+from backend.app.services.material_mapping import MaterialMatch
 
 
 def test_health(client: TestClient) -> None:
@@ -21,6 +22,79 @@ def test_runtime_status_exposes_mobile_test_switches(client: TestClient) -> None
     assert isinstance(payload["enable_barcode"], bool)
     assert isinstance(payload["enable_saas_submit"], bool)
     assert isinstance(payload["dry_run"], bool)
+    assert payload["mobile_url"].endswith("/mobile")
+    assert payload["history_url"].endswith("/history")
+
+
+def test_startup_restore_skips_submission_queue_when_saas_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app import main as main_module
+    from backend.app.config import Settings
+
+    calls: list[bool] = []
+
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: Settings(enable_saas_submit=False),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "enqueue_pending_confirmed",
+        lambda: calls.append(True) or 1,
+    )
+
+    assert main_module.restore_pending_submissions() == 0
+    assert calls == []
+
+
+def test_startup_restore_enqueues_submission_queue_when_saas_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app import main as main_module
+    from backend.app.config import Settings
+
+    calls: list[bool] = []
+
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: Settings(enable_saas_submit=True),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "enqueue_pending_confirmed",
+        lambda: calls.append(True) or 3,
+    )
+
+    assert main_module.restore_pending_submissions() == 3
+    assert calls == [True]
+
+
+def test_static_ui_asset_paths_are_served(client: TestClient) -> None:
+    for path in (
+        "/static/ui.css",
+        "/static/i18n.js",
+        "/static/i18n/en.json",
+        "/static/i18n/de.json",
+        "/static/i18n/zh.json",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, path
+
+
+def test_status_badge_colors_are_declared(client: TestClient) -> None:
+    response = client.get("/static/ui.css")
+
+    assert response.status_code == 200
+    css = response.text
+    assert ".status-confirmed" in css
+    assert "#dcfce7" in css
+    assert ".status-submitted" in css
+    assert ".status-submission_failed" in css
+    assert ".status-duplicate" in css
+    assert ".status-needs_review" in css
 
 
 def test_demo_home_serves_mac_demo_page(client: TestClient) -> None:
@@ -28,12 +102,17 @@ def test_demo_home_serves_mac_demo_page(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "机器标签拍照上传" in response.text
+    assert "Machine Label OCR" in response.text
+    assert 'data-i18n="demo.title"' in response.text
+    assert '<section class="guide"' in response.text
     assert "/upload" in response.text
+    assert "/upload/batch" in response.text
     assert "/jobs" in response.text
     assert "/confirm/" in response.text
     assert "/export.csv?status=confirmed" in response.text
-    assert "重复时放弃新记录" in response.text
+    assert 'data-i18n="duplicate.action.discardNew"' in response.text
+    assert 'data-i18n="material.title"' in response.text
+    assert "renderMaterialMatches" in response.text
 
 
 def test_history_page_serves_history_view(client: TestClient) -> None:
@@ -41,9 +120,59 @@ def test_history_page_serves_history_view(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "历史记录" in response.text
+    assert "Machine Label OCR History" in response.text
+    assert 'data-i18n="history.title"' in response.text
     assert "/records/" in response.text
     assert "/export.csv" in response.text
+    assert "imageFallbackDataUri" in response.text
+
+
+def test_dashboard_page_serves_html(client: TestClient) -> None:
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Contribution Dashboard" in response.text
+    assert "/api/metrics/all" in response.text
+
+
+def test_outbound_page_serves_html(client: TestClient) -> None:
+    response = client.get("/outbound")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "出库核对" in response.text
+    assert "/api/outbound/summary" in response.text
+    assert "/api/outbound/query" in response.text
+    assert "data-order-choice" in response.text
+    assert "belongs_to_selected" in response.text
+    assert "displayValue(row.quantity)" in response.text
+    assert "displayValue(row.cutting_qty)" in response.text
+    assert "displayValue(row.shipping_qty)" in response.text
+    assert "displayValue(row.difference)" in response.text
+    assert "row.quantity || '-'" not in response.text
+    assert "String(value || '')" not in response.text
+
+
+def test_outbound_query_accepts_multiple_selected_orders(client: TestClient, monkeypatch) -> None:
+    from backend.app.routes import outbound
+
+    captured = {}
+
+    def fake_query(code, selected_orders=None):
+        captured["code"] = code
+        captured["selected_orders"] = selected_orders
+        return {"query": code, "selected_order_numbers": selected_orders or []}
+
+    monkeypatch.setattr(outbound, "query_outbound", fake_query)
+
+    response = client.get(
+        "/api/outbound/query",
+        params=[("code", "C.P.XS.000142004"), ("order_no", "SO1"), ("order_no", "SO2")],
+    )
+
+    assert response.status_code == 200
+    assert captured == {"code": "C.P.XS.000142004", "selected_orders": ["SO1", "SO2"]}
 
 
 def test_mobile_page_serves_phone_intake_view(client: TestClient) -> None:
@@ -51,13 +180,28 @@ def test_mobile_page_serves_phone_intake_view(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "手机录入" in response.text
+    assert "Mobile Capture" in response.text
+    assert 'data-i18n="nav.mobile"' in response.text
     assert 'capture="environment"' in response.text
     assert "/upload" in response.text
     assert "/confirm/" in response.text
-    assert "拍照识别" in response.text
+    assert 'data-i18n="mobile.capture.camera"' in response.text
     assert "autoUpload: true" in response.text
     assert "/runtime/status" in response.text
+    assert 'data-i18n="material.title"' in response.text
+
+
+def test_static_ui_assets_are_served(client: TestClient) -> None:
+    for path, expected in [
+        ("/static/ui.css", "#ff6b35"),
+        ("/static/i18n.js", "window.I18n"),
+        ("/static/i18n/en.json", "Machine Label OCR"),
+        ("/static/i18n/de.json", "Feldaufnahme"),
+        ("/static/i18n/zh.json", "现场录入"),
+    ]:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert expected in response.text
 
 
 def test_demo_api_full_flow(client: TestClient) -> None:
@@ -112,6 +256,134 @@ def test_upload_runs_mock_ocr_and_job_can_be_read(client: TestClient) -> None:
     assert job_payload["last_error"] is None
     assert "created_at" in job_payload
     assert "updated_at" in job_payload
+
+
+def test_job_returns_material_mapping_matches(
+    client: TestClient, session: Session, monkeypatch
+) -> None:
+    from backend.app.routes import jobs
+
+    record = Record(
+        image_path="label.jpg",
+        category=Category.A,
+        raw_ocr_text="SKU: MTL24LUM1US02",
+        status=RecordStatus.ocr_done,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    monkeypatch.setattr(
+        jobs,
+        "find_material_matches",
+        lambda text: [
+            MaterialMatch(
+                ruiyun_part_number="C.G.LM.000011000",
+                sku="MTL24LUM1US02",
+                matched_input="MTL24LUM1US02",
+                matched_field="sku",
+            )
+        ],
+    )
+
+    response = client.get(f"/jobs/{record.id}")
+
+    assert response.status_code == 200
+    assert response.json()["material_matches"] == [
+        {
+            "ruiyun_part_number": "C.G.LM.000011000",
+            "sku": "MTL24LUM1US02",
+            "matched_input": "MTL24LUM1US02",
+            "matched_field": "sku",
+        }
+    ]
+
+
+def test_upload_material_mapping_checks_duplicates_after_autofill(
+    client: TestClient,
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.workers import ocr_worker
+
+    existing = Record(
+        image_path="existing.jpg",
+        category=Category.A,
+        vin_or_bin="C.G.LM.000011000",
+        serial_number="MTL24LUM1US02",
+        status=RecordStatus.confirmed,
+    )
+    session.add(existing)
+    session.commit()
+
+    monkeypatch.setattr(
+        ocr_worker,
+        "find_material_matches",
+        lambda text: [
+            MaterialMatch(
+                ruiyun_part_number="C.G.LM.000011000",
+                sku="MTL24LUM1US02",
+                matched_input="MTL24LUM1US02",
+                matched_field="sku",
+            )
+        ],
+    )
+
+    response = client.post(
+        "/upload",
+        data={"category": "A"},
+        files={"file": ("mapped.jpg", b"fake image", "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    record = session.get(Record, response.json()["job_id"])
+    assert record is not None
+    assert record.status == RecordStatus.duplicate
+    assert record.vin_or_bin == "C.G.LM.000011000"
+    assert record.serial_number == "MTL24LUM1US02"
+
+
+def test_upload_saves_operator_id_and_jobs_filter_by_operator(client: TestClient) -> None:
+    first = client.post(
+        "/upload",
+        data={"category": "A", "operator_id": "phone-alpha"},
+        files={"file": ("alpha.jpg", b"fake image", "image/jpeg")},
+    )
+    second = client.post(
+        "/upload",
+        data={"category": "A", "operator_id": "phone-beta"},
+        files={"file": ("beta.jpg", b"fake image", "image/jpeg")},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    response = client.get("/jobs", params={"operator_id": "phone-alpha", "limit": 20})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [row["operator_id"] for row in payload] == ["phone-alpha"]
+    assert payload[0]["id"] == first.json()["job_id"]
+
+
+def test_jobs_filter_before_pagination(client: TestClient) -> None:
+    first = client.post(
+        "/upload",
+        data={"category": "A", "operator_id": "phone-alpha"},
+        files={"file": ("alpha.jpg", b"fake image", "image/jpeg")},
+    )
+    for index in range(3):
+        response = client.post(
+            "/upload",
+            data={"category": "A", "operator_id": "phone-beta"},
+            files={"file": (f"beta-{index}.jpg", b"fake image", "image/jpeg")},
+        )
+        assert response.status_code == 200
+
+    response = client.get("/jobs", params={"operator_id": "phone-alpha", "limit": 1})
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [first.json()["job_id"]]
 
 
 def test_upload_mock_flow_is_unchanged_when_barcode_disabled(
@@ -529,11 +801,14 @@ def test_mobile_page_serves_mobile_optimized_view(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "手机录入" in response.text
+    assert "Mobile Capture" in response.text
     assert "capture=" in response.text
-    assert "确认入库" in response.text
-    assert "继续拍下一台" in response.text
+    assert "mobile.action.confirm" in response.text
+    assert "mobile.action.next" in response.text
     assert "compressImage" in response.text
     assert "lastAutoUploadedSignature" in response.text
-    assert "已标记重复" in response.text
-    assert "拍标签，确认入库" in response.text
+    assert "mobile.done.duplicate" in response.text
+    assert "mobile.step.capture" in response.text
+    assert "mobile.capture.locator" in response.text
+    assert "mobile.mine.uploaded" in response.text
+    assert "operator_id" in response.text

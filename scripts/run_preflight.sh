@@ -8,18 +8,33 @@ cd "$PROJECT_DIR"
 
 echo "=== preflight: machine-label-ocr ==="
 
-# 1. pytest
+# 1. ruff lint
 echo ""
-echo "[1/2] pytest ..."
+echo "[1/3] ruff lint ..."
+if [ -d "$PROJECT_DIR/.venv" ]; then
+    RUFF="$PROJECT_DIR/.venv/bin/ruff"
+else
+    RUFF="ruff"
+fi
+if command -v "$RUFF" &>/dev/null; then
+    "$RUFF" check "$PROJECT_DIR/backend" --select E,F,B,I --ignore E501
+    echo "ruff: OK"
+else
+    echo "ruff not installed, skipping (pip install ruff)"
+fi
+
+# 2. pytest
+echo ""
+echo "[2/3] pytest ..."
 if [ -d "$PROJECT_DIR/.venv" ]; then
     "$PROJECT_DIR/.venv/bin/python" -m pytest "$PROJECT_DIR/backend/tests" -v
 else
     python3 -m pytest "$PROJECT_DIR/backend/tests" -v
 fi
 
-# 2. basic import check (does the app load without crashing?)
+# 3. basic import check
 echo ""
-echo "[2/2] import check ..."
+echo "[3/3] import check ..."
 if [ -d "$PROJECT_DIR/.venv" ]; then
     PYTHON="$PROJECT_DIR/.venv/bin/python"
 else

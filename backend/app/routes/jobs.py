@@ -5,12 +5,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
+from backend.app.config import get_settings
 from backend.app.database import get_session
 from backend.app.models import Record, RecordStatus
 from backend.app.schemas import RecordListItem, RecordRead, RetryResponse
 from backend.app.services.dedup import find_duplicates, serialize_duplicates
+from backend.app.services.material_mapping import find_material_matches
 from backend.app.workers.submit_worker import enqueue_submission
-
 
 router = APIRouter()
 
@@ -29,11 +30,34 @@ def record_barcodes(record: Record) -> list[dict[str, str]]:
     ]
 
 
+def record_material_matches(record: Record) -> list[dict[str, str]]:
+    text = "\n".join(
+        item
+        for item in [
+            record.raw_ocr_text,
+            record.vin_or_bin,
+            record.serial_number,
+            record.model,
+        ]
+        if item
+    )
+    return [
+        {
+            "ruiyun_part_number": match.ruiyun_part_number,
+            "sku": match.sku,
+            "matched_input": match.matched_input,
+            "matched_field": match.matched_field,
+        }
+        for match in find_material_matches(text)
+    ]
+
+
 def to_record_list_item(record: Record) -> RecordListItem:
     return RecordListItem(
         id=record.id or 0,
         image_path=record.image_path,
         category=record.category,
+        operator_id=record.operator_id or "self",
         model=record.model,
         vin_or_bin=record.vin_or_bin,
         serial_number=record.serial_number,
@@ -48,13 +72,17 @@ def to_record_list_item(record: Record) -> RecordListItem:
 @router.get("/jobs", response_model=list[RecordListItem])
 def list_jobs(
     status: RecordStatus | None = None,
+    operator_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
 ) -> list[RecordListItem]:
-    statement = select(Record).order_by(Record.id.desc()).offset(offset).limit(limit)
+    statement = select(Record).order_by(Record.id.desc())
     if status is not None:
         statement = statement.where(Record.status == status)
+    if operator_id:
+        statement = statement.where(Record.operator_id == operator_id)
+    statement = statement.offset(offset).limit(limit)
     records = session.exec(statement).all()
     return [to_record_list_item(record) for record in records]
 
@@ -74,6 +102,7 @@ def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRe
         id=record.id or 0,
         image_path=record.image_path,
         category=record.category,
+        operator_id=record.operator_id or "self",
         model=record.model,
         vin_or_bin=record.vin_or_bin,
         serial_number=record.serial_number,
@@ -82,6 +111,7 @@ def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRe
         status=record.status,
         last_error=record.last_error,
         barcodes=record_barcodes(record),
+        material_matches=record_material_matches(record),
         created_at=record.created_at,
         updated_at=record.updated_at,
         duplicates=serialize_duplicates(duplicates),
@@ -119,7 +149,7 @@ def retry_submission(
     record.status = RecordStatus.confirmed
     session.add(record)
     session.commit()
-    if record.id is not None:
+    if record.id is not None and get_settings().enable_saas_submit:
         background_tasks.add_task(enqueue_submission, record.id)
     return RetryResponse(id=record.id or 0, status=record.status)
 
@@ -141,6 +171,7 @@ def retry_all_failed(
         session.add(record)
         results.append(RetryResponse(id=record.id or 0, status=record.status))
     session.commit()
-    for result in results:
-        background_tasks.add_task(enqueue_submission, result.id)
+    if get_settings().enable_saas_submit:
+        for result in results:
+            background_tasks.add_task(enqueue_submission, result.id)
     return results

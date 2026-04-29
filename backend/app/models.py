@@ -33,6 +33,7 @@ class Record(SQLModel, table=True):
     model: str | None = Field(default=None, index=True)
     vin_or_bin: str | None = Field(default=None, index=True)
     serial_number: str | None = Field(default=None, index=True)
+    operator_id: str = Field(default="self", index=True)
     raw_ocr_text: str | None = None
     barcodes_json: str | None = None
     confidence_score: float | None = None

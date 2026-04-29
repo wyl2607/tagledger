@@ -41,8 +41,12 @@
 - [x] SaaS selector 配置
 - [x] 失败截图和重试记录
 - [x] /jobs/retry API + retry_failed.ps1 脚本
+- [x] pre-commit git hook + ruff lint
 
 ## Phase 5
 
+- [ ] 替换 saas_selectors.yaml 占位符为真实 SaaS URL/selector
+- [ ] 设置 SAAS_USERNAME / SAAS_PASSWORD 环境变量
 - [ ] 人工核对 5 条 dry-run 结果
-- [ ] 生产提交开关
+- [ ] 开启 enable_saas_submit: true + dry_run: false
+- [ ] 可选: cleanup_old_images.ps1 自动化调度

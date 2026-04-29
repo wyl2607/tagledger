@@ -1,4 +1,12 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from sqlmodel import Session
 
 from backend.app.database import get_session
@@ -8,7 +16,6 @@ from backend.app.services.dedup import find_duplicates, serialize_duplicates
 from backend.app.services.file_storage import save_upload
 from backend.app.services.normalize import normalize_label_value
 from backend.app.workers.ocr_worker import run_ocr
-
 
 router = APIRouter()
 
@@ -23,6 +30,7 @@ def create_upload_job(
     category: Category,
     vin_or_bin: str | None,
     serial_number: str | None,
+    operator_id: str,
     file: UploadFile,
     session: Session,
     ocr_runner,
@@ -41,6 +49,7 @@ def create_upload_job(
     record = Record(
         image_path=str(image_path),
         category=category,
+        operator_id=(operator_id.strip() or "self")[:80],
         vin_or_bin=normalized_vin,
         serial_number=normalized_sn,
         status=RecordStatus.duplicate if duplicates else RecordStatus.uploaded,
@@ -59,6 +68,7 @@ def upload_label(
     category: Category = Form(...),
     vin_or_bin: str | None = Form(default=None),
     serial_number: str | None = Form(default=None),
+    operator_id: str = Form(default="self"),
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
     ocr_runner=Depends(get_ocr_runner),
@@ -68,6 +78,7 @@ def upload_label(
         category=category,
         vin_or_bin=vin_or_bin,
         serial_number=serial_number,
+        operator_id=operator_id,
         file=file,
         session=session,
         ocr_runner=ocr_runner,
@@ -84,6 +95,7 @@ def upload_label(
 def upload_label_batch(
     background_tasks: BackgroundTasks,
     category: Category = Form(...),
+    operator_id: str = Form(default="self"),
     files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
     ocr_runner=Depends(get_ocr_runner),
@@ -95,6 +107,7 @@ def upload_label_batch(
             category=category,
             vin_or_bin=None,
             serial_number=None,
+            operator_id=operator_id,
             file=file,
             session=session,
             ocr_runner=ocr_runner,

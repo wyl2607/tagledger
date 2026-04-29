@@ -5,7 +5,6 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from backend.app.config import get_settings
 
-
 settings = get_settings()
 settings.database_path.parent.mkdir(parents=True, exist_ok=True)
 database_url = f"sqlite:///{settings.database_path.as_posix()}"
@@ -19,10 +18,7 @@ engine = create_engine(
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
     with engine.begin() as conn:
-        columns = {
-            row[1]
-            for row in conn.execute(text("PRAGMA table_info(records)")).fetchall()
-        }
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(records)")).fetchall()}
         if "barcodes_json" not in columns:
             conn.execute(text("ALTER TABLE records ADD COLUMN barcodes_json TEXT"))
         if "submission_attempts" not in columns:
@@ -33,6 +29,13 @@ def create_db_and_tables() -> None:
             conn.execute(text("ALTER TABLE records ADD COLUMN error_screenshot TEXT"))
         if "submitted_at" not in columns:
             conn.execute(text("ALTER TABLE records ADD COLUMN submitted_at DATETIME"))
+        if "operator_id" not in columns:
+            conn.execute(text("ALTER TABLE records ADD COLUMN operator_id TEXT DEFAULT 'self'"))
+        conn.execute(
+            text(
+                "UPDATE records SET operator_id = 'self' WHERE operator_id IS NULL OR operator_id = ''"
+            )
+        )
         conn.execute(
             text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ux_records_vin_or_bin "
