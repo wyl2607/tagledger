@@ -61,6 +61,7 @@ class OutboundScan(SQLModel, table=True):
     status: str = Field(default="active", index=True)
     operator_id: str = Field(default="self", index=True)
     batch_id: str | None = Field(default=None, index=True)
+    transfer_id: str | None = Field(default=None, index=True)
     record_id: int | None = Field(default=None, index=True)
     verification_record_id: int | None = Field(default=None, index=True)
     void_reason: str | None = None
@@ -117,6 +118,7 @@ class InventoryMovement(SQLModel, table=True):
     part_key: str = Field(index=True)
     location_code: str = Field(index=True)
     order_no: str | None = Field(default=None, index=True)
+    transfer_id: str | None = Field(default=None, index=True)
     scan_id: int | None = Field(default=None, index=True)
     quantity_delta: int
     before_qty: int

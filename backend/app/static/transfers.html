@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>跨场子调拨 · Machine Label OCR</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    .page { display: grid; gap: 16px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; }
+    .row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .row-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .list { display: grid; gap: 10px; margin-top: 8px; }
+    .item { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; }
+    .item strong, .item span { display: block; overflow-wrap: anywhere; }
+    @media (max-width: 900px) { .row, .row-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-page="transfers">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">ML</span>
+        <span><strong data-i18n="app.name">机器标签 OCR</strong><span data-i18n="app.project">物流工作台</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-button" href="/" data-i18n="nav.home">Home</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="page">
+    <header class="hero">
+      <h1 data-i18n="transfer.title">三场子调拨</h1>
+      <p class="subtitle" data-i18n="transfer.subtitle">调货会写出源场子出库和目标场子入库两条流水，使用同一个 transfer_id 关联。</p>
+    </header>
+
+    <section class="card">
+      <h2 data-i18n="transfer.create.title">发起调拨</h2>
+      <div class="row">
+        <div>
+          <label for="sourceFactory" data-i18n="transfer.field.sourceFactory">源场子</label>
+          <select id="sourceFactory">
+            <option value="factory_a">factory_a</option>
+            <option value="factory_b">factory_b</option>
+            <option value="factory_c">factory_c</option>
+          </select>
+        </div>
+        <div>
+          <label for="targetFactory" data-i18n="transfer.field.targetFactory">目标场子</label>
+          <select id="targetFactory">
+            <option value="factory_b">factory_b</option>
+            <option value="factory_a">factory_a</option>
+            <option value="factory_c">factory_c</option>
+          </select>
+        </div>
+        <div>
+          <label for="transferQty" data-i18n="transfer.field.quantity">数量</label>
+          <input id="transferQty" type="number" min="1" value="1" inputmode="numeric">
+        </div>
+      </div>
+      <div class="row-2">
+        <div>
+          <label for="transferPart" data-i18n="transfer.field.partKey">料号</label>
+          <input id="transferPart" placeholder="CPXS000122001">
+        </div>
+        <div>
+          <label for="transferReason" data-i18n="transfer.field.reason">原因</label>
+          <input id="transferReason" data-i18n-placeholder="transfer.field.reasonPlaceholder" placeholder="line_balance">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="createTransferBtn" type="button" data-i18n="transfer.action.create">提交调拨</button>
+      </div>
+      <div id="createResult" class="muted"></div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="transfer.list.title">近 30 天调拨流水</h2>
+      <div class="row-2">
+        <div>
+          <label for="factoryFilter" data-i18n="transfer.filter.factory">按场子筛选</label>
+          <select id="factoryFilter">
+            <option value="" data-i18n="common.all">全部</option>
+            <option value="factory_a">factory_a</option>
+            <option value="factory_b">factory_b</option>
+            <option value="factory_c">factory_c</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="refreshTransferBtn" type="button" class="secondary" data-i18n="transfer.action.refresh">刷新</button>
+        </div>
+      </div>
+      <div id="transferList" class="list"></div>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script>
+    const tr = (key, vars) => window.I18n.t(key, vars);
+    const createBtn = document.querySelector('#createTransferBtn');
+    const refreshBtn = document.querySelector('#refreshTransferBtn');
+    const createResult = document.querySelector('#createResult');
+    const listNode = document.querySelector('#transferList');
+
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[char]));
+    }
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }
+      if (!response.ok) throw new Error(data?.detail || `HTTP ${response.status}`);
+      return data;
+    }
+
+    async function createTransfer() {
+      createBtn.disabled = true;
+      try {
+        const payload = await requestJson('/api/transfers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_factory: document.querySelector('#sourceFactory').value,
+            target_factory: document.querySelector('#targetFactory').value,
+            part_key: document.querySelector('#transferPart').value,
+            quantity: Number(document.querySelector('#transferQty').value || 1),
+            reason: document.querySelector('#transferReason').value || 'transfer',
+          }),
+        });
+        createResult.innerHTML = `<span class="pill pill-green">${esc(tr('transfer.create.done', { id: payload.transfer_id }))}</span>`;
+        await loadTransfers();
+      } catch (error) {
+        createResult.innerHTML = `<span class="pill pill-yellow">${esc(error.message)}</span>`;
+      } finally {
+        createBtn.disabled = false;
+      }
+    }
+
+    function renderTransfers(rows) {
+      if (!rows.length) {
+        listNode.innerHTML = `<div class="item"><strong>${esc(tr('transfer.list.empty'))}</strong></div>`;
+        return;
+      }
+      listNode.innerHTML = rows.map((row) => `
+        <div class="item">
+          <strong>${esc(row.transfer_id)} · ${esc(row.part_key)} · ${esc(row.quantity)}</strong>
+          <span>${esc(tr('transfer.list.route', { source: row.source_factory || '-', target: row.target_factory || '-' }))}</span>
+          <span>${esc(tr('transfer.list.locations', { source: row.source_location_code || '-', target: row.target_location_code || '-' }))}</span>
+          <span>${esc(row.reason || '-')}</span>
+          <span>${esc(row.created_at || '-')}</span>
+        </div>
+      `).join('');
+    }
+
+    async function loadTransfers() {
+      const factory = document.querySelector('#factoryFilter').value;
+      const query = new URLSearchParams({ days: '30' });
+      if (factory) query.set('factory_id', factory);
+      const payload = await requestJson(`/api/transfers?${query.toString()}`);
+      renderTransfers(payload.transfers || []);
+    }
+
+    createBtn.addEventListener('click', () => { createTransfer().catch(() => {}); });
+    refreshBtn.addEventListener('click', () => { loadTransfers().catch(() => {}); });
+    document.querySelector('#factoryFilter').addEventListener('change', () => { loadTransfers().catch(() => {}); });
+
+    I18n.init().then(() => {
+      loadTransfers().catch((error) => {
+        listNode.innerHTML = `<div class="item"><strong>${esc(error.message)}</strong></div>`;
+      });
+    });
+  </script>
+</body>
+</html>
