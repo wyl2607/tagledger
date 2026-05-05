@@ -5,7 +5,7 @@ import socket
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from typing import NoReturn
@@ -67,6 +67,10 @@ class OutboundCompletionMark:
     part_code: str
     quantity: int | None
     raw_line: str
+
+
+class OutboundVerificationRequiredError(RuntimeError):
+    pass
 
 
 def normalize_order_no(value: str) -> str:
@@ -637,6 +641,7 @@ def _snapshot_to_payload(snapshot: OutboundProgressSnapshot) -> dict[str, object
         "operator_id": snapshot.operator_id,
         "batch_id": snapshot.batch_id,
         "scan_id": snapshot.scan_id,
+        "completed_at": snapshot.completed_at.isoformat() if snapshot.completed_at else None,
         "detail": detail,
         "created_at": snapshot.created_at.isoformat() if snapshot.created_at else None,
     }
@@ -652,6 +657,7 @@ def save_outbound_progress_snapshot(
     scan_id: int | None = None,
     batch_id: str | None = None,
     detail: dict[str, object] | None = None,
+    completed_at: datetime | None = None,
 ) -> OutboundProgressSnapshot:
     selected_order = normalize_order_no(order_no)
     status = status or outbound_order_status(selected_order, session)
@@ -669,6 +675,7 @@ def save_outbound_progress_snapshot(
         operator_id=(operator_id.strip() or "self")[:80],
         batch_id=(batch_id or "")[:120] or None,
         scan_id=scan_id,
+        completed_at=completed_at,
         detail_json=json.dumps(detail or {}, ensure_ascii=False, default=str),
     )
     session.add(snapshot)
@@ -694,11 +701,19 @@ def _scan_to_payload(scan: OutboundScan) -> dict[str, object]:
         "operator_id": scan.operator_id,
         "batch_id": scan.batch_id,
         "record_id": scan.record_id,
+        "verification_record_id": scan.verification_record_id,
         "void_reason": scan.void_reason,
         "voided_by": scan.voided_by,
         "created_at": scan.created_at.isoformat() if scan.created_at else None,
         "voided_at": scan.voided_at.isoformat() if scan.voided_at else None,
     }
+
+
+def _source_part_key_from_scan_code(code: str) -> str | None:
+    match = PART_CODE_RE.search(code)
+    if match is None:
+        return None
+    return compact_part_code(normalize_part_code(match.group(0)))
 
 
 def _normalize_location_code(value: str) -> str:
@@ -1445,6 +1460,7 @@ def register_outbound_scan(
     operator_id: str,
     session: Session,
     record_id: int | None = None,
+    verification_record_id: int | None = None,
     quantity: int = 1,
     location_code: str | None = None,
     dry_run: bool = False,
@@ -1470,6 +1486,10 @@ def register_outbound_scan(
         }
 
     matched_row = required_rows[matched_key]
+    source_part_key = _source_part_key_from_scan_code(code)
+    requires_verification = bool(source_part_key and source_part_key != matched_key)
+    if requires_verification and verification_record_id is None and not dry_run:
+        raise OutboundVerificationRequiredError("verification_record_id is required")
     selected_location, available_locations, location_matches = _select_location_for_outbound(
         location_code=location_code,
         required_row=matched_row,
@@ -1549,6 +1569,9 @@ def register_outbound_scan(
             "requested_quantity": quantity,
             "remaining_qty": remaining_qty,
             "matched_part": matched_row,
+            "requires_verification": requires_verification,
+            "verification_reason": "part_mismatch" if requires_verification else None,
+            "source_part_key": source_part_key,
             "order_status": outbound_order_status(selected_order, session),
         }
     inventory_location = None
@@ -1595,6 +1618,7 @@ def register_outbound_scan(
         status="active",
         operator_id=(operator_id.strip() or "self")[:80],
         record_id=record_id,
+        verification_record_id=verification_record_id,
     )
     session.add(scan)
     try:
@@ -1630,6 +1654,9 @@ def register_outbound_scan(
         "already_complete": False,
         "location_code": selected_location,
         "quantity": quantity,
+        "requires_verification": requires_verification,
+        "verification_reason": "part_mismatch" if requires_verification else None,
+        "source_part_key": source_part_key,
         "matched_part": matched_row,
         "scan_id": scan.id,
         "scan": _scan_to_payload(scan),
@@ -1651,6 +1678,7 @@ def preview_outbound_scan(
     operator_id: str,
     session: Session,
     record_id: int | None = None,
+    verification_record_id: int | None = None,
     quantity: int = 1,
     location_code: str | None = None,
 ) -> dict[str, object]:
@@ -1659,6 +1687,7 @@ def preview_outbound_scan(
         code=code,
         operator_id=operator_id,
         record_id=record_id,
+        verification_record_id=verification_record_id,
         quantity=quantity,
         location_code=location_code,
         session=session,
@@ -2176,6 +2205,7 @@ def complete_outbound_order(
             batch_id=batch_id,
         )
     status = outbound_order_status(selected_order, session)
+    completed_at = datetime.now(UTC)
     snapshot = save_outbound_progress_snapshot(
         order_no=selected_order,
         event="complete_order_finished",
@@ -2183,12 +2213,179 @@ def complete_outbound_order(
         session=session,
         status=status,
         batch_id=batch_id,
+        completed_at=completed_at,
         detail={"line_total": len(required_rows), "batch_id": batch_id},
     )
     return {
         "completed": True,
         "batch_id": batch_id,
         "snapshot": _snapshot_to_payload(snapshot),
+        "order_status": status,
+    }
+
+
+def rollback_outbound_order(
+    *,
+    order_no: str,
+    operator: User,
+    session: Session,
+) -> dict[str, object]:
+    selected_order = normalize_order_no(order_no)
+    latest_completion = session.exec(
+        select(OutboundProgressSnapshot)
+        .where(
+            OutboundProgressSnapshot.order_no == selected_order,
+            OutboundProgressSnapshot.event == "complete_order_finished",
+        )
+        .order_by(OutboundProgressSnapshot.created_at.desc(), OutboundProgressSnapshot.id.desc())
+    ).first()
+    if latest_completion is None:
+        raise RuntimeError(f"no completion snapshot found for order: {selected_order}")
+
+    completed_at = latest_completion.completed_at or latest_completion.created_at
+    if completed_at is None:
+        raise RuntimeError(f"invalid completion snapshot for order: {selected_order}")
+    if completed_at.tzinfo is None:
+        completed_at = completed_at.replace(tzinfo=UTC)
+    else:
+        completed_at = completed_at.astimezone(UTC)
+
+    now = datetime.now(UTC)
+    rollback_window_minutes = max(1, int(get_settings().rollback_window_minutes or 30))
+    rollback_deadline = completed_at + timedelta(minutes=rollback_window_minutes)
+    if now > rollback_deadline:
+        raise RuntimeError(
+            f"rollback window expired for order {selected_order}: "
+            f"completed_at={completed_at.isoformat()} deadline={rollback_deadline.isoformat()}"
+        )
+
+    active_scans = session.exec(
+        select(OutboundScan)
+        .where(OutboundScan.order_no == selected_order, OutboundScan.status == "active")
+        .order_by(OutboundScan.id.asc())
+    ).all()
+    if not active_scans:
+        raise RuntimeError(f"no active scans to rollback for order: {selected_order}")
+
+    now = datetime.now(UTC)
+    restored_count = 0
+    restored_quantity = 0
+    movement_rows: list[InventoryMovement] = []
+    for scan in active_scans:
+        if scan.location_code:
+            normalized_location = _normalize_location_code(scan.location_code)
+            location = _get_or_create_inventory_location(
+                session,
+                part_key=scan.part_code,
+                location_code=normalized_location,
+            )
+            before_qty = int(location.quantity)
+            after_qty = before_qty + int(scan.quantity)
+            location.quantity = after_qty
+            location.zero_stock = after_qty == 0
+            if location.zero_stock:
+                location.status = "zero_stock"
+            elif location.status in {"zero_stock", "retired"}:
+                location.status = "active"
+            location.updated_at = now
+            session.add(location)
+            session.flush()
+
+            movement = InventoryMovement(
+                movement_type="inbound",
+                part_key=scan.part_code,
+                location_code=normalized_location,
+                order_no=selected_order,
+                scan_id=scan.id,
+                quantity_delta=int(scan.quantity),
+                before_qty=before_qty,
+                after_qty=after_qty,
+                operator_id=(operator.username or "self")[:80],
+                reason="rollback_outbound_order_revert",
+            )
+            session.add(movement)
+            movement_rows.append(movement)
+            restored_count += 1
+            restored_quantity += int(scan.quantity)
+
+        scan.status = "voided"
+        scan.void_reason = "rollback"
+        scan.voided_by = (operator.username or "self")[:80]
+        scan.voided_at = now
+        session.add(scan)
+    session.flush()
+
+    status = outbound_order_status(selected_order, session)
+    active_count, active_quantity = _active_scan_summary(session, selected_order)
+    rollback_snapshot = OutboundProgressSnapshot(
+        order_no=selected_order,
+        event="rollback_completed",
+        required_total=int(status.get("required_total") or 0),
+        scanned_total=int(status.get("scanned_total") or 0),
+        remaining_total=int(status.get("remaining_total") or 0),
+        line_total=int(status.get("line_total") or 0),
+        complete_line_total=int(status.get("complete_line_total") or 0),
+        active_scan_count=active_count,
+        active_scan_quantity=active_quantity,
+        operator_id=(operator.username or "self")[:80],
+        batch_id=latest_completion.batch_id,
+        scan_id=None,
+        detail_json=json.dumps(
+            {
+                "rollback_source_snapshot_id": latest_completion.id,
+                "rollback_window_minutes": rollback_window_minutes,
+                "voided_scan_ids": [scan.id for scan in active_scans],
+                "voided_quantity": sum(int(scan.quantity) for scan in active_scans),
+                "restored_inventory_rows": restored_count,
+                "restored_inventory_quantity": restored_quantity,
+            },
+            ensure_ascii=False,
+            default=str,
+        ),
+    )
+    session.add(rollback_snapshot)
+    session.flush()
+
+    audit = AuditLog(
+        event_type="outbound_rollback",
+        actor_user_id=operator.id,
+        actor_username=operator.username,
+        target_type="outbound_order",
+        target_id=selected_order,
+        action="outbound.rollback",
+        reason="supervisor rollback",
+        success=True,
+        detail_json=json.dumps(
+            {
+                "order_no": selected_order,
+                "rollback_source_snapshot_id": latest_completion.id,
+                "voided_scan_count": len(active_scans),
+                "voided_quantity": sum(int(scan.quantity) for scan in active_scans),
+                "rollback_window_minutes": rollback_window_minutes,
+                "completed_at": completed_at.isoformat(),
+                "rolled_back_at": now.isoformat(),
+            },
+            ensure_ascii=False,
+            default=str,
+        ),
+    )
+    session.add(audit)
+    session.commit()
+    session.refresh(rollback_snapshot)
+    session.refresh(audit)
+
+    return {
+        "rolled_back": True,
+        "order_no": selected_order,
+        "voided_scan_count": len(active_scans),
+        "voided_quantity": sum(int(scan.quantity) for scan in active_scans),
+        "restored_inventory_rows": restored_count,
+        "restored_inventory_quantity": restored_quantity,
+        "rollback_window_minutes": rollback_window_minutes,
+        "completed_at": completed_at.isoformat(),
+        "rolled_back_at": now.isoformat(),
+        "snapshot": _snapshot_to_payload(rollback_snapshot),
+        "audit_log_id": audit.id,
         "order_status": status,
     }
 
