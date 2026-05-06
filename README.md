@@ -131,6 +131,18 @@ python -m pip install -e ".[dev]"
 
 Tesseract、PATH、防火墙、局域网访问和常见错误处理见 `docs/WINDOWS_DEPLOY.md`。
 
+## Git 同步规则
+
+中心仓库是私有 GitHub 仓库 `https://github.com/wyl2607/tagledger.git`。Mac、Windows 和服务器之间只通过这个 remote 同步代码；本地数据库、上传图片、日志、截图、`.omx/` 和 private docs 不进 Git。
+
+同步规则见 `docs/SYNC_RULES.md`。推送前至少运行：
+
+```bash
+./.venv/bin/python -m pytest backend/tests -q
+./scripts/security_check.sh
+./scripts/review_push_guard.sh origin/main
+```
+
 ## Phase 1 验证
 
 ```powershell

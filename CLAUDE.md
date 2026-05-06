@@ -5,6 +5,7 @@
 - 默认用中文沟通。
 - 当前已到 Phase 4 (dry-run)，Phase 5 待开始。
 - 不提交 `.env*`、本地数据库、上传图片、日志或截图。
+- Git 同步规则以 `docs/SYNC_RULES.md` 为准；不要推送旧 `slice/*` / `claude/*` 本地历史分支。
 
 ## 开发命令
 
@@ -23,6 +24,8 @@ pytest
 source .venv/bin/activate
 pip install -e ".[dev,barcode,ocr,submit]"
 pytest
+./scripts/security_check.sh
+./scripts/review_push_guard.sh origin/main
 ./scripts/run_mac_demo.sh
 ```
 
