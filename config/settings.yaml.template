@@ -1,0 +1,21 @@
+database:
+  # sqlite:///data/app.db
+  # postgresql://user:password@127.0.0.1:5432/tagledger
+  dsn: sqlite:///data/app.db
+
+app:
+  # Backward-compatible fallback. Prefer database.dsn above.
+  database_url: sqlite:///data/app.db
+  upload_dir: data/uploads
+  screenshot_dir: data/screenshots
+  ocr_provider: tesseract
+  enable_barcode: true
+  enable_saas_submit: false
+  dry_run: true
+  submission_retries: 3
+  rollback_window_minutes: 30
+  # supervisor_password: "<set-via-env-or-local-private-config>"
+  # admin_password: "<set-via-env-or-local-private-config>"
+
+metrics:
+  manual_seconds: 90

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Fake SaaS</title>
+  </head>
+  <body>
+    <form id="login-form">
+      <input id="username" name="username">
+      <input id="password" name="password" type="password">
+      <button type="submit">Login</button>
+    </form>
+
+    <form id="record-form">
+      <input id="model" name="model">
+      <input id="vin" name="vin">
+      <input id="sn" name="sn">
+      <input type="radio" name="category" value="A">
+      <input type="radio" name="category" value="B">
+      <input type="radio" name="category" value="C">
+      <input type="file" name="label">
+      <button class="submit-record" type="button">Submit</button>
+      <div class="alert-success" hidden>Saved</div>
+    </form>
+
+    <script>
+      window.realSubmitted = false;
+      document.querySelector(".submit-record").addEventListener("click", () => {
+        window.realSubmitted = true;
+        document.querySelector(".alert-success").hidden = false;
+      });
+    </script>
+  </body>
+</html>

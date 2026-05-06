@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TagLedger History</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    main { padding-top: 0; }
+    .card { margin-bottom: 24px; }
+    details.card summary { min-height: 56px; display: flex; align-items: center; cursor: pointer; font-size: 26px; font-weight: 950; }
+    .toolbar { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(220px, 1fr) minmax(150px, .7fr) minmax(150px, .7fr) auto auto; gap: 16px; align-items: end; margin-top: 16px; }
+    #statuses { min-height: 160px; }
+    .table-wrap { overflow: auto; padding: 0; }
+    table { width: 100%; border-collapse: collapse; min-width: 960px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: middle; font-size: 18px; }
+    th { position: sticky; top: 0; z-index: 1; height: 48px; background: var(--soft); font-weight: 950; }
+    tbody tr { height: 64px; }
+    tr:last-child td { border-bottom: 0; }
+    .thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: var(--soft); border: 1px solid var(--line); cursor: zoom-in; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+    .pager { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; }
+    .pager div { display: flex; gap: 16px; }
+    .empty { padding: 32px; text-align: center; color: var(--muted); }
+    dialog { border: 0; border-radius: 16px; padding: 0; max-width: min(960px, calc(100vw - 32px)); background: #fff; box-shadow: var(--shadow); }
+    dialog::backdrop { background: rgba(10,10,10,.62); }
+    .modal-body { padding: 16px; }
+    .modal-body img { display: block; max-width: 100%; max-height: 76vh; border-radius: 8px; }
+    .raw-text { white-space: pre-wrap; max-width: 720px; max-height: 60vh; overflow: auto; margin: 0; padding: 16px; background: var(--soft); border-radius: 8px; color: var(--ink); }
+    .modal-actions { display: flex; justify-content: flex-end; padding: 0 16px 16px; }
+    @media (max-width: 900px) {
+      .toolbar { grid-template-columns: 1fr; }
+      .pager { align-items: stretch; flex-direction: column; }
+      .pager div { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="app.project">Field Intake</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">ZH</button>
+        </div>
+        <a class="nav-button" href="/" data-i18n="nav.demo">Capture</a>
+        <a class="nav-button" href="/mobile" data-i18n="nav.mobile">Mobile</a>
+        <a class="nav-button" href="/outbound" data-i18n="nav.outbound">Outbound</a>
+      </div>
+    </div>
+  </div>
+
+  <header class="page-head">
+    <h1 data-i18n="history.title">History</h1>
+    <p class="muted" data-i18n="history.subtitle">Review stored and in-progress records with status, keyword and date filters.</p>
+  </header>
+
+  <main>
+    <details class="card" open>
+      <summary data-i18n="history.filters.title">Filters</summary>
+      <section class="toolbar" aria-label="Filters">
+        <div>
+          <label for="keyword" data-i18n="history.filter.keyword">Keyword</label>
+          <input id="keyword" data-i18n-placeholder="history.filter.keywordPlaceholder" placeholder="Model / VIN / SN / ID">
+        </div>
+        <div>
+          <label for="statuses" data-i18n="history.filter.status">Status</label>
+          <select id="statuses" multiple>
+            <option value="uploaded" data-i18n="status.uploaded">uploaded</option>
+            <option value="ocr_done" data-i18n="status.ocrDone">ocr_done</option>
+            <option value="needs_review" data-i18n="status.needsReview">needs_review</option>
+            <option value="confirmed" data-i18n="status.confirmed">confirmed</option>
+            <option value="submitted" data-i18n="status.submitted">submitted</option>
+            <option value="submission_failed" data-i18n="status.submissionFailed">submission_failed</option>
+            <option value="duplicate" data-i18n="status.duplicate">duplicate</option>
+          </select>
+        </div>
+        <div><label for="dateFrom" data-i18n="history.filter.dateFrom">From</label><input id="dateFrom" type="date"></div>
+        <div><label for="dateTo" data-i18n="history.filter.dateTo">To</label><input id="dateTo" type="date"></div>
+        <div><label>&nbsp;</label><button id="exportBtn" type="button" data-endpoint="/export.csv" data-i18n="history.button.export">Export CSV</button></div>
+        <div><label>&nbsp;</label><button class="secondary" id="refreshBtn" type="button" data-i18n="history.button.refresh">Refresh</button></div>
+      </section>
+    </details>
+
+    <section class="card table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="history.column.thumbnail">Image</th>
+            <th data-i18n="history.column.id">ID</th>
+            <th data-i18n="history.column.category">Category</th>
+            <th data-i18n="history.column.model">Model</th>
+            <th data-i18n="history.column.vin">VIN</th>
+            <th data-i18n="history.column.sn">SN</th>
+            <th data-i18n="history.column.status">Status</th>
+            <th data-i18n="history.column.createdAt">Created at</th>
+            <th data-i18n="history.column.actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="9" class="empty" data-i18n="history.loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="pager">
+      <span class="muted" id="pageInfo"></span>
+      <div>
+        <button class="secondary" id="prevBtn" type="button" data-i18n="history.button.prev">Previous</button>
+        <button class="secondary" id="nextBtn" type="button" data-i18n="history.button.next">Next</button>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="modal">
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="secondary mini" id="closeModalBtn" type="button" data-i18n="history.button.close">Close</button>
+    </div>
+  </dialog>
+
+  <script src="/static/i18n.js"></script>
+  <script>
+    const pageSize = 20;
+    const rows = document.querySelector('#rows');
+    const keyword = document.querySelector('#keyword');
+    const statuses = document.querySelector('#statuses');
+    const dateFrom = document.querySelector('#dateFrom');
+    const dateTo = document.querySelector('#dateTo');
+    const pageInfo = document.querySelector('#pageInfo');
+    const prevBtn = document.querySelector('#prevBtn');
+    const nextBtn = document.querySelector('#nextBtn');
+    const modal = document.querySelector('#modal');
+    const modalBody = document.querySelector('#modalBody');
+    let page = 0;
+    let records = [];
+
+    const tr = (key, vars) => window.I18n.t(key, vars);
+    const statusKeyMap = {
+      uploaded: 'status.uploaded',
+      ocr_done: 'status.ocrDone',
+      confirmed: 'status.confirmed',
+      submitted: 'status.submitted',
+      submission_failed: 'status.submissionFailed',
+      duplicate: 'status.duplicate',
+      needs_review: 'status.needsReview',
+    };
+
+    function statusLabel(status) {
+      return tr(statusKeyMap[status] || 'status.unknown');
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[char]));
+    }
+
+    async function requestJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+
+    function selectedStatuses() {
+      return Array.from(statuses.selectedOptions).map((option) => option.value);
+    }
+
+    function selectedOperatorId() {
+      return new URLSearchParams(window.location.search).get('operator_id') || '';
+    }
+
+    function dateOnly(value) {
+      return value ? value.slice(0, 10) : '';
+    }
+
+    function passesFilters(record) {
+      const statusFilter = selectedStatuses();
+      if (statusFilter.length && !statusFilter.includes(record.status)) return false;
+      const term = keyword.value.trim().toLowerCase();
+      if (term) {
+        const haystack = [record.id, record.category, record.model, record.vin_or_bin, record.serial_number, record.status].join(' ').toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      const created = dateOnly(record.created_at);
+      if (dateFrom.value && created < dateFrom.value) return false;
+      if (dateTo.value && created > dateTo.value) return false;
+      return true;
+    }
+
+    function filteredRecords() {
+      return records.filter(passesFilters);
+    }
+
+    function statusClass(status) {
+      return `status status-${String(status).replace(/[^a-z_]/g, '')}`;
+    }
+
+    function formatTime(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString();
+    }
+
+    function imageFallbackDataUri() {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+          <rect width="96" height="96" rx="12" fill="#f6f6f6"/>
+          <path d="M24 62l14-16 12 12 8-10 14 14" fill="none" stroke="#a3a3a3" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="35" cy="35" r="7" fill="#a3a3a3"/>
+        </svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    }
+
+    function render() {
+      const filtered = filteredRecords();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (page >= totalPages) page = totalPages - 1;
+      const visible = filtered.slice(page * pageSize, page * pageSize + pageSize);
+      rows.innerHTML = '';
+      if (!visible.length) rows.innerHTML = `<tr><td colspan="9" class="empty">${escapeHtml(tr('history.empty'))}</td></tr>`;
+      for (const record of visible) {
+        const trNode = document.createElement('tr');
+        trNode.innerHTML = `
+          <td><img class="thumb" src="/records/${record.id}/image" alt="" data-action="image" data-id="${record.id}" onerror="this.onerror=null;this.src='${imageFallbackDataUri()}';this.dataset.missing='true';"></td>
+          <td>#${record.id}</td>
+          <td>${escapeHtml(record.category)}</td>
+          <td>${escapeHtml(record.model || '-')}</td>
+          <td>${escapeHtml(record.vin_or_bin || '-')}</td>
+          <td>${escapeHtml(record.serial_number || '-')}</td>
+          <td><span class="${statusClass(record.status)}">${escapeHtml(statusLabel(record.status))}</span></td>
+          <td>${escapeHtml(formatTime(record.created_at))}</td>
+          <td>
+            <div class="actions">
+              <button class="secondary mini" type="button" data-action="image" data-id="${record.id}">${escapeHtml(tr('history.button.viewImage'))}</button>
+              <button class="secondary mini" type="button" data-action="copy-sn" data-sn="${escapeHtml(record.serial_number || '')}">${escapeHtml(tr('history.button.copySn'))}</button>
+              <button class="secondary mini" type="button" data-action="raw" data-id="${record.id}">${escapeHtml(tr('history.button.viewRawOcr'))}</button>
+            </div>
+          </td>
+        `;
+        rows.appendChild(trNode);
+      }
+      pageInfo.textContent = tr('history.pageInfo', { page: page + 1, totalPages, count: filtered.length });
+      prevBtn.disabled = page === 0;
+      nextBtn.disabled = page >= totalPages - 1;
+    }
+
+    async function loadRecords() {
+      const params = new URLSearchParams({ limit: '500', offset: '0' });
+      const operatorId = selectedOperatorId();
+      if (operatorId) params.set('operator_id', operatorId);
+      records = await requestJson(`/jobs?${params.toString()}`);
+      render();
+    }
+
+    function openImage(id) {
+      modalBody.innerHTML = `<img src="/records/${id}/image" alt="record ${id}">`;
+      modal.showModal();
+    }
+
+    async function openRawText(id) {
+      const record = await requestJson(`/jobs/${id}`);
+      modalBody.innerHTML = `<pre class="raw-text">${escapeHtml(record.raw_ocr_text || tr('ocr.raw.empty'))}</pre>`;
+      modal.showModal();
+    }
+
+    function exportFilteredCsv() {
+      const statusFilter = selectedStatuses();
+      const params = new URLSearchParams();
+      for (const status of statusFilter) params.append('status', status);
+      if (keyword.value.trim()) params.set('keyword', keyword.value.trim());
+      if (dateFrom.value) params.set('date_from', dateFrom.value);
+      if (dateTo.value) params.set('date_to', dateTo.value);
+      window.location.href = `/export.csv${params.toString() ? `?${params.toString()}` : ''}`;
+    }
+
+    rows.addEventListener('click', async (event) => {
+      const target = event.target.closest('[data-action]');
+      if (!target) return;
+      if (target.dataset.action === 'image') openImage(target.dataset.id);
+      else if (target.dataset.action === 'copy-sn') await navigator.clipboard.writeText(target.dataset.sn || '');
+      else if (target.dataset.action === 'raw') await openRawText(target.dataset.id);
+    });
+
+    document.querySelector('#closeModalBtn').addEventListener('click', () => modal.close());
+    document.querySelector('#exportBtn').addEventListener('click', exportFilteredCsv);
+    document.querySelector('#refreshBtn').addEventListener('click', () => loadRecords().catch(() => {}));
+    prevBtn.addEventListener('click', () => { page = Math.max(0, page - 1); render(); });
+    nextBtn.addEventListener('click', () => { page += 1; render(); });
+    [keyword, statuses, dateFrom, dateTo].forEach((control) => {
+      control.addEventListener('input', () => { page = 0; render(); });
+      control.addEventListener('change', () => { page = 0; render(); });
+    });
+    window.addEventListener('i18n:change', render);
+
+    I18n.init().then(() => {
+      pageInfo.textContent = tr('history.pageInfo', { page: 1, totalPages: 1, count: 0 });
+      loadRecords().catch((error) => {
+        rows.innerHTML = `<tr><td colspan="9" class="empty">${escapeHtml(tr('history.loadFailed', { message: error.message }))}</td></tr>`;
+      });
+      window.setInterval(() => loadRecords().catch(() => {}), 10000);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); gap: 24px; padding-bottom: 48px; }
+    .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; padding: 4px; background: var(--soft); border-radius: 16px; }
+    .mode-tab { background: transparent; border-radius: 14px; }
+    .mode-tab.active { background: var(--orange); }
+    .guide { margin-top: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--soft); padding: 16px; }
+    .guide h3 { margin: 0 0 8px; font-size: 20px; font-weight: 950; }
+    .guide ol { margin: 8px 0 0 24px; padding: 0; line-height: 1.7; }
+    .barcode-panel, .material-panel, .record, .batch-file, .batch-card, .duplicate-item { border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 16px; }
+    .barcode-panel { margin: 16px 0; }
+    .material-panel { margin: 16px 0; border-color: #22c55e; background: #f0fdf4; }
+    .material-match-list { display: grid; gap: 10px; }
+    .material-match-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(34,197,94,.35); }
+    .material-match-row:first-child { border-top: 0; padding-top: 0; }
+    .material-match-row strong, .material-match-row span { display: block; overflow-wrap: anywhere; }
+    .material-match-row span { color: var(--muted); margin-top: 4px; }
+    .barcode-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+    .barcode-row:first-child { border-top: 0; }
+    .barcode-data { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; }
+    .record { width: 100%; text-align: left; margin-bottom: 12px; }
+    .record:hover { background: #fff7f3; }
+    .record strong, .record span, .batch-meta strong, .batch-meta span { display: block; overflow-wrap: anywhere; }
+    .record span, .batch-meta span { color: var(--muted); margin-top: 4px; }
+    .board-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .batch-toolbar { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end; }
+    .batch-list { display: grid; gap: 16px; margin-top: 16px; }
+    .batch-empty { border: 1px dashed var(--line); border-radius: 16px; padding: 16px; color: var(--muted); }
+    .batch-file, .batch-card { display: grid; grid-template-columns: 88px 1fr auto; gap: 16px; align-items: center; }
+    .batch-card { grid-template-columns: 96px 1fr; align-items: start; }
+    .thumb { width: 88px; height: 66px; border-radius: 8px; object-fit: cover; background: var(--soft); border: 1px solid var(--line); }
+    .batch-card .thumb { width: 96px; height: 76px; }
+    .batch-status { min-width: 100px; text-align: right; font-weight: 950; }
+    .batch-confirm { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px; align-items: end; }
+    .batch-confirm label { margin-top: 0; }
+    .duplicate-list { display: grid; gap: 8px; margin: 8px 0 16px; }
+    @media (max-width: 860px) {
+      main { grid-template-columns: 1fr; padding-bottom: 112px; }
+      .board-actions, .batch-toolbar, .batch-confirm, .barcode-row, .material-match-row { grid-template-columns: 1fr; }
+      .batch-file, .batch-card { grid-template-columns: 78px 1fr; }
+      .batch-status { grid-column: 2; text-align: left; }
+      .sticky-actions { position: sticky; bottom: 0; z-index: 10; background: rgba(254,254,254,.96); border-top: 1px solid var(--line); margin: 16px -24px -24px; padding: 16px 24px; box-shadow: var(--shadow); }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="app.project">Field Intake</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">ZH</button>
+        </div>
+        <a class="nav-button" href="/mobile" data-i18n="nav.mobile">Mobile</a>
+        <a class="nav-button" href="/history" data-i18n="nav.history">History</a>
+        <a class="nav-button" href="/outbound" data-i18n="nav.outbound">Outbound</a>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <h1 data-i18n="demo.title">Machine label capture</h1>
+    <p class="subtitle" data-i18n="demo.subtitle">Upload label photos, review OCR and barcode results, then confirm records into SQLite.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2 data-i18n="demo.section.upload">Upload label image</h2>
+      <div class="mode-tabs" role="tablist" aria-label="Upload mode">
+        <button class="mode-tab active" type="button" id="singleTab" aria-selected="true" data-i18n="upload.tab.single">Single image</button>
+        <button class="mode-tab" type="button" id="batchTab" aria-selected="false" data-i18n="upload.tab.batch">Batch</button>
+      </div>
+      <div class="mode-panel" id="singlePanel">
+        <form id="uploadForm">
+          <label for="category" data-i18n="form.field.category">Category</label>
+          <select id="category" name="category" required>
+            <option value="A" data-i18n="form.category.a">A</option>
+            <option value="B" data-i18n="form.category.b">B</option>
+            <option value="C" data-i18n="form.category.c">C</option>
+          </select>
+          <label for="file" data-i18n="upload.file.label">Label photo</label>
+          <input id="file" name="file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+          <p class="muted" data-i18n="upload.dropZone">Choose clear label photos and keep one label per image.</p>
+          <div class="actions sticky-actions">
+            <button type="submit" id="uploadBtn" data-i18n="upload.button.choose">Upload and scan</button>
+            <button class="secondary" type="button" id="refreshBtn" data-i18n="upload.button.refresh">Refresh records</button>
+          </div>
+          <div class="status" id="uploadStatus" role="status" aria-live="polite"></div>
+          <div class="alert alert-red" id="uploadAlert" role="alert" hidden></div>
+          <section class="guide" aria-labelledby="photoGuideTitle">
+            <h3 id="photoGuideTitle" data-i18n="guide.title">Photo guide</h3>
+            <ol>
+              <li data-i18n="guide.item1">Capture one label per photo.</li>
+              <li data-i18n="guide.item2">Keep the full label inside the frame.</li>
+              <li data-i18n="guide.item3">Make Model / VIN-BIN / SN sharp and readable.</li>
+              <li data-i18n="guide.item4">Face the label straight on and avoid glare, shadows and tilt.</li>
+              <li data-i18n="guide.item5">If OCR fails, fill the fields manually.</li>
+            </ol>
+          </section>
+        </form>
+      </div>
+      <div class="mode-panel" id="batchPanel" hidden>
+        <form id="batchForm">
+          <div class="batch-toolbar">
+            <div>
+              <label for="batchCategory" data-i18n="form.field.category">Category</label>
+              <select id="batchCategory" name="category" required>
+                <option value="A" data-i18n="form.category.a">A</option>
+                <option value="B" data-i18n="form.category.b">B</option>
+                <option value="C" data-i18n="form.category.c">C</option>
+              </select>
+            </div>
+            <button class="secondary" type="button" id="batchClearBtn" data-i18n="upload.button.clear">Clear</button>
+          </div>
+          <label for="batchFiles" data-i18n="upload.files.label">Label photos</label>
+          <input id="batchFiles" name="files" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+          <div class="progress" aria-hidden="true"><span id="batchProgressBar"></span></div>
+          <div class="status" id="batchStatus" role="status" aria-live="polite"></div>
+          <div class="alert alert-red" id="batchAlert" role="alert" hidden></div>
+          <div id="batchFileList" class="batch-list">
+            <div class="batch-empty" data-i18n="upload.batch.empty">Choose multiple images to upload and scan them in order.</div>
+          </div>
+          <div class="actions sticky-actions">
+            <button type="submit" id="batchUploadBtn" data-i18n="upload.button.batch">Batch upload and scan</button>
+            <button class="secondary" type="button" id="batchRefreshBtn" data-i18n="upload.button.refresh">Refresh records</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="processing" id="processingBox" role="status" aria-live="polite" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <strong id="processingTitle" data-i18n="ocr.processing">Scanning...</strong>
+        <span id="processingElapsed"></span>
+      </div>
+
+      <div id="confirmBox" hidden>
+        <div class="top-actions">
+          <button class="mini-button" type="button" id="retakeTopBtn" data-i18n="upload.button.retake">Retake / reupload</button>
+        </div>
+        <h2 data-i18n="demo.section.confirm">Review and confirm</h2>
+        <input id="recordId" type="hidden">
+        <div class="alert alert-yellow" id="reviewAlert" role="alert" hidden></div>
+        <div class="alert alert-blue" id="duplicateNotice" role="alert" hidden></div>
+        <div class="material-panel">
+          <h3 data-i18n="material.title">Material match</h3>
+          <div id="materialResults" class="material-match-list muted" data-i18n="material.none">No material match</div>
+        </div>
+        <div class="barcode-panel">
+          <h3 data-i18n="barcode.title">Barcode scan</h3>
+          <div id="barcodeResults" class="muted" data-i18n="barcode.none">No barcode detected</div>
+        </div>
+        <div class="grid">
+          <div><label for="model" data-i18n="form.field.model">Model</label><input id="model" autocomplete="off"></div>
+          <div><label for="vin" data-i18n="form.field.vinOrBin">VIN/BIN</label><input id="vin" autocomplete="off"></div>
+          <div><label for="sn" data-i18n="form.field.serialNumber">SN</label><input id="sn" autocomplete="off"></div>
+        </div>
+        <label for="packageCode" data-i18n="form.field.packageCode">Package code</label>
+        <input id="packageCode" autocomplete="off" readonly>
+        <div class="split">
+          <div>
+            <label for="confirmCategory" data-i18n="form.field.confirmCategory">Confirm category</label>
+            <select id="confirmCategory"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+          </div>
+          <div>
+            <label for="duplicateAction" data-i18n="form.field.duplicateAction">Duplicate handling</label>
+            <select id="duplicateAction">
+              <option value="abandon" data-i18n="duplicate.action.discardNew">Discard new on duplicate</option>
+              <option value="overwrite" data-i18n="duplicate.action.overwrite">Overwrite old record</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions three sticky-actions">
+          <button type="button" id="confirmBtn" data-i18n="form.action.confirmLocal">Confirm local record</button>
+          <button class="danger" type="button" id="abandonBtn" data-i18n="duplicate.action.discardNew">Discard new on duplicate</button>
+          <button class="secondary" type="button" id="retakeBtn" data-i18n="upload.button.retake">Retake / reupload</button>
+        </div>
+        <div class="status" id="confirmStatus" role="status" aria-live="polite"></div>
+      </div>
+
+      <div id="batchConfirmBox" hidden>
+        <h2 data-i18n="demo.section.batchConfirm">Batch review</h2>
+        <div class="actions">
+          <button type="button" id="confirmAllBatchBtn" data-i18n="form.action.confirmAll">Confirm all</button>
+          <button class="secondary" type="button" id="skipUnrecognizedBtn" data-i18n="form.action.skipUnrecognized">Skip unrecognized</button>
+        </div>
+        <div class="status" id="batchConfirmStatus" role="status" aria-live="polite"></div>
+        <div id="batchConfirmList" class="batch-list"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="demo.board.title">Record board</h2>
+      <div class="board-actions">
+        <button class="secondary" type="button" data-status="ocr_done" data-i18n="demo.board.pending">Pending review</button>
+        <button class="secondary" type="button" data-status="confirmed" data-i18n="demo.board.confirmed">Confirmed</button>
+        <button class="secondary" type="button" data-status="needs_review" data-i18n="demo.board.needsReview">Needs review</button>
+        <button class="secondary" type="button" data-status="duplicate" data-i18n="demo.board.duplicate">Duplicate / discarded</button>
+      </div>
+      <div class="actions">
+        <button type="button" id="exportBtn" data-i18n="history.button.export">Export CSV</button>
+      </div>
+      <p class="muted" data-i18n="demo.board.hint">Select a record to reload the review form.</p>
+      <div id="records"></div>
+    </section>
+  </main>
+  <div id="toast" class="toast toast-info" role="status" aria-live="polite" hidden></div>
+
+  <script src="/static/i18n.js"></script>
+  <script>
+    const uploadForm = document.querySelector('#uploadForm');
+    const uploadStatus = document.querySelector('#uploadStatus');
+    const confirmStatus = document.querySelector('#confirmStatus');
+    const confirmBox = document.querySelector('#confirmBox');
+    const records = document.querySelector('#records');
+    const uploadBtn = document.querySelector('#uploadBtn');
+    const uploadAlert = document.querySelector('#uploadAlert');
+    const processingBox = document.querySelector('#processingBox');
+    const processingTitle = document.querySelector('#processingTitle');
+    const processingElapsed = document.querySelector('#processingElapsed');
+    const reviewAlert = document.querySelector('#reviewAlert');
+    const duplicateNotice = document.querySelector('#duplicateNotice');
+    const fileInput = document.querySelector('#file');
+    const singleTab = document.querySelector('#singleTab');
+    const batchTab = document.querySelector('#batchTab');
+    const singlePanel = document.querySelector('#singlePanel');
+    const batchPanel = document.querySelector('#batchPanel');
+    const batchForm = document.querySelector('#batchForm');
+    const batchFiles = document.querySelector('#batchFiles');
+    const batchUploadBtn = document.querySelector('#batchUploadBtn');
+    const batchStatus = document.querySelector('#batchStatus');
+    const batchAlert = document.querySelector('#batchAlert');
+    const batchFileList = document.querySelector('#batchFileList');
+    const batchProgressBar = document.querySelector('#batchProgressBar');
+    const batchConfirmBox = document.querySelector('#batchConfirmBox');
+    const batchConfirmList = document.querySelector('#batchConfirmList');
+    const batchConfirmStatus = document.querySelector('#batchConfirmStatus');
+    const toast = document.querySelector('#toast');
+    let toastTimer = null;
+    let batchItems = [];
+    let batchItemId = 0;
+    let pollTimer = null;
+    let activePollJobId = null;
+    let currentBoardStatus = 'ocr_done';
+
+    const tr = (key, vars) => window.I18n.t(key, vars);
+    const statusKeyMap = {
+      uploaded: 'status.uploaded',
+      ocr_done: 'status.ocrDone',
+      confirmed: 'status.confirmed',
+      submitted: 'status.submitted',
+      submission_failed: 'status.submissionFailed',
+      duplicate: 'status.duplicate',
+      needs_review: 'status.needsReview',
+    };
+
+    function statusLabel(status) {
+      return tr(statusKeyMap[status] || 'status.unknown');
+    }
+
+    function statusPill(status) {
+      return `<span class="pill status-pill status-${escapeHtml(String(status).replace(/[^a-z_]/g, ''))}">${escapeHtml(statusLabel(status))}</span>`;
+    }
+
+    function setStatus(node, message) {
+      node.textContent = message || '';
+    }
+
+    function showToast(message, type = 'info') {
+      if (!message) return;
+      if (toastTimer) window.clearTimeout(toastTimer);
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      toast.hidden = false;
+      toastTimer = window.setTimeout(() => {
+        toast.hidden = true;
+      }, 4000);
+    }
+
+    function setAlert(node, type, html) {
+      const message = typeof html === 'string' ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      node.className = `alert alert-${type}`;
+      const toastOnly = type === 'red' && (node === uploadAlert || node === batchAlert);
+      node.innerHTML = toastOnly ? '' : (html || '');
+      node.hidden = !html || toastOnly;
+      if (html) showToast(message, type === 'red' ? 'error' : (type === 'yellow' ? 'warning' : 'info'));
+    }
+
+    function clearResultAlerts() {
+      reviewAlert.hidden = true;
+      duplicateNotice.hidden = true;
+      duplicateNotice.innerHTML = '';
+      renderMaterialMatches([]);
+    }
+
+    function resetUploadButton() {
+      uploadBtn.disabled = false;
+      uploadBtn.removeAttribute('aria-busy');
+      uploadBtn.textContent = tr('upload.button.choose');
+    }
+
+    function resetBatchButton() {
+      batchUploadBtn.disabled = false;
+      batchUploadBtn.removeAttribute('aria-busy');
+      batchUploadBtn.textContent = tr('upload.button.batch');
+    }
+
+    function showProcessing(elapsedSeconds = 0) {
+      processingBox.hidden = false;
+      processingTitle.textContent = tr('ocr.processing');
+      processingElapsed.textContent = tr('ocr.elapsed', { seconds: elapsedSeconds });
+    }
+
+    function hideProcessing() {
+      processingBox.hidden = true;
+    }
+
+    function stopPolling() {
+      if (pollTimer) window.clearTimeout(pollTimer);
+      pollTimer = null;
+      activePollJobId = null;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[char]));
+    }
+
+    function renderBarcodes(barcodes = []) {
+      const container = document.querySelector('#barcodeResults');
+      container.innerHTML = '';
+      if (!barcodes.length) {
+        container.textContent = tr('barcode.none');
+        container.className = 'muted';
+        return;
+      }
+      container.className = '';
+      for (const barcode of barcodes) {
+        const row = document.createElement('div');
+        row.className = 'barcode-row';
+        row.innerHTML = `
+          <strong>${escapeHtml(barcode.type || 'BARCODE')}</strong>
+          <span class="barcode-data">${escapeHtml(barcode.data)}</span>
+          <button class="mini-button" type="button" data-target="vin">${escapeHtml(tr('barcode.fillSku'))}</button>
+          <button class="mini-button" type="button" data-target="sn">${escapeHtml(tr('barcode.fillSn'))}</button>
+        `;
+        row.querySelectorAll('button').forEach((button) => {
+          button.addEventListener('click', () => {
+            const type = String(barcode.type || '').toUpperCase();
+            if (type === 'EAN13' || type === 'EAN-13') {
+              document.querySelector('#packageCode').value = barcode.data || '';
+              return;
+            }
+            document.querySelector(button.dataset.target === 'sn' ? '#sn' : '#vin').value = barcode.data || '';
+          });
+        });
+        container.appendChild(row);
+      }
+    }
+
+    function renderMaterialMatches(matches = []) {
+      const container = document.querySelector('#materialResults');
+      container.innerHTML = '';
+      if (!matches.length) {
+        container.textContent = tr('material.none');
+        container.className = 'material-match-list muted';
+        return;
+      }
+      container.className = 'material-match-list';
+      for (const match of matches) {
+        const row = document.createElement('div');
+        row.className = 'material-match-row';
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(tr('material.ruiyun'))}: ${escapeHtml(match.ruiyun_part_number || '-')}</strong>
+            <strong>${escapeHtml(tr('material.sku'))}: ${escapeHtml(match.sku || '-')}</strong>
+            <span>${escapeHtml(tr('material.matchedInput'))}: ${escapeHtml(match.matched_input || '-')}</span>
+          </div>
+          <button class="mini-button" type="button" data-fill="ruiyun">${escapeHtml(tr('material.fillRuiyun'))}</button>
+          <button class="mini-button" type="button" data-fill="sku">${escapeHtml(tr('material.fillSku'))}</button>
+        `;
+        row.querySelector('[data-fill="ruiyun"]').addEventListener('click', () => {
+          document.querySelector('#vin').value = match.ruiyun_part_number || '';
+        });
+        row.querySelector('[data-fill="sku"]').addEventListener('click', () => {
+          document.querySelector('#sn').value = match.sku || '';
+        });
+        container.appendChild(row);
+      }
+    }
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }
+      if (!response.ok) {
+        const error = new Error(data?.detail || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    }
+
+    function uploadWithProgress(formData) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload');
+        xhr.upload.addEventListener('progress', (event) => {
+          if (!event.lengthComputable) {
+            uploadBtn.textContent = tr('upload.progress.uploading');
+            setStatus(uploadStatus, tr('upload.progress.uploading'));
+            return;
+          }
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          uploadBtn.textContent = tr('upload.progress.uploadingPercent', { percent });
+          setStatus(uploadStatus, tr('upload.progress.uploadingPercent', { percent }));
+        });
+        xhr.addEventListener('load', () => {
+          let data = null;
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch { data = { detail: xhr.responseText || `HTTP ${xhr.status}` }; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else {
+            const error = new Error(data?.detail || `HTTP ${xhr.status}`);
+            error.status = xhr.status;
+            reject(error);
+          }
+        });
+        xhr.addEventListener('error', () => {
+          const error = new Error(tr('error.networkError'));
+          error.status = 0;
+          reject(error);
+        });
+        xhr.addEventListener('timeout', () => {
+          const error = new Error('timeout');
+          error.status = 0;
+          reject(error);
+        });
+        xhr.timeout = 30000;
+        xhr.send(formData);
+      });
+    }
+
+    function uploadBatchJobWithProgress(item, onProgress) {
+      return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('category', document.querySelector('#batchCategory').value);
+        formData.append('files', item.file, item.file.name);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload/batch');
+        xhr.upload.addEventListener('progress', (event) => onProgress(event.lengthComputable ? Math.min(100, Math.round((event.loaded / event.total) * 100)) : null));
+        xhr.addEventListener('load', () => {
+          let data = null;
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch { data = { detail: xhr.responseText || `HTTP ${xhr.status}` }; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else {
+            const error = new Error(data?.detail || `HTTP ${xhr.status}`);
+            error.status = xhr.status;
+            reject(error);
+          }
+        });
+        xhr.addEventListener('error', () => reject(new Error(tr('error.networkError'))));
+        xhr.addEventListener('timeout', () => reject(new Error('timeout')));
+        xhr.timeout = 30000;
+        xhr.send(formData);
+      });
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => { pollTimer = window.setTimeout(resolve, ms); });
+    }
+
+    async function pollJobUntilReady(id) {
+      const startedAt = Date.now();
+      activePollJobId = id;
+      showProcessing(0);
+      while (Date.now() - startedAt < 30000) {
+        const record = await requestJson(`/jobs/${id}`);
+        showProcessing(Math.floor((Date.now() - startedAt) / 1000));
+        if (record.status !== 'uploaded') {
+          stopPolling();
+          return record;
+        }
+        await sleep(800);
+        if (activePollJobId !== id) throw new Error('polling cancelled');
+      }
+      stopPolling();
+      throw new Error('ocr-timeout');
+    }
+
+    function isEmptyOcrResult(record) {
+      return !record.model && !record.vin_or_bin && !record.serial_number;
+    }
+
+    function renderDuplicateNotice(record, fallbackDuplicates = []) {
+      const duplicates = (record.duplicates && record.duplicates.length) ? record.duplicates : fallbackDuplicates;
+      const summary = duplicates.length
+        ? `<div class="duplicate-list">${duplicates.map((item) => `
+            <div class="duplicate-item">
+              <strong>${escapeHtml(tr('duplicate.existing', { id: item.id, status: statusLabel(item.status) }))}</strong>
+              <span>Model: ${escapeHtml(item.model || '-')}</span>
+              <span>VIN/BIN: ${escapeHtml(item.vin_or_bin || '-')}</span>
+              <span>SN: ${escapeHtml(item.serial_number || '-')}</span>
+            </div>
+          `).join('')}</div>`
+        : `<div class="muted">${escapeHtml(tr('duplicate.noDetails'))}</div>`;
+      setAlert(duplicateNotice, 'blue', `
+        <span class="alert-title">${escapeHtml(tr('duplicate.title'))}</span>
+        ${summary}
+        <div class="actions">
+          <button type="button" id="overwriteDuplicateBtn">${escapeHtml(tr('duplicate.action.overwrite'))}</button>
+          <button class="secondary" type="button" id="dropDuplicateBtn">${escapeHtml(tr('duplicate.action.discardNew'))}</button>
+        </div>
+      `);
+      duplicateNotice.querySelector('#overwriteDuplicateBtn').addEventListener('click', () => {
+        document.querySelector('#duplicateAction').value = 'overwrite';
+        document.querySelector('#confirmBtn').click();
+      });
+      duplicateNotice.querySelector('#dropDuplicateBtn').addEventListener('click', () => {
+        document.querySelector('#duplicateAction').value = 'abandon';
+        document.querySelector('#confirmBtn').click();
+      });
+    }
+
+    function fillConfirm(record, fallbackDuplicates = []) {
+      document.querySelector('#recordId').value = record.id;
+      document.querySelector('#model').value = record.model || '';
+      document.querySelector('#vin').value = record.vin_or_bin || '';
+      document.querySelector('#sn').value = record.serial_number || '';
+      document.querySelector('#packageCode').value = '';
+      document.querySelector('#confirmCategory').value = record.category;
+      renderBarcodes(record.barcodes || []);
+      clearResultAlerts();
+      renderMaterialMatches(record.material_matches || []);
+      if (record.status === 'needs_review' && isEmptyOcrResult(record)) setAlert(reviewAlert, 'yellow', tr('ocr.reviewNeeded'));
+      if (record.status === 'duplicate') renderDuplicateNotice(record, fallbackDuplicates);
+      confirmBox.hidden = false;
+      hideProcessing();
+      setStatus(confirmStatus, tr('form.status.loaded', { id: record.id, status: statusLabel(record.status) }));
+    }
+
+    function setMode(mode) {
+      const batch = mode === 'batch';
+      singlePanel.hidden = batch;
+      batchPanel.hidden = !batch;
+      singleTab.classList.toggle('active', !batch);
+      batchTab.classList.toggle('active', batch);
+      singleTab.setAttribute('aria-selected', String(!batch));
+      batchTab.setAttribute('aria-selected', String(batch));
+    }
+
+    function updateBatchProgress() {
+      const total = batchItems.length || 1;
+      const finished = batchItems.filter((item) => ['OK', tr('common.error')].includes(item.status)).length;
+      const percent = Math.round((finished / total) * 100);
+      batchProgressBar.style.width = `${percent}%`;
+      setStatus(batchStatus, batchItems.length ? tr('upload.progress.done', { done: finished, total: batchItems.length }) : '');
+    }
+
+    function renderBatchFiles() {
+      batchFileList.innerHTML = '';
+      if (!batchItems.length) {
+        batchFileList.innerHTML = `<div class="batch-empty">${escapeHtml(tr('upload.batch.empty'))}</div>`;
+        updateBatchProgress();
+        return;
+      }
+      for (const item of batchItems) {
+        const row = document.createElement('div');
+        row.className = 'batch-file';
+        row.innerHTML = `
+          <img class="thumb" src="${item.previewUrl}" alt="">
+          <div class="batch-meta">
+            <strong>${escapeHtml(item.file.name)}</strong>
+            <span>${Math.round(item.file.size / 1024)} ${escapeHtml(tr('common.kb'))}</span>
+          </div>
+          <div class="batch-status">${escapeHtml(item.progressLabel || item.status)}</div>
+        `;
+        batchFileList.appendChild(row);
+      }
+      updateBatchProgress();
+    }
+
+    function createBatchItems(files) {
+      for (const item of batchItems) URL.revokeObjectURL(item.previewUrl);
+      batchItems = Array.from(files).map((file) => ({
+        id: ++batchItemId,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: tr('common.waiting'),
+        progressLabel: tr('common.waiting'),
+        jobId: null,
+        record: null,
+        error: '',
+        skipped: false,
+      }));
+      batchConfirmBox.hidden = true;
+      setAlert(batchAlert, 'red', '');
+      renderBatchFiles();
+    }
+
+    function isRecognized(record) {
+      return Boolean(record && (record.model || record.vin_or_bin || record.serial_number));
+    }
+
+    function renderBatchConfirm() {
+      batchConfirmList.innerHTML = '';
+      const readyItems = batchItems.filter((item) => item.record || item.error);
+      if (!readyItems.length) {
+        batchConfirmList.innerHTML = `<div class="batch-empty">${escapeHtml(tr('upload.batch.noConfirm'))}</div>`;
+        return;
+      }
+      for (const item of readyItems) {
+        const record = item.record;
+        const card = document.createElement('div');
+        card.className = 'batch-card';
+        card.dataset.itemId = item.id;
+        if (!record) {
+          card.innerHTML = `
+            <img class="thumb" src="${item.previewUrl}" alt="">
+            <div>
+              <div class="batch-meta">
+                <strong>${escapeHtml(item.file.name)}</strong>
+                <span>${escapeHtml(tr('common.error'))}: ${escapeHtml(item.error || tr('error.uploadGeneric'))}</span>
+              </div>
+              <div class="top-actions"><button class="secondary mini-button" type="button" data-action="retry">${escapeHtml(tr('form.action.retryUpload'))}</button></div>
+            </div>
+          `;
+          card.querySelector('[data-action="retry"]').addEventListener('click', () => retryBatchItem(item.id));
+          batchConfirmList.appendChild(card);
+          continue;
+        }
+        card.innerHTML = `
+          <img class="thumb" src="${item.previewUrl}" alt="">
+          <div>
+            <div class="batch-meta">
+              <strong>#${record.id} ${escapeHtml(item.file.name)}</strong>
+              <span>${escapeHtml(statusLabel(record.status))}${isRecognized(record) ? '' : ` · ${escapeHtml(tr('ocr.unrecognized'))}`}</span>
+              ${(record.material_matches || []).map((match) => `<span>${escapeHtml(tr('material.ruiyun'))}: ${escapeHtml(match.ruiyun_part_number || '-')} / ${escapeHtml(tr('material.sku'))}: ${escapeHtml(match.sku || '-')}</span>`).join('')}
+            </div>
+            <div class="batch-confirm">
+              <div><label>${escapeHtml(tr('form.field.model'))}</label><input data-field="model" value="${escapeHtml(record.model || '')}" autocomplete="off"></div>
+              <div><label>${escapeHtml(tr('form.field.vinOrBin'))}</label><input data-field="vin_or_bin" value="${escapeHtml(record.vin_or_bin || '')}" autocomplete="off"></div>
+              <div><label>${escapeHtml(tr('form.field.serialNumber'))}</label><input data-field="serial_number" value="${escapeHtml(record.serial_number || '')}" autocomplete="off"></div>
+              <div><label>${escapeHtml(tr('form.field.category'))}</label><select data-field="category"><option value="A"${record.category === 'A' ? ' selected' : ''}>A</option><option value="B"${record.category === 'B' ? ' selected' : ''}>B</option><option value="C"${record.category === 'C' ? ' selected' : ''}>C</option></select></div>
+              <button type="button" data-action="confirm"${item.confirmed || item.skipped ? ' disabled' : ''}>${escapeHtml(item.skipped ? tr('common.skip') : (item.confirmed ? tr('status.confirmed') : tr('common.confirm')))}</button>
+            </div>
+            <div class="top-actions"><button class="secondary mini-button" type="button" data-action="retry">${escapeHtml(tr('form.action.retryUpload'))}</button></div>
+          </div>
+        `;
+        card.querySelector('[data-action="confirm"]').addEventListener('click', () => confirmBatchItem(item.id));
+        card.querySelector('[data-action="retry"]').addEventListener('click', () => retryBatchItem(item.id));
+        batchConfirmList.appendChild(card);
+      }
+    }
+
+    async function loadJob(id) {
+      const record = await requestJson(`/jobs/${id}`);
+      fillConfirm(record);
+      await loadRecords(currentBoardStatus);
+    }
+
+    async function loadRecords(status = 'ocr_done') {
+      currentBoardStatus = status;
+      const rows = await requestJson(`/jobs?status=${encodeURIComponent(status)}&limit=30&offset=0`);
+      records.innerHTML = '';
+      if (!rows.length) {
+        records.innerHTML = `<p class="muted">${escapeHtml(tr('history.empty'))}</p>`;
+        return;
+      }
+      for (const row of rows) {
+        const div = document.createElement('button');
+        div.type = 'button';
+        div.className = 'record';
+        div.innerHTML = `${statusPill(row.status)}<strong>#${row.id} ${escapeHtml(row.model || tr('ocr.unrecognized'))}</strong><span>VIN/BIN: ${escapeHtml(row.vin_or_bin || '-')}</span><span>SN: ${escapeHtml(row.serial_number || '-')}</span><span>${escapeHtml(tr('form.field.category'))}: ${escapeHtml(row.category)}</span>`;
+        div.addEventListener('click', () => loadJob(row.id));
+        records.appendChild(div);
+      }
+    }
+
+    async function processBatchItem(item) {
+      item.status = tr('common.uploading');
+      item.progressLabel = tr('upload.progress.uploadingPercent', { percent: 0 });
+      renderBatchFiles();
+      const result = await uploadBatchJobWithProgress(item, (percent) => {
+        item.progressLabel = percent === null ? tr('upload.progress.uploading') : tr('upload.progress.uploadingPercent', { percent });
+        renderBatchFiles();
+      });
+      const job = result.jobs[0];
+      item.jobId = job.job_id;
+      item.status = tr('common.scanning');
+      item.progressLabel = tr('common.scanning');
+      renderBatchFiles();
+      item.record = job.status === 'uploaded' ? await pollJobUntilReady(job.job_id) : await requestJson(`/jobs/${job.job_id}`);
+      item.status = tr('common.ok');
+      item.progressLabel = tr('common.ok');
+      item.error = '';
+      renderBatchFiles();
+    }
+
+    async function runBatchUpload() {
+      if (!batchItems.length) {
+        setAlert(batchAlert, 'red', tr('upload.batch.noItems'));
+        return;
+      }
+      stopPolling();
+      batchUploadBtn.disabled = true;
+      batchUploadBtn.setAttribute('aria-busy', 'true');
+      batchUploadBtn.textContent = tr('upload.batch.processing');
+      batchConfirmBox.hidden = true;
+      setAlert(batchAlert, 'red', '');
+      setStatus(batchConfirmStatus, '');
+      try {
+        for (const item of batchItems) {
+          if (item.record) continue;
+          try {
+            await processBatchItem(item);
+          } catch (error) {
+            item.status = tr('common.error');
+            item.progressLabel = tr('common.error');
+            item.error = error.status === 415 ? tr('error.upload415') : (error.message === 'ocr-timeout' ? tr('error.ocrTimeout') : error.message);
+            renderBatchFiles();
+          }
+        }
+        hideProcessing();
+        batchConfirmBox.hidden = false;
+        renderBatchConfirm();
+        setStatus(batchConfirmStatus, tr('upload.batch.done'));
+        await loadRecords('ocr_done');
+      } finally {
+        stopPolling();
+        hideProcessing();
+        resetBatchButton();
+      }
+    }
+
+    function findBatchCard(itemId) {
+      return batchConfirmList.querySelector(`[data-item-id="${itemId}"]`);
+    }
+
+    async function confirmBatchItem(itemId) {
+      const item = batchItems.find((candidate) => candidate.id === itemId);
+      if (!item || !item.record || item.confirmed || item.skipped) return;
+      const card = findBatchCard(itemId);
+      const payload = {
+        category: card.querySelector('[data-field="category"]').value,
+        model: card.querySelector('[data-field="model"]').value,
+        vin_or_bin: card.querySelector('[data-field="vin_or_bin"]').value,
+        serial_number: card.querySelector('[data-field="serial_number"]').value,
+        duplicate_action: 'overwrite',
+      };
+      setStatus(batchConfirmStatus, tr('upload.progress.confirmOne', { id: item.record.id }));
+      const result = await requestJson(`/confirm/${item.record.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      item.confirmed = true;
+      item.record.status = result.status;
+      renderBatchConfirm();
+      setStatus(batchConfirmStatus, tr('upload.progress.confirmedOne', { id: item.record.id }));
+      await loadRecords('confirmed');
+    }
+
+    async function retryBatchItem(itemId) {
+      const item = batchItems.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+      Object.assign(item, { status: tr('common.waiting'), progressLabel: tr('common.waiting'), jobId: null, record: null, error: '', confirmed: false });
+      renderBatchFiles();
+      try {
+        await processBatchItem(item);
+        batchConfirmBox.hidden = false;
+        renderBatchConfirm();
+        setStatus(batchConfirmStatus, tr('upload.progress.retryDone', { name: item.file.name }));
+      } catch (error) {
+        item.status = tr('common.error');
+        item.progressLabel = tr('common.error');
+        item.error = error.status === 415 ? tr('error.upload415') : error.message;
+        renderBatchFiles();
+        renderBatchConfirm();
+      } finally {
+        stopPolling();
+        hideProcessing();
+      }
+    }
+
+    uploadForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      stopPolling();
+      uploadBtn.disabled = true;
+      uploadBtn.setAttribute('aria-busy', 'true');
+      uploadBtn.textContent = tr('upload.progress.uploadingPercent', { percent: 0 });
+      setStatus(uploadStatus, tr('upload.progress.uploadingPercent', { percent: 0 }));
+      setAlert(uploadAlert, 'red', '');
+      clearResultAlerts();
+      confirmBox.hidden = true;
+      hideProcessing();
+      try {
+        const formData = new FormData(uploadForm);
+        const result = await uploadWithProgress(formData);
+        uploadBtn.textContent = tr('ocr.processing');
+        setStatus(uploadStatus, tr('upload.progress.uploadedJob', { id: result.job_id }));
+        showProcessing(0);
+        processingBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const record = result.status === 'uploaded' ? await pollJobUntilReady(result.job_id) : await requestJson(`/jobs/${result.job_id}`);
+        fillConfirm(record, result.duplicates || []);
+        await loadRecords(record.status);
+      } catch (error) {
+        stopPolling();
+        hideProcessing();
+        if (error.message === 'polling cancelled') return;
+        if (error.status === 415) {
+          setAlert(uploadAlert, 'red', tr('error.upload415'));
+        } else if (error.message === 'ocr-timeout') {
+          setAlert(uploadAlert, 'red', tr('error.ocrTimeout'));
+        } else {
+          setAlert(uploadAlert, 'red', tr('error.uploadGeneric'));
+        }
+        setStatus(uploadStatus, '');
+      } finally {
+        resetUploadButton();
+      }
+    });
+
+    batchForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await runBatchUpload();
+    });
+
+    batchFiles.addEventListener('change', () => createBatchItems(batchFiles.files));
+    document.querySelector('#batchClearBtn').addEventListener('click', () => {
+      createBatchItems([]);
+      batchFiles.value = '';
+      batchConfirmBox.hidden = true;
+      setAlert(batchAlert, 'red', '');
+      setStatus(batchStatus, '');
+      setStatus(batchConfirmStatus, '');
+    });
+    singleTab.addEventListener('click', () => setMode('single'));
+    batchTab.addEventListener('click', () => setMode('batch'));
+
+    document.querySelector('#confirmBtn').addEventListener('click', async () => {
+      const id = document.querySelector('#recordId').value;
+      if (!id) return;
+      setStatus(confirmStatus, tr('form.status.confirming'));
+      try {
+        const payload = {
+          category: document.querySelector('#confirmCategory').value,
+          model: document.querySelector('#model').value,
+          vin_or_bin: document.querySelector('#vin').value,
+          serial_number: document.querySelector('#sn').value,
+          duplicate_action: document.querySelector('#duplicateAction').value,
+        };
+        const result = await requestJson(`/confirm/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setStatus(confirmStatus, tr('form.status.confirmed', { status: statusLabel(result.status) }));
+        await loadRecords('confirmed');
+      } catch (error) {
+        setStatus(confirmStatus, tr('form.status.confirmFailed', { message: error.message }));
+      }
+    });
+
+    document.querySelector('#abandonBtn').addEventListener('click', () => {
+      document.querySelector('#duplicateAction').value = 'abandon';
+      document.querySelector('#confirmBtn').click();
+    });
+
+    function retake() {
+      stopPolling();
+      confirmBox.hidden = true;
+      hideProcessing();
+      clearResultAlerts();
+      setAlert(uploadAlert, 'red', '');
+      setStatus(uploadStatus, '');
+      setStatus(confirmStatus, '');
+      document.querySelector('#recordId').value = '';
+      fileInput.value = '';
+      resetUploadButton();
+      fileInput.focus();
+    }
+
+    document.querySelector('#retakeBtn').addEventListener('click', retake);
+    document.querySelector('#retakeTopBtn').addEventListener('click', retake);
+    document.querySelector('#confirmAllBatchBtn').addEventListener('click', async () => {
+      for (const item of batchItems) {
+        if (!item.record || item.confirmed || item.skipped) continue;
+        await confirmBatchItem(item.id);
+      }
+      setStatus(batchConfirmStatus, tr('upload.progress.allDone'));
+    });
+    document.querySelector('#skipUnrecognizedBtn').addEventListener('click', () => {
+      for (const item of batchItems) {
+        if (item.record && !isRecognized(item.record) && !item.confirmed) item.skipped = true;
+      }
+      renderBatchConfirm();
+      setStatus(batchConfirmStatus, tr('upload.progress.skipped'));
+    });
+
+    document.querySelector('#refreshBtn').addEventListener('click', () => loadRecords('ocr_done'));
+    document.querySelector('#batchRefreshBtn').addEventListener('click', () => loadRecords('ocr_done'));
+    document.querySelector('#exportBtn').addEventListener('click', () => { window.location.href = '/export.csv?status=confirmed'; });
+    document.querySelectorAll('[data-status]').forEach((button) => button.addEventListener('click', () => loadRecords(button.dataset.status)));
+    window.addEventListener('i18n:change', () => {
+      resetUploadButton();
+      resetBatchButton();
+      renderBatchFiles();
+      renderBatchConfirm();
+      loadRecords(currentBoardStatus).catch(() => {});
+    });
+
+    I18n.init().then(() => loadRecords('ocr_done').catch((error) => setStatus(uploadStatus, error.message)));
+  </script>
+</body>
+</html>

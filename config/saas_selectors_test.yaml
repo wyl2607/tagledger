@@ -1,0 +1,19 @@
+# 测试用 — 指向本地 fake SaaS fixture
+saas:
+  login_url: "file:///absolute/path/to/tagledger/backend/tests/fixtures/fake_saas.html"
+  form_url: "file:///absolute/path/to/tagledger/backend/tests/fixtures/fake_saas.html"
+  selectors:
+    login:
+      username: "#username"
+      password: "#password"
+      submit: "button[type=submit]"
+    form:
+      model: "#model"
+      vin_or_bin: "#vin"
+      serial_number: "#sn"
+      category_a: "input[value=A]"
+      category_b: "input[value=B]"
+      category_c: "input[value=C]"
+      image_upload: "input[type=file][name=label]"
+      submit: "button.submit-record"
+    success_indicator: ".alert-success"

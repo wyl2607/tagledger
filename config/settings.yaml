@@ -1,0 +1,16 @@
+app:
+  database_url: sqlite:///data/app.db
+  upload_dir: data/uploads
+  screenshot_dir: data/screenshots
+  # OCR provider: mock or tesseract. Keep mock for dependency-free demos.
+  ocr_provider: tesseract
+  # Barcode detection uses optional pyzbar/zbar; if unavailable it is skipped.
+  enable_barcode: true
+  # Keep local/mobile tests focused on OCR + local intake. Turn on only after SaaS selectors are verified.
+  enable_saas_submit: false
+  dry_run: true
+  submission_retries: 3
+
+metrics:
+  # Estimated manual entry baseline for contribution reporting.
+  manual_seconds: 90
