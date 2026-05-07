@@ -7,7 +7,15 @@ from statistics import mean
 from sqlmodel import Session, select
 
 from backend.app.config import get_settings
-from backend.app.models import Category, Record, RecordStatus, utc_now
+from backend.app.models import (
+    Category,
+    InventoryLocation,
+    InventoryMovement,
+    OutboundScan,
+    Record,
+    RecordStatus,
+    utc_now,
+)
 
 
 def _all_records(session: Session) -> list[Record]:
@@ -135,6 +143,63 @@ def estimated_savings(session: Session) -> dict:
     }
 
 
+def logistics_metrics(session: Session, days: int = 7) -> dict:
+    bounded_days = max(1, min(days, 365))
+    since = utc_now() - timedelta(days=bounded_days)
+    locations = list(session.exec(select(InventoryLocation)).all())
+    recent_movements = list(
+        session.exec(select(InventoryMovement).where(InventoryMovement.created_at >= since)).all()
+    )
+    active_scans = list(
+        session.exec(select(OutboundScan).where(OutboundScan.status == "active")).all()
+    )
+
+    active_locations = [row for row in locations if row.status == "active"]
+    zero_stock_locations = [
+        row for row in locations if bool(row.zero_stock) or int(row.quantity or 0) <= 0
+    ]
+    restock_locations = [
+        row for row in active_locations if bool(row.zero_stock) or int(row.quantity or 0) <= 0
+    ]
+
+    inbound_quantity = 0
+    outbound_quantity = 0
+    transfer_quantity = 0
+    for movement in recent_movements:
+        movement_type = movement.movement_type or ""
+        delta = int(movement.quantity_delta or 0)
+        if movement_type == "inbound":
+            inbound_quantity += max(delta, 0)
+        elif movement_type.startswith("transfer_"):
+            transfer_quantity += abs(delta)
+        elif movement_type.startswith("outbound"):
+            outbound_quantity += abs(delta)
+
+    return {
+        "inventory": {
+            "location_count": len(locations),
+            "active_location_count": len(active_locations),
+            "disabled_location_count": sum(1 for row in locations if row.status == "disabled"),
+            "zero_stock_location_count": len(zero_stock_locations),
+            "restock_needed_count": len(restock_locations),
+            "part_count": len({row.part_key for row in locations}),
+            "total_quantity": sum(int(row.quantity or 0) for row in locations),
+        },
+        "movements": {
+            "days": bounded_days,
+            "movement_count": len(recent_movements),
+            "inbound_quantity": inbound_quantity,
+            "outbound_quantity": outbound_quantity,
+            "transfer_quantity": transfer_quantity,
+        },
+        "outbound": {
+            "active_scan_count": len(active_scans),
+            "active_scan_quantity": sum(int(row.quantity or 0) for row in active_scans),
+            "active_order_count": len({row.order_no for row in active_scans}),
+        },
+    }
+
+
 def all_metrics(session: Session, days: int = 30) -> dict:
     return {
         "summary": summary(session),
@@ -142,6 +207,7 @@ def all_metrics(session: Session, days: int = 30) -> dict:
         "processing_time": avg_processing_time(session),
         "ocr_quality": ocr_quality(session),
         "error_prevention": error_prevention(session),
+        "logistics": logistics_metrics(session, days=days),
         "savings": estimated_savings(session),
         "generated_at": datetime.now(UTC).isoformat(),
     }

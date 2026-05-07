@@ -168,8 +168,13 @@ def test_dashboard_page_serves_html(authenticated_client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "Contribution Dashboard" in response.text
+    assert "TagLedger 统计面板" in response.text
     assert "/api/metrics/all" in response.text
+    assert 'data-i18n="dashboard.title"' in response.text
+    assert 'id="inventoryTotalQty"' in response.text
+    assert 'id="zeroStockLocations"' in response.text
+    assert 'id="recentInboundQty"' in response.text
+    assert 'id="activeOutboundQty"' in response.text
 
 
 def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:

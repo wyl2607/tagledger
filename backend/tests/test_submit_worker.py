@@ -1,12 +1,22 @@
 from pathlib import Path
 from uuid import uuid4
 
-from sqlmodel import Session
+from sqlmodel import Session, SQLModel, create_engine
 
 from backend.app.config import Settings
 from backend.app.models import Category, Record, RecordStatus
 from backend.app.saas.client import PlaywrightNotInstalledError
 from backend.app.workers import submit_worker
+
+
+def _use_temp_submit_engine(monkeypatch, tmp_path: Path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'submit-worker.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr(submit_worker, "engine", engine)
+    return engine
 
 
 def test_dry_run_skip_when_playwright_missing_keeps_record_confirmed(
@@ -26,7 +36,7 @@ def test_dry_run_skip_when_playwright_missing_keeps_record_confirmed(
         playwright_log=str(tmp_path / "playwright.log"),
         dry_run=True,
     )
-    engine = submit_worker.engine
+    engine = _use_temp_submit_engine(monkeypatch, tmp_path)
     record_id: int
     unique_vin = f"VIN-WORKER-{uuid4().hex[:8]}"
     with Session(engine) as session:
@@ -73,7 +83,7 @@ def test_dry_run_skip_when_playwright_browser_missing_keeps_record_confirmed(
         playwright_log=str(tmp_path / "playwright.log"),
         dry_run=True,
     )
-    engine = submit_worker.engine
+    engine = _use_temp_submit_engine(monkeypatch, tmp_path)
     record_id: int
     vin = f"VIN-BROWSER-{uuid4().hex}"
     with Session(engine) as session:

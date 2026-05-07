@@ -79,10 +79,11 @@ def client(session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_ocr_runner] = lambda: override_ocr_runner
     app.dependency_overrides[get_submit_runner] = lambda: lambda record_id: None
+    test_client = TestClient(app)
     try:
-        with TestClient(app) as test_client:
-            yield test_client
+        yield test_client
     finally:
+        test_client.close()
         app.dependency_overrides = previous_overrides
 
 
