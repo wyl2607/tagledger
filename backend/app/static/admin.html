@@ -71,7 +71,7 @@
           </div>
           <div>
             <label for="assignedOrder" data-i18n="admin.assignedOrder">分配发货单号</label>
-            <input id="assignedOrder" autocomplete="off" placeholder="SO202604210093">
+            <input id="assignedOrder" autocomplete="off" data-testid="assigned-order-input" placeholder="SO202604210093, SO202604210094">
           </div>
           <div>
             <label for="password" data-i18n="admin.password">初始密码</label>
@@ -120,6 +120,7 @@
   </main>
 
   <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
   <script>
     const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -128,17 +129,6 @@
     const createStatus = document.querySelector('#createStatus');
     const adminContent = document.querySelector('#adminContent');
     const accessDenied = document.querySelector('#accessDenied');
-
-    async function requestJson(url, options) {
-      const response = await fetch(url, options);
-      const data = await response.json().catch(() => ({}));
-      if (response.status === 401) {
-        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
-        throw new Error('login required');
-      }
-      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
-      return data;
-    }
 
     function showAccessDenied(message) {
       adminContent.hidden = true;
@@ -154,7 +144,7 @@
           <td>${esc(user.role)}</td>
           <td>
             <div class="mini-actions">
-              <input class="mini" data-assigned-order="${esc(user.id)}" value="${esc(user.outbound_last_order_no || '')}" placeholder="SO...">
+              <input class="mini" data-assigned-order="${esc(user.id)}" value="${esc(user.outbound_last_order_no || '')}" placeholder="SO..., SO...">
               <button type="button" class="secondary mini" data-save-order="${esc(user.id)}">${esc(tr('common.save'))}</button>
             </div>
           </td>
@@ -172,21 +162,21 @@
 
     async function loadAdmin() {
       try {
-        const me = await requestJson('/api/auth/me');
-        if (!me.user) {
-          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        const user = await AuthUI.currentUser();
+        if (!user) {
+          AuthUI.redirectToLogin();
           return;
         }
-        if (!me.user.capabilities?.can_manage_users) {
+        if (!AuthUI.hasCapability(user, 'can_manage_users')) {
           showAccessDenied(tr('admin.accessDenied'));
           return;
         }
-        const users = await requestJson('/api/admin/users');
-        const audit = await requestJson('/api/admin/audit-logs');
+        const users = await AuthUI.fetchJson('/api/admin/users');
+        const audit = await AuthUI.fetchJson('/api/admin/audit-logs');
         document.querySelector('#currentUser').textContent = tr('admin.currentUser', {
-          name: me.user.display_name,
-          username: me.user.username,
-          role: me.user.role,
+          name: user.display_name,
+          username: user.username,
+          role: user.role,
         });
         renderUsers(users.users || []);
         renderAudit(audit.logs || []);
@@ -202,7 +192,7 @@
       event.preventDefault();
       createStatus.textContent = tr('admin.status.creating');
       try {
-        await requestJson('/api/admin/users', {
+        await AuthUI.fetchJson('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -226,7 +216,7 @@
       if (saveOrderButton) {
         const input = document.querySelector(`[data-assigned-order="${saveOrderButton.dataset.saveOrder}"]`);
         try {
-          await requestJson(`/api/admin/users/${saveOrderButton.dataset.saveOrder}`, {
+          await AuthUI.fetchJson(`/api/admin/users/${saveOrderButton.dataset.saveOrder}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ outbound_last_order_no: input.value }),
@@ -243,7 +233,7 @@
       const password = window.prompt(tr('admin.prompt.newPassword'));
       if (!password) return;
       try {
-        await requestJson(`/api/admin/users/${button.dataset.resetPassword}/reset-password`, {
+        await AuthUI.fetchJson(`/api/admin/users/${button.dataset.resetPassword}/reset-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password }),
@@ -256,7 +246,7 @@
     });
 
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
-      await requestJson('/api/auth/logout', { method: 'POST' }).catch(() => {});
+      await AuthUI.logout();
       window.location.href = '/login';
     });
 

@@ -4,7 +4,13 @@ from openpyxl import Workbook
 from sqlmodel import select
 
 from backend.app.models import OutboundScan
-from backend.app.services.auth_service import create_session, create_user
+from backend.app.services.auth_service import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    create_session,
+    create_user,
+)
 from backend.app.services.outbound_reconciliation import (
     complete_outbound_order,
     rollback_outbound_order,
@@ -145,7 +151,10 @@ def test_rollback_api_rejects_non_supervisor(tmp_path, monkeypatch, client, sess
         role="operator",
     )
     token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
-    client.cookies.set("mlocr_session", token)
+    csrf_token = "pytest-csrf-token"
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, csrf_token)
+    client.headers.update({CSRF_HEADER: csrf_token})
 
     response = client.post(
         "/api/outbound/orders/SO202604210135/rollback",

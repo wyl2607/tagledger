@@ -406,6 +406,7 @@
   <div id="toast" class="toast toast-info" role="status" aria-live="polite" hidden></div>
 
   <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
   <script>
     const uploadForm = document.querySelector('#uploadForm');
     const cameraFile = document.querySelector('#cameraFile');
@@ -665,7 +666,7 @@
     }
 
     async function requestJson(url, options) {
-      const response = await fetch(url, options);
+      const response = await fetch(url, AuthUI.csrfHeaders(options));
       const text = await response.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }
@@ -1470,6 +1471,7 @@
       const storedOrder = rememberedOutboundOrder();
       if (orders.includes(initialOrder)) outboundOrderSelect.value = initialOrder;
       else if (orders.includes(storedOrder)) outboundOrderSelect.value = storedOrder;
+      else if (orders.length === 1) outboundOrderSelect.value = orders[0];
       else if (storedOrder) rememberOutboundOrder('');
       selectedOutboundOrder = outboundOrderSelect.value;
       selectedOutboundLocation = initialLocation;

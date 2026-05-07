@@ -217,6 +217,7 @@
   <div id="toast" class="toast toast-info" role="status" aria-live="polite" hidden></div>
 
   <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
   <script>
     const uploadForm = document.querySelector('#uploadForm');
     const uploadStatus = document.querySelector('#uploadStatus');
@@ -401,7 +402,7 @@
     }
 
     async function requestJson(url, options) {
-      const response = await fetch(url, options);
+      const response = await fetch(url, AuthUI.csrfHeaders(options));
       const text = await response.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }

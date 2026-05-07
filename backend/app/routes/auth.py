@@ -1,3 +1,4 @@
+import secrets
 from datetime import timedelta
 from typing import Annotated
 
@@ -6,15 +7,18 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, func, select
 
 from backend.app.auth import current_user_optional, require_manager
+from backend.app.config import get_settings
 from backend.app.database import get_session
 from backend.app.models import AuditLog, OutboundScan, Record, User, utc_now
 from backend.app.services.auth_service import (
+    CSRF_COOKIE,
     SESSION_COOKIE,
     SESSION_HOURS,
     authenticate_user,
     create_session,
     create_user,
     has_role,
+    normalize_assigned_order_numbers,
     revoke_session,
     update_user_account,
     users_exist,
@@ -79,13 +83,23 @@ def _user_payload(user: User) -> dict[str, object]:
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
+    settings = get_settings()
     response.set_cookie(
         SESSION_COOKIE,
         token,
         max_age=SESSION_HOURS * 60 * 60,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
+        path="/",
+    )
+    response.set_cookie(
+        CSRF_COOKIE,
+        secrets.token_urlsafe(32),
+        max_age=SESSION_HOURS * 60 * 60,
+        httponly=False,
+        samesite="strict",
+        secure=settings.cookie_secure,
         path="/",
     )
 
@@ -149,6 +163,7 @@ def logout(
 ) -> dict[str, bool]:
     revoke_session(session, mlocr_session)
     response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(CSRF_COOKIE, path="/")
     return {"ok": True}
 
 
@@ -170,10 +185,7 @@ def _fallback_order_no(order_numbers: list[str]) -> str | None:
 def _allowed_order_numbers(user: User) -> list[str] | None:
     if has_role(user, "supervisor"):
         return None
-    saved = normalize_order_no(user.outbound_last_order_no or "")
-    if saved:
-        return [saved]
-    return []
+    return normalize_assigned_order_numbers(user.outbound_last_order_no)
 
 
 def _module_payload(user: User) -> list[dict[str, object]]:

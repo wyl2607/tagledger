@@ -58,6 +58,7 @@
   </main>
 
   <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
   <script>
     const statusNode = document.querySelector('#status');
     const form = document.querySelector('#setupForm');
@@ -66,7 +67,7 @@
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
     async function requestJson(url, options) {
-      const response = await fetch(url, options);
+      const response = await fetch(url, AuthUI.csrfHeaders(options));
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || tr('auth.setup.failed', { status: response.status }));
       return data;

@@ -2,7 +2,13 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from backend.app.models import OutboundScan, User
-from backend.app.services.auth_service import create_session, create_user
+from backend.app.services.auth_service import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    create_session,
+    create_user,
+)
 from backend.app.services.outbound_reconciliation import OutboundItem
 
 
@@ -18,10 +24,66 @@ def test_auth_pages_are_served(client: TestClient) -> None:
         assert expected in response.text
 
 
+def test_root_routes_to_setup_login_or_workbench(
+    client: TestClient,
+    session: Session,
+) -> None:
+    first_visit = client.get("/", follow_redirects=False)
+    assert first_visit.status_code == 303
+    assert first_visit.headers["location"] == "/setup"
+
+    manager = create_user(
+        session,
+        username="entry-manager",
+        display_name="Entry Manager",
+        password="entry-manager-pass",
+        role="manager",
+    )
+
+    initialized_visit = client.get("/", follow_redirects=False)
+    assert initialized_visit.status_code == 303
+    assert initialized_visit.headers["location"] == "/login"
+
+    _login_as(client, session, manager)
+    authenticated_visit = client.get("/", follow_redirects=False)
+    assert authenticated_visit.status_code == 303
+    assert authenticated_visit.headers["location"] == "/workbench"
+
+
+def test_root_routes_invalid_session_cookie_to_login(
+    client: TestClient,
+    session: Session,
+) -> None:
+    create_user(
+        session,
+        username="entry-invalid-cookie",
+        display_name="Entry Invalid Cookie",
+        password="entry-invalid-cookie-pass",
+        role="manager",
+    )
+    client.cookies.set(SESSION_COOKIE, "stale-session-token")
+
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_capture_preserves_legacy_ocr_demo(client: TestClient) -> None:
+    response = client.get("/capture")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "demo.title" in response.text
+
+
 def test_setup_creates_first_manager_and_blocks_second(
     client: TestClient,
     session: Session,
 ) -> None:
+    setup_page = client.get("/setup")
+    assert setup_page.status_code == 200
+    assert "auth.setup.title" in setup_page.text
+
     status = client.get("/api/auth/setup-status")
     assert status.status_code == 200
     assert status.json() == {"initialized": False}
@@ -39,7 +101,8 @@ def test_setup_creates_first_manager_and_blocks_second(
     payload = response.json()
     assert payload["user"]["username"] == "boss"
     assert payload["user"]["role"] == "manager"
-    assert "mlocr_session" in response.cookies
+    assert SESSION_COOKIE in response.cookies
+    assert CSRF_COOKIE in response.cookies
     set_cookie = response.headers["set-cookie"]
     assert "HttpOnly" in set_cookie
     assert "SameSite=lax" in set_cookie
@@ -56,6 +119,10 @@ def test_setup_creates_first_manager_and_blocks_second(
         },
     )
     assert second.status_code == 409
+
+    blocked_setup_page = client.get("/setup", follow_redirects=False)
+    assert blocked_setup_page.status_code == 303
+    assert blocked_setup_page.headers["location"] == "/login"
 
 
 def test_login_me_logout_and_protected_transfers(
@@ -90,10 +157,40 @@ def test_login_me_logout_and_protected_transfers(
     assert transfers.status_code == 200
     assert transfers.json()["transfers"] == []
 
+    client.headers.update({CSRF_HEADER: client.cookies.get(CSRF_COOKIE)})
     logout = client.post("/api/auth/logout")
     assert logout.status_code == 200
     assert client.get("/api/auth/me").json()["user"] is None
     assert client.get("/api/transfers").status_code == 401
+
+
+def test_cookie_session_write_requests_require_csrf(
+    client: TestClient,
+    session: Session,
+) -> None:
+    manager = create_user(
+        session,
+        username="csrf-manager",
+        display_name="CSRF Manager",
+        password="csrf-manager-pass",
+        role="manager",
+    )
+    token, _ = create_session(session, manager, ip_address="testclient", user_agent="pytest")
+
+    client.cookies.set(SESSION_COOKIE, token)
+    missing = client.post("/api/auth/logout")
+    assert missing.status_code == 403
+    assert missing.json()["detail"] == "CSRF validation failed"
+
+    client.cookies.set(CSRF_COOKIE, "cookie-token")
+    client.headers.update({CSRF_HEADER: "wrong-token"})
+    mismatch = client.post("/api/auth/logout")
+    assert mismatch.status_code == 403
+    assert mismatch.json()["detail"] == "CSRF validation failed"
+
+    client.headers.update({CSRF_HEADER: "cookie-token"})
+    allowed = client.post("/api/auth/logout")
+    assert allowed.status_code == 200
 
 
 def test_admin_user_management_requires_manager(
@@ -108,7 +205,7 @@ def test_admin_user_management_requires_manager(
         role="operator",
     )
     token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
-    client.cookies.set("mlocr_session", token)
+    _set_auth_cookies(client, token)
 
     assert client.get("/api/admin/users").status_code == 403
 
@@ -121,7 +218,7 @@ def test_admin_user_management_requires_manager(
         role="manager",
     )
     token, _ = create_session(session, manager, ip_address="testclient", user_agent="pytest")
-    client.cookies.set("mlocr_session", token)
+    _set_auth_cookies(client, token)
 
     created = client.post(
         "/api/admin/users",
@@ -162,7 +259,7 @@ def test_protected_pages_preserve_next_redirects(client: TestClient) -> None:
 
     transfers = client.get("/transfers")
     assert transfers.status_code == 200
-    assert "login?next=" in transfers.text
+    assert "AuthUI.redirectToLogin" in transfers.text
     assert "window.location.pathname" in transfers.text
 
 
@@ -182,7 +279,15 @@ def _fake_outbound_items() -> tuple[list[OutboundItem], list[OutboundItem]]:
 def _login_as(client: TestClient, session: Session, user: User) -> None:
     token, _ = create_session(session, user, ip_address="testclient", user_agent="pytest")
     client.cookies.clear()
-    client.cookies.set("mlocr_session", token)
+    _set_auth_cookies(client, token)
+
+
+def _set_auth_cookies(
+    client: TestClient, token: str, csrf_token: str = "pytest-csrf-token"
+) -> None:
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, csrf_token)
+    client.headers.update({CSRF_HEADER: csrf_token})
 
 
 def test_operator_workbench_and_outbound_scope_are_order_limited(
@@ -256,6 +361,52 @@ def test_operator_workbench_and_outbound_scope_are_order_limited(
     assert forbidden_status.status_code == 403
     assert client.get("/api/transfers").status_code == 403
     assert client.get("/api/reports/factory-summary").status_code == 403
+
+
+def test_operator_scope_accepts_multiple_assigned_orders(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    from backend.app.services import outbound_reconciliation
+
+    cutting_items, shipping_items = _fake_outbound_items()
+    shipping_items.append(
+        OutboundItem("SO202605060003", "C.P.XS.000199999", 1, "shipping", "", "Other")
+    )
+    monkeypatch.setattr(
+        outbound_reconciliation,
+        "load_outbound_items",
+        lambda: (cutting_items, shipping_items),
+    )
+    operator = create_user(
+        session,
+        username="shipper-multi",
+        display_name="Shipper Multi",
+        password="shipper-multi-pass",
+        role="operator",
+        outbound_last_order_no="SO202605060001, SO202605060002",
+    )
+    _login_as(client, session, operator)
+
+    workbench = client.get("/api/workbench")
+    assert workbench.status_code == 200
+    assert workbench.json()["scope"]["allowed_order_numbers"] == [
+        "SO202605060001",
+        "SO202605060002",
+    ]
+
+    choices = client.get("/api/outbound/orders")
+    assert choices.status_code == 200
+    assert choices.json()["order_numbers"]["shipping"] == [
+        "SO202605060001",
+        "SO202605060002",
+    ]
+
+    allowed_status = client.get("/api/outbound/orders/SO202605060002/status")
+    assert allowed_status.status_code == 200
+    forbidden_status = client.get("/api/outbound/orders/SO202605060003/status")
+    assert forbidden_status.status_code == 403
 
 
 def test_unassigned_operator_workbench_has_empty_scope(

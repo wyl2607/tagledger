@@ -2,9 +2,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
+from backend.app.auth import require_login
 from backend.app.config import get_settings
 from backend.app.database import get_session
-from backend.app.models import Record, RecordStatus, utc_now
+from backend.app.models import Record, RecordStatus, User, utc_now
 from backend.app.schemas import ConfirmRequest, ConfirmResponse
 from backend.app.services.dedup import find_duplicates, serialize_duplicates
 from backend.app.workers.submit_worker import run as run_submit_worker
@@ -21,6 +22,7 @@ def confirm_record(
     record_id: int,
     payload: ConfirmRequest,
     background_tasks: BackgroundTasks,
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
     submit_runner=Depends(get_submit_runner),
 ) -> ConfirmResponse:

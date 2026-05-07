@@ -2,7 +2,13 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
-from backend.app.services.auth_service import create_session, create_user
+from backend.app.services.auth_service import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    create_session,
+    create_user,
+)
 
 
 def _seed_location(
@@ -47,7 +53,10 @@ def _switch_supervisor(client: TestClient, session: Session) -> None:
         ip_address="testclient",
         user_agent="pytest",
     )
-    client.cookies.set("mlocr_session", token)
+    csrf_token = "pytest-csrf-token"
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, csrf_token)
+    client.headers.update({CSRF_HEADER: csrf_token})
 
 
 def test_transfer_success_creates_linked_movements(client: TestClient, session: Session) -> None:
@@ -85,6 +94,52 @@ def test_transfer_success_creates_linked_movements(client: TestClient, session: 
         "transfer_in",
         "transfer_out",
     ]
+
+
+def test_transfer_idempotency_key_prevents_duplicate_stock_moves(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _switch_supervisor(client, session)
+    _seed_location(
+        session,
+        factory_id="factory_a",
+        part_key="CPXS000122099",
+        location_code="A-99",
+        quantity=10,
+    )
+    payload = {
+        "source_factory": "factory_a",
+        "target_factory": "factory_b",
+        "part_key": "CPXS000122099",
+        "quantity": 4,
+        "reason": "line_balance",
+        "idempotency_key": "transfer-click-001",
+    }
+
+    first = client.post("/api/transfers", json=payload)
+    second = client.post("/api/transfers", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["transfer_id"] == second.json()["transfer_id"]
+    assert first.json()["created"] is True
+    assert second.json()["created"] is False
+    source_after = session.exec(
+        select(InventoryLocation).where(
+            InventoryLocation.factory_id == "factory_a",
+            InventoryLocation.part_key == "CPXS000122099",
+            InventoryLocation.location_code == "A-99",
+        )
+    ).one()
+    assert int(source_after.quantity) == 6
+    movements = session.exec(
+        select(InventoryMovement).where(
+            InventoryMovement.part_key == "CPXS000122099",
+            InventoryMovement.transfer_id == first.json()["transfer_id"],
+        )
+    ).all()
+    assert len(movements) == 2
 
 
 def test_transfer_rejects_insufficient_inventory(client: TestClient, session: Session) -> None:

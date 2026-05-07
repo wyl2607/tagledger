@@ -17,6 +17,8 @@ ROLE_LEVELS = {
 }
 
 SESSION_COOKIE = "mlocr_session"
+CSRF_COOKIE = "tagledger_csrf"
+CSRF_HEADER = "x-csrf-token"
 SESSION_HOURS = 12
 
 
@@ -52,12 +54,25 @@ def users_exist(session: Session) -> bool:
 
 
 def normalize_assigned_order_no(value: str | None) -> str | None:
-    cleaned = "".join(ch for ch in (value or "").upper() if ch.isalnum())
-    if not cleaned:
+    orders = normalize_assigned_order_numbers(value)
+    if not orders:
         return None
-    if cleaned.startswith("5"):
-        cleaned = "S" + cleaned[1:]
-    return cleaned[:80]
+    return ",".join(orders)[:80]
+
+
+def normalize_assigned_order_numbers(value: str | None) -> list[str]:
+    cleaned_orders: list[str] = []
+    seen: set[str] = set()
+    for raw_order in (value or "").replace("，", ",").replace(";", ",").split(","):
+        cleaned = "".join(ch for ch in raw_order.upper() if ch.isalnum())
+        if not cleaned:
+            continue
+        if cleaned.startswith("5"):
+            cleaned = "S" + cleaned[1:]
+        if cleaned not in seen:
+            cleaned_orders.append(cleaned)
+            seen.add(cleaned)
+    return cleaned_orders
 
 
 def audit_event(

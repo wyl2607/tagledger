@@ -42,6 +42,92 @@ def _normalize_reason(value: str) -> str:
     return reason[:200]
 
 
+def _normalize_idempotency_key(value: str | None) -> str | None:
+    key = (value or "").strip()
+    return key[:120] if key else None
+
+
+def _find_existing_transfer_id(
+    session: Session,
+    *,
+    operator: User,
+    idempotency_key: str,
+) -> str | None:
+    rows = session.exec(
+        select(AuditLog)
+        .where(
+            AuditLog.action == "inventory.transfer",
+            AuditLog.actor_username == operator.username,
+            AuditLog.success == True,  # noqa: E712
+        )
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(200)
+    ).all()
+    for row in rows:
+        try:
+            detail = json.loads(row.detail_json or "{}")
+        except json.JSONDecodeError:
+            continue
+        if detail.get("idempotency_key") == idempotency_key:
+            transfer_id = str(detail.get("transfer_id") or row.target_id or "")
+            return transfer_id or None
+    return None
+
+
+def _transfer_payload_from_existing(
+    *,
+    session: Session,
+    transfer_id: str,
+) -> dict[str, object] | None:
+    movements = session.exec(
+        select(InventoryMovement)
+        .where(InventoryMovement.transfer_id == transfer_id)
+        .order_by(InventoryMovement.movement_type.desc(), InventoryMovement.id.asc())
+    ).all()
+    if len(movements) < 2:
+        return None
+    out_movement = next((row for row in movements if row.movement_type == "transfer_out"), None)
+    in_movement = next((row for row in movements if row.movement_type == "transfer_in"), None)
+    if out_movement is None or in_movement is None:
+        return None
+    return {
+        "created": False,
+        "transfer_id": transfer_id,
+        "source_factory": out_movement.factory_id,
+        "target_factory": in_movement.factory_id,
+        "part_key": out_movement.part_key,
+        "quantity": abs(int(out_movement.quantity_delta)),
+        "source_location": {
+            "factory_id": out_movement.factory_id,
+            "location_code": out_movement.location_code,
+            "quantity": int(out_movement.after_qty),
+            "status": None,
+        },
+        "target_location": {
+            "factory_id": in_movement.factory_id,
+            "location_code": in_movement.location_code,
+            "quantity": int(in_movement.after_qty),
+            "status": None,
+        },
+        "movements": [
+            {
+                "id": row.id,
+                "factory_id": row.factory_id,
+                "movement_type": row.movement_type,
+                "part_key": row.part_key,
+                "location_code": row.location_code,
+                "transfer_id": row.transfer_id,
+                "quantity_delta": row.quantity_delta,
+                "before_qty": row.before_qty,
+                "after_qty": row.after_qty,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in (out_movement, in_movement)
+        ],
+        "audit_log_id": None,
+    }
+
+
 def _pick_source_location(
     session: Session,
     *,
@@ -146,6 +232,7 @@ def create_transfer(
     part_key: str,
     quantity: int,
     reason: str,
+    idempotency_key: str | None = None,
     operator: User,
     session: Session,
 ) -> dict[str, object]:
@@ -158,6 +245,20 @@ def create_transfer(
     transfer_qty = int(quantity)
     if transfer_qty <= 0:
         raise RuntimeError("quantity must be > 0")
+    normalized_idempotency_key = _normalize_idempotency_key(idempotency_key)
+    if normalized_idempotency_key:
+        existing_transfer_id = _find_existing_transfer_id(
+            session,
+            operator=operator,
+            idempotency_key=normalized_idempotency_key,
+        )
+        if existing_transfer_id:
+            existing_payload = _transfer_payload_from_existing(
+                session=session,
+                transfer_id=existing_transfer_id,
+            )
+            if existing_payload is not None:
+                return existing_payload
 
     transfer_id = f"tf-{uuid.uuid4().hex[:12]}"
     now = datetime.now(UTC)
@@ -248,6 +349,7 @@ def create_transfer(
                     "quantity": transfer_qty,
                     "source_location_code": source_location.location_code,
                     "target_location_code": target_location.location_code,
+                    "idempotency_key": normalized_idempotency_key,
                 },
                 ensure_ascii=False,
             ),

@@ -4,7 +4,13 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from backend.app.models import InventoryMovement
-from backend.app.services.auth_service import create_session, create_user
+from backend.app.services.auth_service import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    create_session,
+    create_user,
+)
 
 
 def _switch_user(client: TestClient, session: Session) -> None:
@@ -21,7 +27,10 @@ def _switch_user(client: TestClient, session: Session) -> None:
         ip_address="testclient",
         user_agent="pytest",
     )
-    client.cookies.set("mlocr_session", token)
+    csrf_token = "pytest-csrf-token"
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, csrf_token)
+    client.headers.update({CSRF_HEADER: csrf_token})
 
 
 def _seed_movement(

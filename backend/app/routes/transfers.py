@@ -22,6 +22,7 @@ class TransferCreateRequest(BaseModel):
     part_key: str
     quantity: int = Field(gt=0)
     reason: str
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
 
 @router.post("/api/transfers")
@@ -37,6 +38,7 @@ def post_transfer(
             part_key=payload.part_key,
             quantity=payload.quantity,
             reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
             operator=user,
             session=session,
         )

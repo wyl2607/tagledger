@@ -11,7 +11,7 @@ from backend.app.schemas import (
     OutboundCurrentOrderPreferenceRead,
     OutboundCurrentOrderPreferenceWrite,
 )
-from backend.app.services.auth_service import has_role
+from backend.app.services.auth_service import has_role, normalize_assigned_order_numbers
 from backend.app.services.outbound_reconciliation import (
     OutboundVerificationRequiredError,
     complete_outbound_order,
@@ -112,10 +112,7 @@ def _fallback_order_no(orders: list[str]) -> str | None:
 def _allowed_outbound_orders(user: User) -> list[str] | None:
     if has_role(user, "supervisor"):
         return None
-    saved = normalize_order_no(user.outbound_last_order_no or "")
-    if saved:
-        return [saved]
-    return []
+    return normalize_assigned_order_numbers(user.outbound_last_order_no)
 
 
 def _require_order_access(user: User, order_no: str) -> None:
@@ -188,10 +185,11 @@ def post_outbound_current_order_preference(
     allowed = _allowed_outbound_orders(user)
     if allowed is not None and order_no not in allowed:
         raise HTTPException(status_code=403, detail="order is outside your assigned scope")
-    user.outbound_last_order_no = order_no
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+    if allowed is None:
+        user.outbound_last_order_no = order_no
+        session.add(user)
+        session.commit()
+        session.refresh(user)
     return OutboundCurrentOrderPreferenceRead(
         selected_order_no=order_no,
         saved_order_no=order_no,
@@ -209,7 +207,8 @@ def get_outbound_current_order_preference(
         normalize_order_no(v) for v in choices.get("order_numbers", {}).get("shipping", [])
     ]
     available = [value for value in available_orders if value]
-    saved = normalize_order_no(user.outbound_last_order_no or "")
+    saved_orders = normalize_assigned_order_numbers(user.outbound_last_order_no)
+    saved = saved_orders[0] if len(saved_orders) == 1 else ""
     if saved and saved in available:
         return OutboundCurrentOrderPreferenceRead(
             selected_order_no=saved,

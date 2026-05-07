@@ -152,6 +152,7 @@
   </main>
 
   <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
   <script>
     const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -159,7 +160,7 @@
     }[char]));
 
     async function requestJson(url, options) {
-      const response = await fetch(url, options);
+      const response = await fetch(url, AuthUI.csrfHeaders(options));
       const data = await response.json().catch(() => ({}));
       if (response.status === 401) {
         window.location.href = `/login?next=${encodeURIComponent('/workbench')}`;
