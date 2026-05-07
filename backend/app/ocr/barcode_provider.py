@@ -46,11 +46,7 @@ class BarcodeProvider:
     @staticmethod
     def _to_result(symbol: Any) -> BarcodeResult:
         rect = getattr(symbol, "rect", None)
-        bbox = (
-            (rect.left, rect.top, rect.width, rect.height)
-            if rect is not None
-            else None
-        )
+        bbox = (rect.left, rect.top, rect.width, rect.height) if rect is not None else None
         return BarcodeResult(
             type=symbol.type,
             data=symbol.data.decode("utf-8"),
