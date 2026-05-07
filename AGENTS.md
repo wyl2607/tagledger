@@ -1,16 +1,16 @@
 # AGENTS.md — TagLedger AI 开发入口
 
-> Scope: `/Users/yumei/tagledger`
+> Scope: TagLedger repository root
 > Project: TagLedger
 > Current branch family: `ui/mobile-history-v1`
 
 ## Read First
 
 - 先读本文件，再读 `CLAUDE.md`、`README.md`、`docs/SYNC_RULES.md`。
-- 非琐碎实现、调试或交付前，先查 `/Users/yumei/tools/automation/runtime/ai-trace/*.jsonl`：
+- 非琐碎实现、调试或交付前，先查 `~/tools/automation/runtime/ai-trace/*.jsonl`：
 
 ```bash
-bash /Users/yumei/tools/automation/scripts/ai-trace.sh find "tagledger <keyword>"
+bash ~/tools/automation/scripts/ai-trace.sh find "tagledger <keyword>"
 ```
 
 - 形成稳定根因、可复用流程或交付边界后，必须写回 `ai-trace` session；可复用规则写 solution。
@@ -26,8 +26,8 @@ bash /Users/yumei/tools/automation/scripts/ai-trace.sh find "tagledger <keyword>
 多组改动必须先走 `grouped-commit-cycle` dry-run，再按组提交。禁止把行为/API/UI、i18n、docs、scripts 混在一个 commit。
 
 ```bash
-python3 /Users/yumei/tools/automation/workspace-guides/skill-chains/chain-gates/grouped_commit_cycle.py \
-  --repo /Users/yumei/tagledger \
+python3 ~/tools/automation/workspace-guides/skill-chains/chain-gates/grouped_commit_cycle.py \
+  --repo "$PWD" \
   --project tagledger \
   --dry-run
 ```
@@ -35,8 +35,8 @@ python3 /Users/yumei/tools/automation/workspace-guides/skill-chains/chain-gates/
 需要本地自动逐组提交时：
 
 ```bash
-python3 /Users/yumei/tools/automation/workspace-guides/skill-chains/chain-gates/grouped_commit_cycle.py \
-  --repo /Users/yumei/tagledger \
+python3 ~/tools/automation/workspace-guides/skill-chains/chain-gates/grouped_commit_cycle.py \
+  --repo "$PWD" \
   --project tagledger \
   --execute
 ```
