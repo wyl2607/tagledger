@@ -63,9 +63,9 @@ def main() -> None:
         console_errors: list[str] = []
         page.on(
             "console",
-            lambda msg: console_errors.append(msg.text)
-            if msg.type in {"error", "warning"}
-            else None,
+            lambda msg: (
+                console_errors.append(msg.text) if msg.type in {"error", "warning"} else None
+            ),
         )
         login(page, "browser-manager", "browser-manager-pass")
         expect(page.get_by_text("全局录入和调拨状态，一屏看清")).to_be_visible()
