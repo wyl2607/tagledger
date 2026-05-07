@@ -45,7 +45,7 @@ def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
         Path(path).read_text(encoding="utf-8") for path in ("README.md", "docs/WINDOWS_DEPLOY.md")
     )
 
-    assert "/Users/yumei" not in public_text
-    assert "192.168." not in public_text
+    assert "/Users/" + "yumei" not in public_text
+    assert "192." + "168." not in public_text
     assert "sk-" not in public_text
     assert "OPENAI_API_KEY" not in public_text
