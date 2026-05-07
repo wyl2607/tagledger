@@ -52,12 +52,19 @@ healthcheck() {
   "$VENV_PYTHON" - "$PORT" <<'PY'
 import json
 import sys
+import urllib.error
 import urllib.request
 
 port = int(sys.argv[1])
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.5) as response:
-        sys.exit(0 if json.load(response).get("status") == "ok" else 1)
+        if json.load(response).get("status") != "ok":
+            sys.exit(1)
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/outbound/summary", timeout=0.5):
+            sys.exit(0)
+    except urllib.error.HTTPError as exc:
+        sys.exit(1 if exc.code == 404 else 0)
 except Exception:
     sys.exit(1)
 PY
@@ -115,6 +122,7 @@ if port_is_busy; then
     exit 0
   fi
   echo "Port ${PORT} is already in use by another service."
+  echo "It may be an older TagLedger process if /api/outbound/summary returns 404."
   echo "Try: PORT=8010 ./scripts/run_mobile_test.sh"
   exit 1
 fi
