@@ -1,16 +1,22 @@
 # TagLedger
 
-![Status](https://img.shields.io/badge/Status-Phase%204%20dry--run%20%E5%AE%8C%E6%88%90-brightgreen)
+![Status](https://img.shields.io/badge/Status-Factory%20Workbench-brightgreen)
 ![OS](https://img.shields.io/badge/OS-macOS%20%2F%20Windows-blue)
 
-本项目是机器/车辆产品标签 OCR 自动入库系统的 Phase 0 + Phase 1 后端 MVP。目标是先把本地闭环跑通：上传图片、MockOCR、抽取 Model/VIN/SN、查重、人工确认写库、导出 CSV。
+TagLedger 是面向工厂现场的局域网 Web 工作台：中心 Windows 电脑启动 FastAPI 服务，手机扫码进入移动录入页，其他电脑通过内网浏览器进入账号化工作台。主线目标是把发货单扫码、OCR 标签录入、调拨、统计和账号权限收束到同一个本地优先系统。
 
-当前已接入真实 Tesseract OCR、条码识别和 Playwright/SaaS dry-run 提交骨架。macOS 版提供一个极简演示页用于快速展示，不作为最终前端交付。
+当前已接入账号登录、角色化工作台、出库核对、移动扫码、真实 Tesseract OCR、条码识别和 Playwright/SaaS dry-run 提交骨架。旧桌面 OCR demo 保留为 `/capture` 子功能，不再作为产品首页。
 
 ## 功能范围
 
 - FastAPI 后端服务
 - SQLite 本地数据库
+- 初始化页 `/setup`，首次安装创建管理员账号
+- 登录页 `/login` 和角色化工作台 `/workbench`
+- 首页 `/` 智能入口：未初始化跳 `/setup`，未登录跳 `/login`，已登录跳 `/workbench`
+- 现场移动页 `/mobile`，支持扫码、拍照、OCR 和当前发货单录入
+- 出库核对页 `/outbound`，按账号权限限制可见发货单
+- 调拨页 `/transfers` 和后台管理页 `/admin`
 - 图片上传 API，上传时选择品类 `A` / `B` / `C`
 - 批量图片上传 API，串行复用单图上传/OCR 入库逻辑
 - MockOCR 后台任务，上传后立即返回 `job_id`
@@ -19,13 +25,12 @@
 - 人工确认 API，可修改字段后写入 `confirmed`
 - 任务列表 API，支持状态筛选和分页
 - CSV 导出 API，支持状态筛选
-- macOS 本机极简演示页
-- 手机录入页 `/mobile`，支持拍照后自动上传识别、选择图片、OCR 原文查看和本地入库确认
 - 历史记录页，支持状态/关键字/日期筛选、缩略图查看和 CSV 导出
+- 旧桌面 OCR demo `/capture`，用于标签录入和历史 OCR 兼容
 - Playwright/SaaS 提交骨架，默认 dry-run，不点击真实提交按钮
 - parser 和查重单元测试
 
-## macOS 快速演示
+## 本机启动
 
 ```bash
 cd /path/to/tagledger
@@ -33,6 +38,8 @@ cd /path/to/tagledger
 ```
 
 打开：`http://127.0.0.1:8000`
+
+首次安装会进入 `/setup` 创建管理员账号；之后访问 `/` 会按登录状态进入 `/login` 或 `/workbench`。
 
 Finder 双击启动：`Start Mac Demo.command`
 
@@ -48,9 +55,9 @@ PORT=8010 ./scripts/run_mac_demo.sh
 ./scripts/smoke_mac_demo.sh
 ```
 
-更多说明见 `MAC_DEMO.md`。
+旧 OCR demo 可从 `/capture` 打开。更多本机启动说明见 `MAC_DEMO.md`。
 
-## 手机测试
+## 局域网现场测试
 
 推荐用手机测试脚本启动，它会自动监听局域网并打印 iPhone 可访问地址：
 
@@ -88,7 +95,7 @@ adb reverse tcp:8000 tcp:8000
 http://127.0.0.1:8000/mobile
 ```
 
-手机测试阶段默认只做本地 OCR 和本地入库，`config/settings.yaml` 中 `enable_saas_submit: false` 会阻止确认后触发 SaaS/Playwright 提交。
+局域网测试阶段默认只做本地扫码、OCR 和本地入库，`config/settings.yaml` 中 `enable_saas_submit: false` 会阻止确认后触发 SaaS/Playwright 提交。
 
 手机页顶部会显示当前 OCR、条码和 SaaS 提交开关。按「拍照识别」并在相机里确认照片后，会自动压缩、上传并轮询 OCR；「选择图片」保留为手动预览后上传。
 
@@ -116,7 +123,7 @@ python -m pip install -e ".[dev]"
 .\scripts\run_dev.ps1
 ```
 
-启动后访问：`http://127.0.0.1:8000/docs`
+启动后访问：`http://127.0.0.1:8000`
 
 局域网手机访问时，把 `127.0.0.1` 换成 Windows 主机局域网 IP。
 
@@ -127,6 +134,8 @@ python -m pip install -e ".[dev]"
 ```
 
 也可以双击 `Start Windows LAN.cmd`。脚本会监听 `0.0.0.0`、自动打印手机访问地址和二维码，手机同一 Wi-Fi 下扫码打开 `/mobile`。
+
+Windows exe 或系统服务包装属于第二阶段交付：先保持 FastAPI + Web UI 的现场流程稳定，再用 PyInstaller、NSSM、Windows 服务或 Tauri 包装启动器。核心服务仍是局域网 Web 工作台，因为手机扫码和多设备访问都依赖浏览器入口。
 
 ## Windows 部署
 
@@ -140,6 +149,10 @@ python -m pip install -e ".[dev]"
 Tesseract、PATH、防火墙、局域网访问和常见错误处理见 `docs/WINDOWS_DEPLOY.md`。
 
 首次使用出库、调拨和后台管理前，打开 `/setup` 创建第一个管理员账号；之后用 `/login` 登录。
+
+## SaaS 桥接边界
+
+内置 `backend/app/saas/` 是 Playwright dry-run 提交骨架，用于验证第三方页面自动填表流程。Chrome 插件如果后续加入，只作为外部 SaaS/Mammotion 页面中的登录态桥接、填表和附件上传模块，不替代 TagLedger 主工作台。
 
 ## Git 同步规则
 
@@ -167,7 +180,7 @@ Windows 一键安装依赖并跑测试：
 
 ## 语言支持
 
-三个静态页面 `/`、`/mobile`、`/history` 支持 English、Deutsch、中文三语切换。页面启动时会按浏览器语言自动选择：`zh*` 使用中文，`de*` 使用德文，其他语言使用英文；用户在顶部 `🌐 EN | DE | 中` 切换后会写入 `localStorage`，后续页面保持同一语言。
+主要静态页面支持 English、Deutsch、中文三语切换。页面启动时会按浏览器语言自动选择：`zh*` 使用中文，`de*` 使用德文，其他语言使用英文；用户在顶部 `EN | DE | 中` 切换后会写入 `localStorage`，后续页面保持同一语言。
 
 翻译文件位于 `backend/app/static/i18n/`，中文 `zh.json` 是 source of truth。新增用户可见文本时，先在 `zh.json` 增加扁平 key，再同步到 `en.json` 和 `de.json`，HTML 用 `data-i18n="key"`，占位符用 `data-i18n-placeholder="key"`。
 
@@ -243,7 +256,7 @@ print([(item.type, item.data) for item in results])
 
 ## 语言切换
 
-页面右上角提供 `EN | DE | 中文` 切换，覆盖 `/`、`/history`、`/mobile` 三个静态页面。选择会保存到浏览器 `localStorage`；也可以用 `?lang=en`、`?lang=de`、`?lang=zh` 指定首次打开语言。
+页面右上角提供 `EN | DE | 中文` 切换，覆盖 `/workbench`、`/mobile`、`/history`、`/outbound` 等主要静态页面。选择会保存到浏览器 `localStorage`；也可以用 `?lang=en`、`?lang=de`、`?lang=zh` 指定首次打开语言。
 
 ## 贡献仪表板
 

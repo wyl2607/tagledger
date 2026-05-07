@@ -142,10 +142,11 @@ Common options:
 
 Protected operations such as outbound reconciliation, transfer creation, and admin management require a local TagLedger account.
 
-1. Open the printed LAN URL on the Windows host and go to `/setup`.
+1. Open the printed LAN URL on the Windows host. First-time installs redirect `/` to `/setup`.
 2. Create the first manager account.
-3. Use `/login` from phones or PCs when protected pages redirect there.
+3. After initialization, `/` sends unauthenticated users to `/login` and logged-in users to `/workbench`.
 4. Use `/admin` to create operator or supervisor accounts for the floor team.
+5. Phones should use `/mobile` from the QR code. The legacy desktop OCR demo remains available at `/capture` when needed for label intake compatibility.
 
 ## Switch To Real OCR
 
