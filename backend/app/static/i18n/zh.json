@@ -502,7 +502,7 @@
   "admin.username": "账号",
   "admin.displayName": "显示名",
   "admin.role": "角色",
-  "admin.assignedOrder": "分配发货单号",
+  "admin.assignedOrder": "分配发货单号（可多个）",
   "admin.assignedOrderShort": "分配单号",
   "admin.password": "初始密码",
   "admin.create": "创建账号",
