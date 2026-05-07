@@ -4,13 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlmodel import Session
 
-from backend.app.auth import current_user_optional, require_login, require_supervisor
+from backend.app.auth import require_login, require_supervisor
 from backend.app.database import get_session
 from backend.app.models import User
 from backend.app.schemas import (
     OutboundCurrentOrderPreferenceRead,
     OutboundCurrentOrderPreferenceWrite,
 )
+from backend.app.services.auth_service import has_role, normalize_assigned_order_numbers
 from backend.app.services.outbound_reconciliation import (
     OutboundVerificationRequiredError,
     complete_outbound_order,
@@ -18,6 +19,7 @@ from backend.app.services.outbound_reconciliation import (
     get_inventory_movements,
     inbound_inventory,
     normalize_order_no,
+    normalize_order_set,
     outbound_batch_detail,
     outbound_ops_health,
     outbound_order_choices,
@@ -107,17 +109,54 @@ def _fallback_order_no(orders: list[str]) -> str | None:
     return sorted(cleaned)[-1]
 
 
+def _allowed_outbound_orders(user: User) -> list[str] | None:
+    if has_role(user, "supervisor"):
+        return None
+    return normalize_assigned_order_numbers(user.outbound_last_order_no)
+
+
+def _require_order_access(user: User, order_no: str) -> None:
+    allowed = _allowed_outbound_orders(user)
+    if allowed is not None and normalize_order_no(order_no) not in allowed:
+        raise HTTPException(status_code=403, detail="order is outside your assigned scope")
+
+
+def _filter_orders_status_payload(
+    payload: dict[str, object], allowed_orders: list[str]
+) -> dict[str, object]:
+    allowed = set(normalize_order_set(allowed_orders))
+    orders = [
+        order
+        for order in payload.get("orders", [])
+        if isinstance(order, dict) and normalize_order_no(str(order.get("order_no", ""))) in allowed
+    ]
+    return {
+        "orders": orders,
+        "totals": {
+            "order_count": len(orders),
+            "complete_order_count": sum(1 for order in orders if order.get("is_complete")),
+            "open_order_count": sum(1 for order in orders if not order.get("is_complete")),
+            "required_total": sum(int(order.get("required_total") or 0) for order in orders),
+            "scanned_total": sum(int(order.get("scanned_total") or 0) for order in orders),
+            "remaining_total": sum(int(order.get("remaining_total") or 0) for order in orders),
+            "extra_scanned_total": sum(
+                int(order.get("extra_scanned_total") or 0) for order in orders
+            ),
+        },
+    }
+
+
 @router.get("/summary")
-def get_outbound_summary(_: object = Depends(require_login)) -> dict[str, object]:
+def get_outbound_summary(user: User = Depends(require_login)) -> dict[str, object]:
     try:
-        return outbound_summary()
+        return outbound_summary(allowed_orders=_allowed_outbound_orders(user))
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/ops-health")
 def get_outbound_ops_health(
-    _: object = Depends(require_login),
+    _: object = Depends(require_supervisor),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
@@ -127,9 +166,9 @@ def get_outbound_ops_health(
 
 
 @router.get("/orders")
-def get_outbound_order_choices(_: object = Depends(require_login)) -> dict[str, object]:
+def get_outbound_order_choices(user: User = Depends(require_login)) -> dict[str, object]:
     try:
-        return outbound_order_choices()
+        return outbound_order_choices(allowed_orders=_allowed_outbound_orders(user))
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -143,10 +182,14 @@ def post_outbound_current_order_preference(
     order_no = normalize_order_no(payload.order_no)
     if not order_no:
         raise HTTPException(status_code=422, detail="order_no is required")
-    user.outbound_last_order_no = order_no
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+    allowed = _allowed_outbound_orders(user)
+    if allowed is not None and order_no not in allowed:
+        raise HTTPException(status_code=403, detail="order is outside your assigned scope")
+    if allowed is None:
+        user.outbound_last_order_no = order_no
+        session.add(user)
+        session.commit()
+        session.refresh(user)
     return OutboundCurrentOrderPreferenceRead(
         selected_order_no=order_no,
         saved_order_no=order_no,
@@ -159,12 +202,13 @@ def post_outbound_current_order_preference(
 def get_outbound_current_order_preference(
     user: User = Depends(require_login),
 ) -> OutboundCurrentOrderPreferenceRead:
-    choices = outbound_order_choices()
+    choices = outbound_order_choices(allowed_orders=_allowed_outbound_orders(user))
     available_orders = [
         normalize_order_no(v) for v in choices.get("order_numbers", {}).get("shipping", [])
     ]
     available = [value for value in available_orders if value]
-    saved = normalize_order_no(user.outbound_last_order_no or "")
+    saved_orders = normalize_assigned_order_numbers(user.outbound_last_order_no)
+    saved = saved_orders[0] if len(saved_orders) == 1 else ""
     if saved and saved in available:
         return OutboundCurrentOrderPreferenceRead(
             selected_order_no=saved,
@@ -226,7 +270,7 @@ def get_outbound_inventory_movements(
     part_key: str | None = None,
     location_code: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
-    _: object = Depends(require_login),
+    _: object = Depends(require_supervisor),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     return get_inventory_movements(
@@ -261,9 +305,16 @@ def post_outbound_inventory_location_status(
 def get_outbound_query(
     code: str = Query(..., min_length=1),
     order_no: Annotated[list[str] | None, Query()] = None,
+    user: User = Depends(require_login),
 ) -> dict[str, object]:
     try:
-        return query_outbound(code, selected_orders=order_no)
+        allowed_orders = _allowed_outbound_orders(user)
+        selected_orders = allowed_orders if allowed_orders is not None else order_no
+        return query_outbound(
+            code,
+            selected_orders=selected_orders,
+            allowed_orders=allowed_orders,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -271,10 +322,11 @@ def get_outbound_query(
 @router.get("/orders/{order_no}/status")
 def get_outbound_order_status(
     order_no: str,
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
+        _require_order_access(user, order_no)
         return outbound_order_status(order_no, session)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -283,10 +335,11 @@ def get_outbound_order_status(
 @router.get("/orders/{order_no}/scans")
 def get_outbound_order_scans(
     order_no: str,
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
+        _require_order_access(user, order_no)
         return outbound_order_scans(order_no, session)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -295,10 +348,11 @@ def get_outbound_order_scans(
 @router.get("/orders/{order_no}/remaining.csv")
 def get_outbound_remaining_csv(
     order_no: str,
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> Response:
     try:
+        _require_order_access(user, order_no)
         csv_text = outbound_remaining_csv(order_no, session)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -314,10 +368,18 @@ def get_outbound_remaining_csv(
 def get_outbound_progress_snapshots(
     order_no: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
+        allowed = _allowed_outbound_orders(user)
+        if allowed is not None:
+            if order_no:
+                _require_order_access(user, order_no)
+            elif len(allowed) == 1:
+                order_no = allowed[0]
+            else:
+                return {"order_no": None, "snapshots": []}
         return outbound_progress_snapshots(order_no, session, limit=limit)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -346,10 +408,11 @@ def post_outbound_batch_void(
 def get_outbound_batch_detail(
     order_no: str,
     batch_id: str,
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
+        _require_order_access(user, order_no)
         return outbound_batch_detail(order_no, batch_id, session)
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -412,22 +475,26 @@ def post_outbound_order_rollback(
 
 @router.get("/orders/status")
 def get_outbound_orders_status(
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
-        return outbound_orders_status(session)
+        payload = outbound_orders_status(session)
+        allowed = _allowed_outbound_orders(user)
+        return payload if allowed is None else _filter_orders_status_payload(payload, allowed)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/orders/overview")
 def get_outbound_orders_overview(
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
-        return outbound_orders_overview(session)
+        payload = outbound_orders_overview(session)
+        allowed = _allowed_outbound_orders(user)
+        return payload if allowed is None else _filter_orders_status_payload(payload, allowed)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -435,16 +502,15 @@ def get_outbound_orders_overview(
 @router.post("/scan")
 def post_outbound_scan(
     payload: OutboundScanRequest,
-    user: object | None = Depends(current_user_optional),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
+        _require_order_access(user, payload.order_no)
         return register_outbound_scan(
             order_no=payload.order_no,
             code=payload.code,
-            operator_id=getattr(user, "username", None)
-            if user is not None
-            else payload.operator_id,
+            operator_id=user.username,
             record_id=payload.record_id,
             verification_record_id=payload.verification_record_id,
             quantity=payload.quantity,
@@ -460,14 +526,15 @@ def post_outbound_scan(
 @router.post("/scan/preview")
 def post_outbound_scan_preview(
     payload: OutboundScanRequest,
-    _: object = Depends(require_login),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
+        _require_order_access(user, payload.order_no)
         preview_payload = preview_outbound_scan(
             order_no=payload.order_no,
             code=payload.code,
-            operator_id=payload.operator_id,
+            operator_id=user.username,
             record_id=payload.record_id,
             verification_record_id=payload.verification_record_id,
             quantity=payload.quantity,

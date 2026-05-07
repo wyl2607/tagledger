@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from backend.app.auth import require_login, require_supervisor
+from backend.app.auth import require_supervisor
 from backend.app.database import get_session
 from backend.app.models import User
 from backend.app.services.transfer_service import (
@@ -22,6 +22,7 @@ class TransferCreateRequest(BaseModel):
     part_key: str
     quantity: int = Field(gt=0)
     reason: str
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
 
 @router.post("/api/transfers")
@@ -37,6 +38,7 @@ def post_transfer(
             part_key=payload.part_key,
             quantity=payload.quantity,
             reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
             operator=user,
             session=session,
         )
@@ -49,7 +51,7 @@ def get_transfers(
     factory_id: str | None = None,
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=200, ge=1, le=500),
-    _: User = Depends(require_login),
+    _: User = Depends(require_supervisor),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
@@ -67,7 +69,7 @@ def get_transfers(
 def get_factory_summary(
     from_: str | None = Query(default=None, alias="from"),
     to: str | None = Query(default=None),
-    _: User = Depends(require_login),
+    _: User = Depends(require_supervisor),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:

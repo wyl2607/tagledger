@@ -5,9 +5,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
+from backend.app.auth import require_login
 from backend.app.config import get_settings
 from backend.app.database import get_session
-from backend.app.models import Record, RecordStatus
+from backend.app.models import Record, RecordStatus, User
 from backend.app.schemas import RecordListItem, RecordRead, RetryResponse
 from backend.app.services.dedup import find_duplicates, serialize_duplicates
 from backend.app.services.material_mapping import find_material_matches
@@ -133,6 +134,7 @@ def get_record_image(record_id: int, session: Session = Depends(get_session)) ->
 def retry_submission(
     record_id: int,
     background_tasks: BackgroundTasks,
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> RetryResponse:
     record = session.get(Record, record_id)
@@ -157,6 +159,7 @@ def retry_submission(
 @router.post("/jobs/retry", response_model=list[RetryResponse])
 def retry_all_failed(
     background_tasks: BackgroundTasks,
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> list[RetryResponse]:
     records = session.exec(

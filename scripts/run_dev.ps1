@@ -43,4 +43,6 @@ Write-Host 'Starting TagLedger API'
 Write-Host 'Local docs: http://127.0.0.1:8000/docs'
 Write-Host "LAN docs:   http://${LanIP}:8000/docs"
 Write-Host "LAN app:    http://${LanIP}:8000"
+Write-Host "Phone scan: http://${LanIP}:8000/mobile"
+Write-Host 'For QR-code LAN startup, run: .\scripts\run_lan.ps1'
 & $Python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload

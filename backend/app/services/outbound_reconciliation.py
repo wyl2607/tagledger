@@ -443,8 +443,33 @@ def _part_rows(
     return rows
 
 
-def outbound_summary() -> dict[str, object]:
+def _scope_items_for_orders(
+    cutting_items: list[OutboundItem],
+    shipping_items: list[OutboundItem],
+    allowed_orders: list[str] | None,
+) -> tuple[list[OutboundItem], list[OutboundItem]]:
+    if allowed_orders is None:
+        return cutting_items, shipping_items
+    selected = normalize_order_set(allowed_orders)
+    if not selected:
+        return [], []
+    scoped_shipping = [
+        item for item in shipping_items if normalize_order_no(item.order_no) in selected
+    ]
+    scoped_part_keys = {compact_part_code(item.part_code) for item in scoped_shipping}
+    scoped_cutting = [
+        item for item in cutting_items if compact_part_code(item.part_code) in scoped_part_keys
+    ]
+    return scoped_cutting, scoped_shipping
+
+
+def outbound_summary(allowed_orders: list[str] | None = None) -> dict[str, object]:
     cutting_items, shipping_items = load_outbound_items()
+    cutting_items, shipping_items = _scope_items_for_orders(
+        cutting_items,
+        shipping_items,
+        allowed_orders,
+    )
     part_rows = _part_rows(cutting_items, shipping_items)
     part_status_counts: dict[str, int] = defaultdict(int)
     for row in part_rows:
@@ -470,8 +495,9 @@ def outbound_summary() -> dict[str, object]:
     }
 
 
-def outbound_order_choices() -> dict[str, object]:
-    _, shipping_items = load_outbound_items()
+def outbound_order_choices(allowed_orders: list[str] | None = None) -> dict[str, object]:
+    cutting_items, shipping_items = load_outbound_items()
+    _, shipping_items = _scope_items_for_orders(cutting_items, shipping_items, allowed_orders)
     return {
         "data_source": "workbook" if get_settings().outbound_workbook_file.exists() else "text_ocr",
         "order_numbers": {
@@ -483,7 +509,11 @@ def outbound_order_choices() -> dict[str, object]:
     }
 
 
-def query_outbound(code: str, selected_orders: list[str] | None = None) -> dict[str, object]:
+def query_outbound(
+    code: str,
+    selected_orders: list[str] | None = None,
+    allowed_orders: list[str] | None = None,
+) -> dict[str, object]:
     candidates = {compact_part_code(code)}
     material_matches = []
     for match in find_material_matches(code):
@@ -491,6 +521,11 @@ def query_outbound(code: str, selected_orders: list[str] | None = None) -> dict[
         candidates.add(compact_part_code(match.ruiyun_part_number))
         candidates.add(compact_part_code(match.sku))
     cutting_items, shipping_items = load_outbound_items()
+    cutting_items, shipping_items = _scope_items_for_orders(
+        cutting_items,
+        shipping_items,
+        allowed_orders,
+    )
     rows = [
         row
         for row in _part_rows(cutting_items, shipping_items)

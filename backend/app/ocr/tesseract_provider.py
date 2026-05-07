@@ -30,11 +30,7 @@ class TesseractOCRProvider(OCRProvider):
                 output_type=Output.DICT,
             )
             confidences = _valid_confidences(data.get("conf", []))
-            confidence = (
-                sum(confidences) / len(confidences) / 100
-                if confidences
-                else 0.0
-            )
+            confidence = sum(confidences) / len(confidences) / 100 if confidences else 0.0
             return OCRResult(text=text, confidence=confidence)
         except Exception as exc:
             raise RuntimeError(f"Tesseract OCR failed for {image_path}") from exc

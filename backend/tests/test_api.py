@@ -1,20 +1,55 @@
+import json
+import re
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from backend.app.models import Category, Record, RecordStatus
+from backend.app.services.auth_service import CSRF_COOKIE, CSRF_HEADER, create_session, create_user
 from backend.app.services.material_mapping import MaterialMatch
 
+STATIC_UI_PAGES = [
+    Path("backend/app/static/home.html"),
+    Path("backend/app/static/login.html"),
+    Path("backend/app/static/setup.html"),
+    Path("backend/app/static/admin.html"),
+    Path("backend/app/static/mobile.html"),
+    Path("backend/app/static/outbound.html"),
+    Path("backend/app/static/transfers.html"),
+]
 
-def test_health(client: TestClient) -> None:
-    response = client.get("/health")
+
+def _static_text(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+def test_health(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_runtime_status_exposes_mobile_test_switches(client: TestClient) -> None:
-    response = client.get("/runtime/status")
+def test_database_url_can_be_overridden_for_isolated_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from backend.app import config as config_module
+
+    config_module.get_settings.cache_clear()
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'isolated.db'}")
+    try:
+        settings = config_module.get_settings()
+    finally:
+        config_module.get_settings.cache_clear()
+
+    assert settings.database_path == tmp_path / "isolated.db"
+
+
+def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/runtime/status")
 
     assert response.status_code == 200
     payload = response.json()
@@ -72,20 +107,21 @@ def test_startup_restore_enqueues_submission_queue_when_saas_enabled(
     assert calls == [True]
 
 
-def test_static_ui_asset_paths_are_served(client: TestClient) -> None:
+def test_static_ui_asset_paths_are_served(authenticated_client: TestClient) -> None:
     for path in (
         "/static/ui.css",
         "/static/i18n.js",
+        "/static/auth-ui.js",
         "/static/i18n/en.json",
         "/static/i18n/de.json",
         "/static/i18n/zh.json",
     ):
-        response = client.get(path)
+        response = authenticated_client.get(path)
         assert response.status_code == 200, path
 
 
-def test_status_badge_colors_are_declared(client: TestClient) -> None:
-    response = client.get("/static/ui.css")
+def test_status_badge_colors_are_declared(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/static/ui.css")
 
     assert response.status_code == 200
     css = response.text
@@ -97,8 +133,8 @@ def test_status_badge_colors_are_declared(client: TestClient) -> None:
     assert ".status-needs_review" in css
 
 
-def test_demo_home_serves_mac_demo_page(client: TestClient) -> None:
-    response = client.get("/")
+def test_capture_serves_mac_demo_page(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/capture")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -115,8 +151,8 @@ def test_demo_home_serves_mac_demo_page(client: TestClient) -> None:
     assert "renderMaterialMatches" in response.text
 
 
-def test_history_page_serves_history_view(client: TestClient) -> None:
-    response = client.get("/history")
+def test_history_page_serves_history_view(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/history")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -127,8 +163,8 @@ def test_history_page_serves_history_view(client: TestClient) -> None:
     assert "imageFallbackDataUri" in response.text
 
 
-def test_dashboard_page_serves_html(client: TestClient) -> None:
-    response = client.get("/dashboard")
+def test_dashboard_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/dashboard")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -136,8 +172,8 @@ def test_dashboard_page_serves_html(client: TestClient) -> None:
     assert "/api/metrics/all" in response.text
 
 
-def test_outbound_page_serves_html(client: TestClient) -> None:
-    response = client.get("/outbound")
+def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/outbound")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -152,31 +188,137 @@ def test_outbound_page_serves_html(client: TestClient) -> None:
     assert "displayValue(row.difference)" in response.text
     assert "row.quantity || '-'" not in response.text
     assert "String(value || '')" not in response.text
+    assert "/login?next=" in response.text
+    assert "/static/i18n.js" in response.text
+    assert "outbound.page.title" in response.text
 
 
-def test_outbound_query_accepts_multiple_selected_orders(client: TestClient, monkeypatch) -> None:
+def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/workbench")
+
+    assert response.status_code == 200
+    assert "/api/workbench" in response.text
+    assert "/static/i18n.js" in response.text
+    assert "workbench.modules.title" in response.text
+
+
+def test_static_role_ui_contracts_are_explicit() -> None:
+    workbench = _static_text("backend/app/static/home.html")
+    mobile = _static_text("backend/app/static/mobile.html")
+    admin = _static_text("backend/app/static/admin.html")
+    transfers = _static_text("backend/app/static/transfers.html")
+
+    assert "renderModules(payload.modules || [])" in workbench
+    assert "payload.global_stats" in workbench
+    assert 'href="/admin"' not in mobile
+    assert 'href="/transfers"' not in mobile
+    assert 'href="/dashboard"' not in mobile
+    assert 'id="adminContent" hidden' in admin
+    assert 'id="accessDenied" hidden' in admin
+    assert 'id="createUserForm"' in admin
+    assert 'id="assignedOrder"' in admin
+    assert "outbound_last_order_no" in admin
+    assert "can_manage_users" in admin
+    assert 'id="createTransferCard" hidden' in transfers
+    assert "can_manage_transfers" in transfers
+
+
+def test_static_i18n_keys_exist_for_three_languages() -> None:
+    locale_payloads = {
+        locale: json.loads(
+            Path(f"backend/app/static/i18n/{locale}.json").read_text(encoding="utf-8")
+        )
+        for locale in ("zh", "en", "de")
+    }
+    key_pattern = re.compile(
+        r"""data-i18n(?:-placeholder)?=["']([^"']+)["']|tr\(["']([^"']+)["']"""
+    )
+    keys: set[str] = set()
+    for path in STATIC_UI_PAGES:
+        text = path.read_text(encoding="utf-8")
+        for match in key_pattern.finditer(text):
+            keys.add(next(group for group in match.groups() if group))
+
+    missing = {
+        locale: sorted(key for key in keys if key not in payload)
+        for locale, payload in locale_payloads.items()
+    }
+    assert missing == {"zh": [], "en": [], "de": []}
+
+
+def test_write_endpoints_require_login_even_with_valid_csrf(
+    client: TestClient,
+    session: Session,
+) -> None:
+    csrf_token = "anonymous-csrf-token"
+    client.cookies.set(CSRF_COOKIE, csrf_token)
+    client.headers.update({CSRF_HEADER: csrf_token})
+    record = Record(
+        image_path="pending.jpg",
+        category=Category.A,
+        status=RecordStatus.ocr_done,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    upload = client.post(
+        "/upload",
+        data={"category": "A"},
+        files={"file": ("anon.jpg", b"fake image", "image/jpeg")},
+    )
+    confirm = client.post(
+        f"/confirm/{record.id}",
+        json={"category": "A", "duplicate_action": "overwrite"},
+    )
+    retry_one = client.post(f"/jobs/retry/{record.id}")
+    retry_all = client.post("/jobs/retry")
+
+    assert upload.status_code == 401
+    assert confirm.status_code == 401
+    assert retry_one.status_code == 401
+    assert retry_all.status_code == 401
+
+
+def test_outbound_query_accepts_multiple_selected_orders(
+    authenticated_client: TestClient, session: Session, monkeypatch
+) -> None:
     from backend.app.routes import outbound
 
     captured = {}
 
-    def fake_query(code, selected_orders=None):
+    def fake_query(code, selected_orders=None, allowed_orders=None):
         captured["code"] = code
         captured["selected_orders"] = selected_orders
+        captured["allowed_orders"] = allowed_orders
         return {"query": code, "selected_order_numbers": selected_orders or []}
 
     monkeypatch.setattr(outbound, "query_outbound", fake_query)
+    manager = create_user(
+        session,
+        username="query-manager",
+        display_name="Query Manager",
+        password="query-manager-pass",
+        role="manager",
+    )
+    token, _ = create_session(session, manager, ip_address="testclient", user_agent="pytest")
+    authenticated_client.cookies.set("mlocr_session", token)
 
-    response = client.get(
+    response = authenticated_client.get(
         "/api/outbound/query",
         params=[("code", "C.P.XS.000142004"), ("order_no", "SO1"), ("order_no", "SO2")],
     )
 
     assert response.status_code == 200
-    assert captured == {"code": "C.P.XS.000142004", "selected_orders": ["SO1", "SO2"]}
+    assert captured == {
+        "code": "C.P.XS.000142004",
+        "selected_orders": ["SO1", "SO2"],
+        "allowed_orders": None,
+    }
 
 
-def test_mobile_page_serves_phone_intake_view(client: TestClient) -> None:
-    response = client.get("/mobile")
+def test_mobile_page_serves_phone_intake_view(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/mobile")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -191,21 +333,22 @@ def test_mobile_page_serves_phone_intake_view(client: TestClient) -> None:
     assert 'data-i18n="material.title"' in response.text
 
 
-def test_static_ui_assets_are_served(client: TestClient) -> None:
+def test_static_ui_assets_are_served(authenticated_client: TestClient) -> None:
     for path, expected in [
         ("/static/ui.css", "#ff6b35"),
         ("/static/i18n.js", "window.I18n"),
+        ("/static/auth-ui.js", "AuthUI"),
         ("/static/i18n/en.json", "TagLedger"),
         ("/static/i18n/de.json", "Feldaufnahme"),
         ("/static/i18n/zh.json", "现场录入"),
     ]:
-        response = client.get(path)
+        response = authenticated_client.get(path)
         assert response.status_code == 200
         assert expected in response.text
 
 
-def test_demo_api_full_flow(client: TestClient) -> None:
-    upload = client.post(
+def test_demo_api_full_flow(authenticated_client: TestClient) -> None:
+    upload = authenticated_client.post(
         "/upload",
         data={"category": "A"},
         files={"file": ("demo.jpg", b"fake image", "image/jpeg")},
@@ -213,11 +356,11 @@ def test_demo_api_full_flow(client: TestClient) -> None:
     assert upload.status_code == 200
     record_id = upload.json()["job_id"]
 
-    job = client.get(f"/jobs/{record_id}")
+    job = authenticated_client.get(f"/jobs/{record_id}")
     assert job.status_code == 200
     job_payload = job.json()
 
-    confirm = client.post(
+    confirm = authenticated_client.post(
         f"/confirm/{record_id}",
         json={
             "category": job_payload["category"],
@@ -230,13 +373,13 @@ def test_demo_api_full_flow(client: TestClient) -> None:
     assert confirm.status_code == 200
     assert confirm.json()["status"] == "confirmed"
 
-    exported = client.get("/export.csv", params={"status": "confirmed"})
+    exported = authenticated_client.get("/export.csv", params={"status": "confirmed"})
     assert exported.status_code == 200
     assert job_payload["vin_or_bin"] in exported.text
 
 
-def test_upload_runs_mock_ocr_and_job_can_be_read(client: TestClient) -> None:
-    response = client.post(
+def test_upload_runs_mock_ocr_and_job_can_be_read(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
         "/upload",
         data={"category": "A"},
         files={"file": ("label.jpg", b"fake image", "image/jpeg")},
@@ -246,7 +389,7 @@ def test_upload_runs_mock_ocr_and_job_can_be_read(client: TestClient) -> None:
     payload = response.json()
     assert payload["status"] == "uploaded"
 
-    job = client.get(f"/jobs/{payload['job_id']}")
+    job = authenticated_client.get(f"/jobs/{payload['job_id']}")
     assert job.status_code == 200
     job_payload = job.json()
     assert job_payload["status"] == "ocr_done"
@@ -259,7 +402,7 @@ def test_upload_runs_mock_ocr_and_job_can_be_read(client: TestClient) -> None:
 
 
 def test_job_returns_material_mapping_matches(
-    client: TestClient, session: Session, monkeypatch
+    authenticated_client: TestClient, session: Session, monkeypatch
 ) -> None:
     from backend.app.routes import jobs
 
@@ -286,7 +429,7 @@ def test_job_returns_material_mapping_matches(
         ],
     )
 
-    response = client.get(f"/jobs/{record.id}")
+    response = authenticated_client.get(f"/jobs/{record.id}")
 
     assert response.status_code == 200
     assert response.json()["material_matches"] == [
@@ -300,7 +443,7 @@ def test_job_returns_material_mapping_matches(
 
 
 def test_upload_material_mapping_checks_duplicates_after_autofill(
-    client: TestClient,
+    authenticated_client: TestClient,
     session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -329,7 +472,7 @@ def test_upload_material_mapping_checks_duplicates_after_autofill(
         ],
     )
 
-    response = client.post(
+    response = authenticated_client.post(
         "/upload",
         data={"category": "A"},
         files={"file": ("mapped.jpg", b"fake image", "image/jpeg")},
@@ -343,13 +486,15 @@ def test_upload_material_mapping_checks_duplicates_after_autofill(
     assert record.serial_number == "MTL24LUM1US02"
 
 
-def test_upload_saves_operator_id_and_jobs_filter_by_operator(client: TestClient) -> None:
-    first = client.post(
+def test_upload_saves_operator_id_and_jobs_filter_by_operator(
+    authenticated_client: TestClient,
+) -> None:
+    first = authenticated_client.post(
         "/upload",
         data={"category": "A", "operator_id": "phone-alpha"},
         files={"file": ("alpha.jpg", b"fake image", "image/jpeg")},
     )
-    second = client.post(
+    second = authenticated_client.post(
         "/upload",
         data={"category": "A", "operator_id": "phone-beta"},
         files={"file": ("beta.jpg", b"fake image", "image/jpeg")},
@@ -358,7 +503,7 @@ def test_upload_saves_operator_id_and_jobs_filter_by_operator(client: TestClient
     assert first.status_code == 200
     assert second.status_code == 200
 
-    response = client.get("/jobs", params={"operator_id": "phone-alpha", "limit": 20})
+    response = authenticated_client.get("/jobs", params={"operator_id": "phone-alpha", "limit": 20})
 
     assert response.status_code == 200
     payload = response.json()
@@ -366,28 +511,28 @@ def test_upload_saves_operator_id_and_jobs_filter_by_operator(client: TestClient
     assert payload[0]["id"] == first.json()["job_id"]
 
 
-def test_jobs_filter_before_pagination(client: TestClient) -> None:
-    first = client.post(
+def test_jobs_filter_before_pagination(authenticated_client: TestClient) -> None:
+    first = authenticated_client.post(
         "/upload",
         data={"category": "A", "operator_id": "phone-alpha"},
         files={"file": ("alpha.jpg", b"fake image", "image/jpeg")},
     )
     for index in range(3):
-        response = client.post(
+        response = authenticated_client.post(
             "/upload",
             data={"category": "A", "operator_id": "phone-beta"},
             files={"file": (f"beta-{index}.jpg", b"fake image", "image/jpeg")},
         )
         assert response.status_code == 200
 
-    response = client.get("/jobs", params={"operator_id": "phone-alpha", "limit": 1})
+    response = authenticated_client.get("/jobs", params={"operator_id": "phone-alpha", "limit": 1})
 
     assert response.status_code == 200
     assert [row["id"] for row in response.json()] == [first.json()["job_id"]]
 
 
 def test_upload_mock_flow_is_unchanged_when_barcode_disabled(
-    client: TestClient,
+    authenticated_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from backend.app.config import Settings
@@ -399,7 +544,7 @@ def test_upload_mock_flow_is_unchanged_when_barcode_disabled(
         lambda: Settings(ocr_provider="mock", enable_barcode=False),
     )
 
-    response = client.post(
+    response = authenticated_client.post(
         "/upload",
         data={"category": "A"},
         files={"file": ("mock-only.jpg", b"fake image", "image/jpeg")},
@@ -410,7 +555,7 @@ def test_upload_mock_flow_is_unchanged_when_barcode_disabled(
     assert payload["status"] == "uploaded"
     assert payload["barcodes"] == []
 
-    job = client.get(f"/jobs/{payload['job_id']}")
+    job = authenticated_client.get(f"/jobs/{payload['job_id']}")
     assert job.status_code == 200
     job_payload = job.json()
     assert job_payload["status"] == "ocr_done"
@@ -421,8 +566,8 @@ def test_upload_mock_flow_is_unchanged_when_barcode_disabled(
     assert job_payload["last_error"] is None
 
 
-def test_upload_rejects_unsupported_file_extension(client: TestClient) -> None:
-    response = client.post(
+def test_upload_rejects_unsupported_file_extension(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
         "/upload",
         data={"category": "A"},
         files={"file": ("notes.txt", b"not an image", "text/plain")},
@@ -432,8 +577,8 @@ def test_upload_rejects_unsupported_file_extension(client: TestClient) -> None:
     assert "unsupported image extension" in response.json()["detail"]
 
 
-def test_batch_upload_returns_multiple_jobs(client: TestClient) -> None:
-    response = client.post(
+def test_batch_upload_returns_multiple_jobs(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
         "/upload/batch",
         data={"category": "A"},
         files=[
@@ -449,13 +594,15 @@ def test_batch_upload_returns_multiple_jobs(client: TestClient) -> None:
     assert all(job["job_id"] for job in payload["jobs"])
 
     for job in payload["jobs"]:
-        record = client.get(f"/jobs/{job['job_id']}")
+        record = authenticated_client.get(f"/jobs/{job['job_id']}")
         assert record.status_code == 200
         assert record.json()["status"] == "ocr_done"
 
 
-def test_upload_normalizes_blank_duplicate_fields(client: TestClient, session: Session) -> None:
-    response = client.post(
+def test_upload_normalizes_blank_duplicate_fields(
+    authenticated_client: TestClient, session: Session
+) -> None:
+    response = authenticated_client.post(
         "/upload",
         data={"category": "B", "vin_or_bin": "   ", "serial_number": ""},
         files={"file": ("blank.jpg", b"fake image", "image/jpeg")},
@@ -469,7 +616,7 @@ def test_upload_normalizes_blank_duplicate_fields(client: TestClient, session: S
 
 
 def test_upload_duplicate_hint_returns_duplicate_without_ocr(
-    client: TestClient,
+    authenticated_client: TestClient,
     session: Session,
 ) -> None:
     existing = Record(
@@ -482,7 +629,7 @@ def test_upload_duplicate_hint_returns_duplicate_without_ocr(
     session.add(existing)
     session.commit()
 
-    response = client.post(
+    response = authenticated_client.post(
         "/upload",
         data={"category": "A", "vin_or_bin": "vin100"},
         files={"file": ("dup.jpg", b"fake image", "image/jpeg")},
@@ -494,7 +641,9 @@ def test_upload_duplicate_hint_returns_duplicate_without_ocr(
     assert payload["duplicates"][0]["id"] == existing.id
 
 
-def test_confirm_abandon_keeps_existing_record(client: TestClient, session: Session) -> None:
+def test_confirm_abandon_keeps_existing_record(
+    authenticated_client: TestClient, session: Session
+) -> None:
     existing = Record(
         image_path="existing.jpg",
         category=Category.A,
@@ -512,7 +661,7 @@ def test_confirm_abandon_keeps_existing_record(client: TestClient, session: Sess
     session.commit()
     session.refresh(current)
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/confirm/{current.id}",
         json={"vin_or_bin": "VIN200", "serial_number": "SN200", "duplicate_action": "abandon"},
     )
@@ -524,7 +673,9 @@ def test_confirm_abandon_keeps_existing_record(client: TestClient, session: Sess
     assert existing.vin_or_bin == "VIN200"
 
 
-def test_confirm_overwrite_replaces_existing_record(client: TestClient, session: Session) -> None:
+def test_confirm_overwrite_replaces_existing_record(
+    authenticated_client: TestClient, session: Session
+) -> None:
     existing = Record(
         image_path="existing.jpg",
         category=Category.A,
@@ -543,7 +694,7 @@ def test_confirm_overwrite_replaces_existing_record(client: TestClient, session:
     session.refresh(existing)
     session.refresh(current)
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/confirm/{current.id}",
         json={
             "category": "C",
@@ -567,7 +718,7 @@ def test_confirm_overwrite_replaces_existing_record(client: TestClient, session:
 
 
 def test_confirm_does_not_enqueue_submit_when_saas_disabled(
-    client: TestClient,
+    authenticated_client: TestClient,
     session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -593,7 +744,7 @@ def test_confirm_does_not_enqueue_submit_when_saas_disabled(
     )
     app.dependency_overrides[get_submit_runner] = lambda: calls.append
     try:
-        response = client.post(
+        response = authenticated_client.post(
             f"/confirm/{current.id}",
             json={"vin_or_bin": "VIN-LOCAL", "duplicate_action": "overwrite"},
         )
@@ -606,7 +757,7 @@ def test_confirm_does_not_enqueue_submit_when_saas_disabled(
 
 
 def test_confirm_enqueues_submit_when_saas_enabled(
-    client: TestClient,
+    authenticated_client: TestClient,
     session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -632,7 +783,7 @@ def test_confirm_enqueues_submit_when_saas_enabled(
     )
     app.dependency_overrides[get_submit_runner] = lambda: calls.append
     try:
-        response = client.post(
+        response = authenticated_client.post(
             f"/confirm/{current.id}",
             json={"vin_or_bin": "VIN-SUBMIT", "duplicate_action": "overwrite"},
         )
@@ -643,7 +794,7 @@ def test_confirm_enqueues_submit_when_saas_enabled(
     assert calls == [current.id]
 
 
-def test_export_csv_contains_records(client: TestClient, session: Session) -> None:
+def test_export_csv_contains_records(authenticated_client: TestClient, session: Session) -> None:
     session.add(
         Record(
             image_path="export.jpg",
@@ -656,7 +807,7 @@ def test_export_csv_contains_records(client: TestClient, session: Session) -> No
     )
     session.commit()
 
-    response = client.get("/export.csv")
+    response = authenticated_client.get("/export.csv")
 
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
@@ -664,7 +815,9 @@ def test_export_csv_contains_records(client: TestClient, session: Session) -> No
     assert "VIN400" in response.text
 
 
-def test_get_record_image_returns_file(client: TestClient, session: Session, tmp_path) -> None:
+def test_get_record_image_returns_file(
+    authenticated_client: TestClient, session: Session, tmp_path
+) -> None:
     image_path = tmp_path / "history-image.jpg"
     image_path.write_bytes(b"fake jpeg bytes")
     record = Record(
@@ -676,13 +829,15 @@ def test_get_record_image_returns_file(client: TestClient, session: Session, tmp
     session.commit()
     session.refresh(record)
 
-    response = client.get(f"/records/{record.id}/image")
+    response = authenticated_client.get(f"/records/{record.id}/image")
 
     assert response.status_code == 200
     assert response.content == b"fake jpeg bytes"
 
 
-def test_list_jobs_supports_status_limit_and_offset(client: TestClient, session: Session) -> None:
+def test_list_jobs_supports_status_limit_and_offset(
+    authenticated_client: TestClient, session: Session
+) -> None:
     first = Record(
         image_path="first.jpg",
         category=Category.A,
@@ -703,7 +858,9 @@ def test_list_jobs_supports_status_limit_and_offset(client: TestClient, session:
     session.refresh(first)
     session.refresh(second)
 
-    response = client.get("/jobs", params={"status": "ocr_done", "limit": 1, "offset": 0})
+    response = authenticated_client.get(
+        "/jobs", params={"status": "ocr_done", "limit": 1, "offset": 0}
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -713,13 +870,15 @@ def test_list_jobs_supports_status_limit_and_offset(client: TestClient, session:
     assert "raw_ocr_text" not in payload[0]
 
 
-def test_list_jobs_rejects_invalid_status(client: TestClient) -> None:
-    response = client.get("/jobs", params={"status": "not-a-status"})
+def test_list_jobs_rejects_invalid_status(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/jobs", params={"status": "not-a-status"})
 
     assert response.status_code == 422
 
 
-def test_export_csv_supports_status_filter(client: TestClient, session: Session) -> None:
+def test_export_csv_supports_status_filter(
+    authenticated_client: TestClient, session: Session
+) -> None:
     session.add(
         Record(
             image_path="confirmed.jpg",
@@ -740,14 +899,16 @@ def test_export_csv_supports_status_filter(client: TestClient, session: Session)
     )
     session.commit()
 
-    response = client.get("/export.csv", params={"status": "confirmed"})
+    response = authenticated_client.get("/export.csv", params={"status": "confirmed"})
 
     assert response.status_code == 200
     assert "VIN-CONFIRMED" in response.text
     assert "VIN-DUP-EXPORT" not in response.text
 
 
-def test_export_csv_supports_history_filters(client: TestClient, session: Session) -> None:
+def test_export_csv_supports_history_filters(
+    authenticated_client: TestClient, session: Session
+) -> None:
     session.add(
         Record(
             image_path="history-confirmed.jpg",
@@ -770,7 +931,7 @@ def test_export_csv_supports_history_filters(client: TestClient, session: Sessio
     )
     session.commit()
 
-    response = client.get(
+    response = authenticated_client.get(
         "/export.csv",
         params=[
             ("status", "confirmed"),
@@ -784,20 +945,20 @@ def test_export_csv_supports_history_filters(client: TestClient, session: Sessio
     assert "VIN-OTHER" not in response.text
 
 
-def test_export_csv_rejects_invalid_status(client: TestClient) -> None:
-    response = client.get("/export.csv", params={"status": "not-a-status"})
+def test_export_csv_rejects_invalid_status(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/export.csv", params={"status": "not-a-status"})
 
     assert response.status_code == 422
 
 
-def test_missing_job_returns_404(client: TestClient) -> None:
-    response = client.get("/jobs/999999")
+def test_missing_job_returns_404(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/jobs/999999")
 
     assert response.status_code == 404
 
 
-def test_mobile_page_serves_mobile_optimized_view(client: TestClient) -> None:
-    response = client.get("/mobile")
+def test_mobile_page_serves_mobile_optimized_view(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/mobile")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]

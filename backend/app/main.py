@@ -1,14 +1,19 @@
+import hmac
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlmodel import Session
 
+from backend.app.auth import current_user_optional
 from backend.app.config import get_settings
-from backend.app.database import create_db_and_tables
-from backend.app.routes import confirm, export, jobs, metrics, outbound, transfers, upload
+from backend.app.database import create_db_and_tables, get_session
+from backend.app.models import User
+from backend.app.routes import auth, confirm, export, jobs, metrics, outbound, transfers, upload
+from backend.app.services.auth_service import CSRF_COOKIE, CSRF_HEADER, users_exist
 from backend.app.workers.submit_worker import enqueue_pending_confirmed
 
 
@@ -29,6 +34,35 @@ app = FastAPI(title="TagLedger", version="0.1.0", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/setup"}
+CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.middleware("http")
+async def csrf_protection(request: Request, call_next):
+    settings = get_settings()
+    if (
+        settings.csrf_protection
+        and request.method.upper() in CSRF_METHODS
+        and request.url.path not in CSRF_EXEMPT_PATHS
+    ):
+        header_token = request.headers.get(CSRF_HEADER)
+        cookie_token = request.cookies.get(CSRF_COOKIE)
+        if (
+            not header_token
+            or not cookie_token
+            or not hmac.compare_digest(
+                header_token,
+                cookie_token,
+            )
+        ):
+            return Response(
+                content='{"detail":"CSRF validation failed"}',
+                status_code=403,
+                media_type="application/json",
+            )
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -51,11 +85,35 @@ def runtime_status(request: Request) -> dict[str, bool | str]:
 
 
 @app.get("/", include_in_schema=False)
+def smart_home(
+    user: User | None = Depends(current_user_optional),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    if not users_exist(session):
+        return RedirectResponse(url="/setup", status_code=303)
+    if user is not None:
+        return RedirectResponse(url="/workbench", status_code=303)
+    return RedirectResponse(url="/login", status_code=303)
+
+
 def demo_home() -> FileResponse:
     demo_path = STATIC_DIR / "demo.html"
     if not demo_path.exists():
         raise HTTPException(status_code=404, detail="demo page not found")
     return FileResponse(demo_path)
+
+
+@app.get("/capture", include_in_schema=False)
+def capture_page() -> FileResponse:
+    return demo_home()
+
+
+@app.get("/workbench", include_in_schema=False)
+def workbench_page() -> FileResponse:
+    home_path = STATIC_DIR / "home.html"
+    if not home_path.exists():
+        raise HTTPException(status_code=404, detail="home page not found")
+    return FileResponse(home_path)
 
 
 @app.get("/mobile", include_in_schema=False)
@@ -98,6 +156,32 @@ def transfers_page() -> FileResponse:
     return FileResponse(transfers_path)
 
 
+@app.get("/login", include_in_schema=False)
+def login_page() -> FileResponse:
+    login_path = STATIC_DIR / "login.html"
+    if not login_path.exists():
+        raise HTTPException(status_code=404, detail="login page not found")
+    return FileResponse(login_path)
+
+
+@app.get("/setup", include_in_schema=False)
+def setup_page(session: Session = Depends(get_session)) -> Response:
+    setup_path = STATIC_DIR / "setup.html"
+    if not setup_path.exists():
+        raise HTTPException(status_code=404, detail="setup page not found")
+    if users_exist(session):
+        return RedirectResponse(url="/login", status_code=303)
+    return FileResponse(setup_path)
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_page() -> FileResponse:
+    admin_path = STATIC_DIR / "admin.html"
+    if not admin_path.exists():
+        raise HTTPException(status_code=404, detail="admin page not found")
+    return FileResponse(admin_path)
+
+
 app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(confirm.router)
@@ -105,3 +189,6 @@ app.include_router(export.router)
 app.include_router(metrics.router)
 app.include_router(outbound.router)
 app.include_router(transfers.router)
+app.include_router(auth.router)
+app.include_router(auth.admin_router)
+app.include_router(auth.workbench_router)

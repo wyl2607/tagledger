@@ -406,6 +406,7 @@
   <div id="toast" class="toast toast-info" role="status" aria-live="polite" hidden></div>
 
   <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
   <script>
     const uploadForm = document.querySelector('#uploadForm');
     const cameraFile = document.querySelector('#cameraFile');
@@ -482,6 +483,7 @@
     let outboundScanHistory = { orderNo: '', scans: [] };
     const outboundOrderStorageKey = 'machineLabelSelectedOutboundOrder';
     let outboundStatusRequestId = 0;
+    let currentUser = null;
 
     function getOperatorId() {
       const key = 'machineLabelOperatorId';
@@ -512,6 +514,23 @@
 
     function handleRoleError(error) {
       throw error;
+    }
+
+    function canManageOutboundActions() {
+      return Boolean(
+        currentUser?.capabilities?.can_view_global_stats
+        || ['supervisor', 'manager', 'it_admin'].includes(String(currentUser?.role || '')),
+      );
+    }
+
+    async function loadCurrentUser() {
+      try {
+        const payload = await requestJson('/api/auth/me');
+        currentUser = payload.user || null;
+      } catch {
+        currentUser = null;
+      }
+      return currentUser;
     }
 
     const operatorId = getOperatorId();
@@ -647,10 +666,19 @@
     }
 
     async function requestJson(url, options) {
-      const response = await fetch(url, options);
+      const response = await fetch(url, AuthUI.csrfHeaders(options));
       const text = await response.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }
+      if (response.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.hash)}`;
+        throw new Error('login required');
+      }
+      if (response.status === 403) {
+        const error = new Error(data?.detail || tr('error.permissionDenied'));
+        error.status = response.status;
+        throw error;
+      }
       if (!response.ok) {
         const error = new Error(data?.detail || `HTTP ${response.status}`);
         error.status = response.status;
@@ -994,6 +1022,7 @@
       const otherOrders = payload.orders.filter((order) => order.order_no !== selectedOrderNo && order.remaining_total > 0).slice(0, 8);
       const selectedRemaining = Number(selected?.remaining_total || 0);
       const completeBlockedTitle = selected ? (selectedRemaining > 0 ? tr('outbound.completeOrder.blocked', { count: selectedRemaining }) : '') : '';
+      const canManageOutbound = canManageOutboundActions();
       outboundOrderPreview.innerHTML = `
         <div class="outbound-mini-kpis">
           <div class="outbound-mini-kpi"><strong>${escapeHtml(displayValue(totals.required_total, 0))}</strong><span>${escapeHtml(tr('outbound.mobile.todayRequired'))}</span></div>
@@ -1002,9 +1031,9 @@
         </div>
         <div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.totalProgress', { percent: totalPercent }))}</strong><span>${escapeHtml(tr('outbound.mobile.completedOrders', { complete: displayValue(totals.complete_order_count, 0), total: displayValue(totals.order_count, 0) }))}</span><div class="outbound-progress"><span style="width:${totalPercent}%"></span></div></div>
         ${selected ? `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.currentProgress', { order: selected.order_no, percent: selectedPercent }))}</strong><span>${escapeHtml(tr('outbound.mobile.orderCounts', { required: selected.required_total, scanned: selected.scanned_total, remaining: selected.remaining_total, completeLines: selected.complete_line_total, lines: selected.line_total }))}</span><div class="outbound-progress"><span style="width:${selectedPercent}%"></span></div></div>` : ''}
-        ${selected ? `<div class="outbound-card-actions"><button type="button" id="outboundCompleteOrderBtn" ${selectedRemaining > 0 ? 'disabled' : ''} title="${escapeHtml(completeBlockedTitle)}">${escapeHtml(tr('outbound.action.completeOrder'))}</button><button type="button" id="outboundRollbackOrderBtn" class="secondary">${escapeHtml(tr('outbound.action.rollbackOrder'))}</button><button type="button" id="outboundSyncMarksBtn" class="secondary">${escapeHtml(tr('outbound.action.syncMarks'))}</button><button type="button" id="outboundRefreshBtn" class="secondary">${escapeHtml(tr('outbound.action.refreshQty'))}</button></div>` : ''}
+        ${selected ? `<div class="outbound-card-actions">${canManageOutbound ? `<button type="button" id="outboundCompleteOrderBtn" ${selectedRemaining > 0 ? 'disabled' : ''} title="${escapeHtml(completeBlockedTitle)}">${escapeHtml(tr('outbound.action.completeOrder'))}</button><button type="button" id="outboundRollbackOrderBtn" class="secondary">${escapeHtml(tr('outbound.action.rollbackOrder'))}</button><button type="button" id="outboundSyncMarksBtn" class="secondary">${escapeHtml(tr('outbound.action.syncMarks'))}</button>` : ''}<button type="button" id="outboundRefreshBtn" class="secondary">${escapeHtml(tr('outbound.action.refreshQty'))}</button></div>` : ''}
         ${selected ? renderOutboundScanHistory(selected.order_no) : ''}
-        ${selected ? `<details open><summary>${escapeHtml(tr('outbound.mobile.currentRemainingSummary', { count: selected.remaining_total }))}</summary>${selectedRowsLoaded ? (pendingRows.length ? pendingRows.map((row) => `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.partRemaining', { part: row.part_code, count: displayValue(row.remaining_qty, tr('status.needsReview')) }))}</strong><span>${escapeHtml(row.name || '-')}</span><span>${escapeHtml(tr('outbound.mobile.location', { locations: (row.locations || []).join(', ') || tr('outbound.mobile.noLocation') }))}</span><span>${escapeHtml(tr('outbound.mobile.partTodayRemaining', { count: displayValue(row.today_remaining_qty, row.remaining_qty || 0) }))}</span><span>${escapeHtml(tr('outbound.mobile.partCounts', { required: displayValue(row.required_qty, 0), scanned: displayValue(row.scanned_qty, 0) }))}</span><div class="outbound-card-actions"><button type="button" data-manual-code="${escapeHtml(row.part_code)}">${escapeHtml(tr('outbound.mobile.plusOne'))}</button><button type="button" data-set-complete="${escapeHtml(row.part_key)}">${escapeHtml(tr('outbound.mobile.completePart'))}</button><button type="button" data-edit-qty="${escapeHtml(row.part_key)}" data-current-qty="${escapeHtml(row.scanned_qty)}" class="secondary">${escapeHtml(tr('outbound.action.editQty'))}</button><button type="button" data-reset-qty="${escapeHtml(row.part_key)}" class="secondary">${escapeHtml(tr('outbound.mobile.resetZero'))}</button></div></div>`).join('') : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.orderComplete'))}</strong><span>${escapeHtml(tr('outbound.mobile.noRemainingParts'))}</span></div>`) : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.totalShown'))}</strong><span>${escapeHtml(tr('outbound.mobile.loadingParts'))}</span></div>`}</details>` : ''}
+        ${selected ? `<details open><summary>${escapeHtml(tr('outbound.mobile.currentRemainingSummary', { count: selected.remaining_total }))}</summary>${selectedRowsLoaded ? (pendingRows.length ? pendingRows.map((row) => `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.partRemaining', { part: row.part_code, count: displayValue(row.remaining_qty, tr('status.needsReview')) }))}</strong><span>${escapeHtml(row.name || '-')}</span><span>${escapeHtml(tr('outbound.mobile.location', { locations: (row.locations || []).join(', ') || tr('outbound.mobile.noLocation') }))}</span><span>${escapeHtml(tr('outbound.mobile.partTodayRemaining', { count: displayValue(row.today_remaining_qty, row.remaining_qty || 0) }))}</span><span>${escapeHtml(tr('outbound.mobile.partCounts', { required: displayValue(row.required_qty, 0), scanned: displayValue(row.scanned_qty, 0) }))}</span><div class="outbound-card-actions"><button type="button" data-manual-code="${escapeHtml(row.part_code)}">${escapeHtml(tr('outbound.mobile.plusOne'))}</button>${canManageOutbound ? `<button type="button" data-set-complete="${escapeHtml(row.part_key)}">${escapeHtml(tr('outbound.mobile.completePart'))}</button><button type="button" data-edit-qty="${escapeHtml(row.part_key)}" data-current-qty="${escapeHtml(row.scanned_qty)}" class="secondary">${escapeHtml(tr('outbound.action.editQty'))}</button><button type="button" data-reset-qty="${escapeHtml(row.part_key)}" class="secondary">${escapeHtml(tr('outbound.mobile.resetZero'))}</button>` : ''}</div></div>`).join('') : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.orderComplete'))}</strong><span>${escapeHtml(tr('outbound.mobile.noRemainingParts'))}</span></div>`) : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.totalShown'))}</strong><span>${escapeHtml(tr('outbound.mobile.loadingParts'))}</span></div>`}</details>` : ''}
         <details><summary>${escapeHtml(tr('outbound.mobile.otherOrdersSummary'))}</summary>${otherOrders.length ? otherOrders.map((order) => `<div class="outbound-mini-row"><strong>${escapeHtml(order.order_no)} · ${escapeHtml(tr('outbound.mobile.remaining', { count: order.remaining_total }))}</strong><span>${escapeHtml(tr('outbound.mobile.otherOrderLine', { required: order.required_total, scanned: order.scanned_total, completeLines: order.complete_line_total, lines: order.line_total }))}</span></div>`).join('') : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.noOtherRemaining'))}</strong></div>`}</details>
       `;
       outboundOrderPreview.querySelectorAll('[data-manual-code]').forEach((button) => {
@@ -1410,7 +1439,7 @@
         ${payload?.requires_verification ? `<span>${escapeHtml(tr('outbound.scan.verificationHint'))}</span>` : ''}
         ${renderAlternativeLocations(payload, code, orderNo, recordId)}
         <span>${escapeHtml(tr('outbound.scan.orderStatus', { required: displayValue(status?.required_total), scanned: displayValue(status?.scanned_total), remaining: displayValue(status?.remaining_total) }))}</span>
-        ${payload?.scan_saved ? `<div class="outbound-card-actions"><button type="button" id="outboundUndoLastBtn" class="secondary">${escapeHtml(tr('outbound.action.undoLast'))}</button><button type="button" id="outboundNextScanBtn">${escapeHtml(tr('outbound.action.nextScan'))}</button></div>` : ''}
+        ${payload?.scan_saved ? `<div class="outbound-card-actions">${canManageOutboundActions() ? `<button type="button" id="outboundUndoLastBtn" class="secondary">${escapeHtml(tr('outbound.action.undoLast'))}</button>` : ''}<button type="button" id="outboundNextScanBtn">${escapeHtml(tr('outbound.action.nextScan'))}</button></div>` : ''}
         ${otherOrders ? `<span>${escapeHtml(tr('outbound.scan.otherOrderList', { orders: otherOrders }))}</span>` : ''}
       `;
       const undoBtn = outboundScanResult.querySelector('#outboundUndoLastBtn');
@@ -1442,6 +1471,7 @@
       const storedOrder = rememberedOutboundOrder();
       if (orders.includes(initialOrder)) outboundOrderSelect.value = initialOrder;
       else if (orders.includes(storedOrder)) outboundOrderSelect.value = storedOrder;
+      else if (orders.length === 1) outboundOrderSelect.value = orders[0];
       else if (storedOrder) rememberOutboundOrder('');
       selectedOutboundOrder = outboundOrderSelect.value;
       selectedOutboundLocation = initialLocation;
@@ -1757,8 +1787,8 @@
     I18n.init().then(() => {
       if (!window.location.hash) routeTo('capture', true);
       else applyStep(currentHashStep());
+      loadCurrentUser().then(() => loadOutboundOrders());
       loadRuntimeStatus();
-      loadOutboundOrders();
       loadRecent().catch(() => {});
     });
   </script>

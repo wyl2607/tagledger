@@ -9,8 +9,9 @@ from fastapi import (
 )
 from sqlmodel import Session
 
+from backend.app.auth import require_login
 from backend.app.database import get_session
-from backend.app.models import Category, Record, RecordStatus
+from backend.app.models import Category, Record, RecordStatus, User
 from backend.app.schemas import BatchUploadJob, BatchUploadResponse, UploadResponse
 from backend.app.services.dedup import find_duplicates, serialize_duplicates
 from backend.app.services.file_storage import save_upload
@@ -70,6 +71,7 @@ def upload_label(
     serial_number: str | None = Form(default=None),
     operator_id: str = Form(default="self"),
     file: UploadFile = File(...),
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
     ocr_runner=Depends(get_ocr_runner),
 ) -> UploadResponse:
@@ -97,6 +99,7 @@ def upload_label_batch(
     category: Category = Form(...),
     operator_id: str = Form(default="self"),
     files: list[UploadFile] = File(...),
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
     ocr_runner=Depends(get_ocr_runner),
 ) -> BatchUploadResponse:
