@@ -132,6 +132,7 @@ git diff --check -- AGENTS.md CLAUDE.md README.md docs
 必跑：
 
 ```bash
+ruff format backend scripts
 ruff check backend scripts
 PATH=.venv/bin:$PATH python -m pytest backend/tests/test_release_packaging.py -q
 ```
