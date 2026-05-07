@@ -11,6 +11,7 @@ from playwright.sync_api import Page, expect, sync_playwright
 
 BASE_URL = os.getenv("TAGLEDGER_BROWSER_BASE_URL", "http://127.0.0.1:8031").rstrip("/")
 ARTIFACT_DIR = Path("data/screenshots/browser-role-flow")
+LOCALE_STORAGE_KEY = "tagledger.locale"
 
 
 def request_json(path: str, *, data: dict[str, object] | None = None) -> dict[str, object]:
@@ -57,6 +58,7 @@ def main() -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1366, "height": 900})
+        context.add_init_script(f"window.localStorage.setItem({LOCALE_STORAGE_KEY!r}, 'zh');")
         page = context.new_page()
         console_errors: list[str] = []
         page.on(
@@ -119,6 +121,7 @@ def main() -> None:
             )
 
         mobile = browser.new_context(viewport={"width": 390, "height": 844})
+        mobile.add_init_script(f"window.localStorage.setItem({LOCALE_STORAGE_KEY!r}, 'zh');")
         mobile_page = mobile.new_page()
         mobile_page.goto(f"{BASE_URL}/login", wait_until="networkidle")
         mobile_page.screenshot(path=ARTIFACT_DIR / "login-mobile.png", full_page=True)
