@@ -120,6 +120,14 @@ python -m pip install -e ".[dev]"
 
 局域网手机访问时，把 `127.0.0.1` 换成 Windows 主机局域网 IP。
 
+现场局域网一键启动，推荐用二维码脚本：
+
+```powershell
+.\scripts\run_lan.ps1
+```
+
+也可以双击 `Start Windows LAN.cmd`。脚本会监听 `0.0.0.0`、自动打印手机访问地址和二维码，手机同一 Wi-Fi 下扫码打开 `/mobile`。
+
 ## Windows 部署
 
 推荐从一键安装脚本开始：
@@ -130,6 +138,8 @@ python -m pip install -e ".[dev]"
 ```
 
 Tesseract、PATH、防火墙、局域网访问和常见错误处理见 `docs/WINDOWS_DEPLOY.md`。
+
+首次使用出库、调拨和后台管理前，打开 `/setup` 创建第一个管理员账号；之后用 `/login` 登录。
 
 ## Git 同步规则
 

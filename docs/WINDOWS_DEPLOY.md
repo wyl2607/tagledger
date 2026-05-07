@@ -105,6 +105,48 @@ http://<Windows-IPv4>:8000
 
 `run_dev.ps1` also prints a likely LAN URL using `Get-NetIPAddress`.
 
+## One-Click LAN / Phone Startup
+
+For shop-floor phones and other LAN devices, prefer:
+
+```powershell
+.\scripts\run_lan.ps1
+```
+
+Or double-click from Explorer:
+
+```text
+Start Windows LAN.cmd
+```
+
+The LAN script:
+
+- Creates `.venv` when missing.
+- Installs the local package when needed.
+- Listens on `0.0.0.0` so other LAN devices can connect.
+- Finds a likely Windows LAN IPv4 address.
+- Prints a QR code for `http://<Windows-IPv4>:<port>/mobile`.
+- If the requested port is occupied by an older TagLedger process, it checks `/api/outbound/summary` and moves to the next free port instead of silently using the stale service.
+
+Common options:
+
+```powershell
+.\scripts\run_lan.ps1 -Port 8010
+.\scripts\run_lan.ps1 -OpenBrowser
+.\scripts\run_lan.ps1 -AddFirewallRule
+```
+
+`-AddFirewallRule` may require an Administrator PowerShell window. Without it, add the Windows Defender Firewall inbound rule manually for the printed TCP port.
+
+## First Login
+
+Protected operations such as outbound reconciliation, transfer creation, and admin management require a local TagLedger account.
+
+1. Open the printed LAN URL on the Windows host and go to `/setup`.
+2. Create the first manager account.
+3. Use `/login` from phones or PCs when protected pages redirect there.
+4. Use `/admin` to create operator or supervisor accounts for the floor team.
+
 ## Switch To Real OCR
 
 Edit `config\settings.yaml`:

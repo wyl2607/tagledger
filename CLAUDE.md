@@ -16,6 +16,7 @@ py -3.12 -m venv .venv
 python -m pip install -e ".[dev]"
 pytest
 .\scripts\run_dev.ps1
+.\scripts\run_lan.ps1   # 局域网手机扫码入口，打印 /mobile 二维码
 .\scripts\smoke_phase1.ps1
 ```
 
