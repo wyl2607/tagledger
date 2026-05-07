@@ -13,13 +13,14 @@
     .list { display: grid; gap: 10px; margin-top: 8px; }
     .item { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; }
     .item strong, .item span { display: block; overflow-wrap: anywhere; }
+    .access-denied { border-left: 8px solid var(--warning); }
     @media (max-width: 900px) { .row, .row-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body data-page="transfers">
   <div class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/">
+      <a class="brand" href="/workbench">
         <span class="logo">TL</span>
         <span><strong data-i18n="app.name">机器标签 OCR</strong><span data-i18n="app.project">物流工作台</span></span>
       </a>
@@ -29,7 +30,7 @@
           <button type="button" data-locale="de" data-i18n="language.de">DE</button>
           <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
         </div>
-        <a class="nav-button" href="/" data-i18n="nav.home">Home</a>
+        <a class="nav-button" href="/workbench">工作台</a>
       </div>
     </div>
   </div>
@@ -40,7 +41,7 @@
       <p class="subtitle" data-i18n="transfer.subtitle">调货会写出源场子出库和目标场子入库两条流水，使用同一个 transfer_id 关联。</p>
     </header>
 
-    <section class="card">
+    <section class="card" id="createTransferCard" hidden>
       <h2 data-i18n="transfer.create.title">发起调拨</h2>
       <div class="row">
         <div>
@@ -80,7 +81,7 @@
       <div id="createResult" class="muted"></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="transferListCard">
       <h2 data-i18n="transfer.list.title">近 30 天调拨流水</h2>
       <div class="row-2">
         <div>
@@ -108,6 +109,8 @@
     const refreshBtn = document.querySelector('#refreshTransferBtn');
     const createResult = document.querySelector('#createResult');
     const listNode = document.querySelector('#transferList');
+    const createCard = document.querySelector('#createTransferCard');
+    const listCard = document.querySelector('#transferListCard');
 
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -120,8 +123,32 @@
       const text = await response.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text || `HTTP ${response.status}` }; }
-      if (!response.ok) throw new Error(data?.detail || `HTTP ${response.status}`);
+      if (response.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        throw new Error('login required');
+      }
+      if (!response.ok) {
+        const error = new Error(data?.detail || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return data;
+    }
+
+    function renderAccessDenied(message) {
+      const title = tr('error.permissionDenied') === 'error.permissionDenied'
+        ? '权限不足'
+        : tr('error.permissionDenied');
+      createCard.hidden = true;
+      listCard.classList.add('access-denied');
+      listCard.innerHTML = `
+        <h2>${esc(title)}</h2>
+        <p class="muted">${esc(message || '需要主管或管理员权限 / Supervisor or manager permission required')}</p>
+        <div class="actions">
+          <a class="nav-link" href="/workbench">返回工作台</a>
+          <a class="nav-link" href="/outbound">查看我的发货单</a>
+        </div>
+      `;
     }
 
     async function createTransfer() {
@@ -168,6 +195,8 @@
       const query = new URLSearchParams({ days: '30' });
       if (factory) query.set('factory_id', factory);
       const payload = await requestJson(`/api/transfers?${query.toString()}`);
+      createCard.hidden = false;
+      listCard.classList.remove('access-denied');
       renderTransfers(payload.transfers || []);
     }
 
@@ -176,9 +205,25 @@
     document.querySelector('#factoryFilter').addEventListener('change', () => { loadTransfers().catch(() => {}); });
 
     I18n.init().then(() => {
-      loadTransfers().catch((error) => {
-        listNode.innerHTML = `<div class="item"><strong>${esc(error.message)}</strong></div>`;
-      });
+      requestJson('/api/auth/me')
+        .then((payload) => {
+          if (!payload.user) {
+            window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+            return null;
+          }
+          if (!payload.user?.capabilities?.can_manage_transfers) {
+            renderAccessDenied('需要主管或管理员权限 / Supervisor or manager permission required');
+            return null;
+          }
+          return loadTransfers();
+        })
+        .catch((error) => {
+          if (error.status === 403) {
+            renderAccessDenied(error.message);
+            return;
+          }
+          listNode.innerHTML = `<div class="item"><strong>${esc(error.message)}</strong></div>`;
+        });
     });
   </script>
 </body>

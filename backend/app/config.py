@@ -92,6 +92,7 @@ def get_settings() -> Settings:
     )
     app_config["saas_username"] = os.getenv("SAAS_USERNAME") or app_config.get("saas_username")
     app_config["saas_password"] = os.getenv("SAAS_PASSWORD") or app_config.get("saas_password")
+    app_config["database_url"] = os.getenv("DATABASE_URL") or app_config.get("database_url")
     settings = Settings(**app_config)
     if not settings.dry_run and (not settings.saas_username or not settings.saas_password):
         logger.warning("SAAS_USERNAME/SAAS_PASSWORD are not set; forcing SaaS dry_run=True")

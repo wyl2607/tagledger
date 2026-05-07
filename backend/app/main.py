@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.config import get_settings
 from backend.app.database import create_db_and_tables
-from backend.app.routes import confirm, export, jobs, metrics, outbound, transfers, upload
+from backend.app.routes import auth, confirm, export, jobs, metrics, outbound, transfers, upload
 from backend.app.workers.submit_worker import enqueue_pending_confirmed
 
 
@@ -58,6 +58,19 @@ def demo_home() -> FileResponse:
     return FileResponse(demo_path)
 
 
+@app.get("/capture", include_in_schema=False)
+def capture_page() -> FileResponse:
+    return demo_home()
+
+
+@app.get("/workbench", include_in_schema=False)
+def workbench_page() -> FileResponse:
+    home_path = STATIC_DIR / "home.html"
+    if not home_path.exists():
+        raise HTTPException(status_code=404, detail="home page not found")
+    return FileResponse(home_path)
+
+
 @app.get("/mobile", include_in_schema=False)
 def mobile_page() -> FileResponse:
     mobile_path = STATIC_DIR / "mobile.html"
@@ -98,6 +111,30 @@ def transfers_page() -> FileResponse:
     return FileResponse(transfers_path)
 
 
+@app.get("/login", include_in_schema=False)
+def login_page() -> FileResponse:
+    login_path = STATIC_DIR / "login.html"
+    if not login_path.exists():
+        raise HTTPException(status_code=404, detail="login page not found")
+    return FileResponse(login_path)
+
+
+@app.get("/setup", include_in_schema=False)
+def setup_page() -> FileResponse:
+    setup_path = STATIC_DIR / "setup.html"
+    if not setup_path.exists():
+        raise HTTPException(status_code=404, detail="setup page not found")
+    return FileResponse(setup_path)
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_page() -> FileResponse:
+    admin_path = STATIC_DIR / "admin.html"
+    if not admin_path.exists():
+        raise HTTPException(status_code=404, detail="admin page not found")
+    return FileResponse(admin_path)
+
+
 app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(confirm.router)
@@ -105,3 +142,6 @@ app.include_router(export.router)
 app.include_router(metrics.router)
 app.include_router(outbound.router)
 app.include_router(transfers.router)
+app.include_router(auth.router)
+app.include_router(auth.admin_router)
+app.include_router(auth.workbench_router)

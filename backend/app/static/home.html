@@ -6,182 +6,255 @@
   <title>物流工作台 · TagLedger</title>
   <link rel="stylesheet" href="/static/ui.css">
   <style>
-    body { background: #f7f8fa; }
-    .workbench { display: grid; gap: 24px; padding-bottom: 48px; }
-    .home-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; }
-    .home-hero h1 { font-size: 34px; }
-    .home-status { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 12px; min-width: min(460px, 100%); }
-    .status-tile { min-height: 84px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-    .status-tile strong, .status-tile span { display: block; overflow-wrap: anywhere; }
-    .status-tile strong { font-size: 18px; }
-    .status-tile span { margin-top: 8px; color: var(--muted); font-weight: 850; }
-    .module-section { display: grid; gap: 14px; }
-    .section-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .section-title h2 { margin: 0; font-size: 24px; }
-    .module-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .module-card {
-      min-height: 152px;
+    body { background: #f5f7fa; }
+    .workbench { display: grid; gap: 20px; padding-bottom: 48px; }
+    .hero-panel {
       display: grid;
-      align-content: start;
-      gap: 10px;
-      padding: 20px;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+      gap: 20px;
+      align-items: stretch;
+    }
+    .hero-copy {
+      min-height: 220px;
+      display: grid;
+      align-content: center;
+      gap: 14px;
+      padding: 28px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
     }
-    .module-card:hover { border-color: var(--orange); background: #fffaf7; }
-    .module-card strong { font-size: 24px; line-height: 1.18; overflow-wrap: anywhere; }
-    .module-card span { color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
-    .module-card small { color: var(--success); font-weight: 950; }
-    .module-card.pending small { color: var(--warning); }
-    .quick-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+    .hero-copy h1 { font-size: 34px; letter-spacing: 0; }
+    .role-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .scope-note { max-width: 760px; color: var(--muted); line-height: 1.45; font-weight: 800; }
+    .stats-panel {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-tile {
+      min-height: 92px;
+      display: grid;
+      align-content: center;
+      gap: 6px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+    .stat-tile span { color: var(--muted); font-size: 16px; font-weight: 850; }
+    .stat-tile strong { font-size: 30px; line-height: 1; }
+    .section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+    .section-head h2 { margin: 0; font-size: 24px; }
+    .section-head p { margin: 6px 0 0; }
+    .module-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .module-card {
+      min-height: 148px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .module-card:hover, .module-card:focus-visible {
+      border-color: var(--orange);
+      background: #fffaf7;
+      outline: 0;
+    }
+    .module-card strong { display: block; font-size: 22px; line-height: 1.18; overflow-wrap: anywhere; }
+    .module-card span { display: block; margin-top: 8px; color: var(--muted); line-height: 1.42; overflow-wrap: anywhere; }
+    .module-card small { color: var(--success); font-size: 15px; font-weight: 950; }
+    .topbar-user { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+    .daily-list { display: grid; gap: 8px; }
+    .daily-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-weight: 850;
+    }
+    .daily-item:last-child { border-bottom: 0; }
     @media (max-width: 920px) {
-      .home-hero { grid-template-columns: 1fr; }
-      .home-status, .module-grid { grid-template-columns: 1fr; }
-      .module-card { min-height: 128px; }
+      .hero-panel, .module-grid, .stat-row { grid-template-columns: 1fr; }
+      .hero-copy { min-height: 0; padding: 22px; }
+      .hero-copy h1 { font-size: 30px; }
+      .topbar-user { justify-content: stretch; }
+      .topbar-user .nav-button { flex: 1; }
     }
   </style>
 </head>
 <body data-page="home-workbench">
   <div class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/">
+      <a class="brand" href="/workbench">
         <span class="logo">TL</span>
-        <span><strong data-i18n="app.name">机器标签 OCR</strong><span data-i18n="app.project">物流工作台</span></span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="workbench.brand">物流工作台</span></span>
       </a>
-      <div class="nav-actions">
+      <div class="nav-actions topbar-user">
         <div class="lang-switch" aria-label="Language">
           <button type="button" data-locale="en" data-i18n="language.en">EN</button>
           <button type="button" data-locale="de" data-i18n="language.de">DE</button>
           <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
         </div>
-        <a class="nav-button" href="/mobile" data-i18n="nav.mobile">手机</a>
-        <a class="nav-button" href="/outbound" data-i18n="nav.outbound">出库核对</a>
-        <a class="nav-button" href="/transfers" data-i18n="nav.transfers">调拨</a>
-        <a class="nav-button" href="/admin" data-i18n="nav.admin">后台</a>
+        <span id="userBadge" class="pill" data-i18n="common.loading">加载中</span>
+        <button id="logoutBtn" class="secondary mini" type="button" data-i18n="admin.logout">退出</button>
       </div>
     </div>
   </div>
 
-  <header class="hero home-hero">
-    <div>
-      <h1 data-i18n="home.title">物流工作台</h1>
-      <p class="subtitle" data-i18n="home.subtitle">把扫码、出库、入库、库存库位、历史和后台管理拆成清楚入口，现场同事打开后直接选择要做的事。</p>
-    </div>
-    <div class="home-status" aria-label="System status">
-      <div class="status-tile"><strong data-i18n="home.status.service">服务</strong><span id="serviceStatus" data-i18n="common.loading">加载中</span></div>
-      <div class="status-tile"><strong data-i18n="home.status.inventory">库存</strong><span data-i18n="home.status.ready">已接入总表</span></div>
-      <div class="status-tile"><strong data-i18n="home.status.orders">单据</strong><span data-i18n="home.status.ready">可核对</span></div>
-    </div>
-  </header>
-
   <main class="workbench">
-    <section class="module-section" aria-labelledby="todayTitle">
-      <div class="section-title">
-        <h2 id="todayTitle" data-i18n="home.section.today">今日作业</h2>
-        <div class="quick-nav">
-          <a class="nav-link" href="/mobile" data-i18n="nav.mobile">手机</a>
-          <a class="nav-link" href="/capture" data-i18n="nav.capture">桌面录入</a>
+    <section class="hero-panel">
+      <div class="hero-copy">
+        <div class="role-line">
+          <span id="roleBadge" class="pill pill-blue" data-i18n="workbench.role.loading">工作台</span>
+          <span id="scopeBadge" class="pill" data-i18n="workbench.scope.loading">权限范围</span>
+        </div>
+        <h1 id="heroTitle" data-i18n="workbench.hero.loading">今天先处理最该处理的单</h1>
+        <p id="scopeNote" class="scope-note" data-i18n="workbench.scope.loadingDetail">正在读取账号权限和今日作业范围。</p>
+      </div>
+      <aside class="stats-panel" aria-label="Stats">
+        <h2 data-i18n="workbench.myStats.title">我的近 7 天</h2>
+        <div class="stat-row">
+          <div class="stat-tile"><span data-i18n="workbench.myStats.scanCount">扫码次数</span><strong id="myScanCount">0</strong></div>
+          <div class="stat-tile"><span data-i18n="workbench.myStats.scanQty">扫码数量</span><strong id="myScanQty">0</strong></div>
+        </div>
+        <div id="globalStats" class="stat-row" hidden>
+          <div class="stat-tile"><span data-i18n="workbench.globalStats.orders">全部发货单</span><strong id="globalOrders">0</strong></div>
+          <div class="stat-tile"><span data-i18n="workbench.globalStats.scans">全员扫码</span><strong id="globalScans">0</strong></div>
+        </div>
+      </aside>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div>
+          <h2 data-i18n="workbench.modules.title">可用子页面</h2>
+          <p class="muted" data-i18n="workbench.modules.subtitle">入口会按账号等级收起，减少现场误点和越权失败。</p>
         </div>
       </div>
-      <div class="module-grid">
-        <a class="module-card" href="/mobile">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong data-i18n="home.card.mobile.title">手机扫码作业</strong>
-          <span data-i18n="home.card.mobile.desc">拍照、扫条码、手动输入料号，并保留当前出库单。</span>
-        </a>
-        <a class="module-card" href="/outbound">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong data-i18n="home.card.outbound.title">出库核对</strong>
-          <span data-i18n="home.card.outbound.desc">选择出库单，核对料号命中、剩余数量和完成状态。</span>
-        </a>
-        <a class="module-card pending" href="/outbound-progress#inbound-plan">
-          <small data-i18n="common.loading">排队开发</small>
-          <strong data-i18n="home.card.inbound.title">入库登记</strong>
-          <span data-i18n="home.card.inbound.desc">下一步拆出入库页面，按料号和库位增加库存。</span>
-        </a>
-      </div>
+      <div id="moduleGrid" class="module-grid"></div>
     </section>
 
-    <section class="module-section" aria-labelledby="inventoryTitle">
-      <div class="section-title">
-        <h2 id="inventoryTitle" data-i18n="home.section.inventory">库存与库位</h2>
-      </div>
-      <div class="module-grid">
-        <a class="module-card" href="/inventory">
-          <small data-i18n="home.status.ready">可查询</small>
-          <strong data-i18n="home.card.inventory.title">库存与库位</strong>
-          <span data-i18n="home.card.inventory.desc">按料号查看所有库位数量，后续支持空库、补货和停用状态。</span>
-        </a>
-        <a class="module-card" href="/outbound-progress">
-          <small data-i18n="home.status.ready">可查看</small>
-          <strong data-i18n="home.card.history.title">出库流水</strong>
-          <span data-i18n="home.card.history.desc">查看出库快照、库位扣减和当前进度。</span>
-        </a>
-        <a class="module-card" href="/inventory">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong>库位转移</strong>
-          <span>把物料从一个库位移动到另一个库位，并保留变动记录。</span>
-        </a>
-        <a class="module-card" href="/transfers">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong data-i18n="home.card.transfers.title">三场子调拨</strong>
-          <span data-i18n="home.card.transfers.desc">按源场子和目标场子发起调拨，自动写入双边流水并生成 transfer_id。</span>
-        </a>
-      </div>
-    </section>
-
-    <section class="module-section" aria-labelledby="recordsTitle">
-      <div class="section-title">
-        <h2 id="recordsTitle" data-i18n="home.section.orders">单据与记录</h2>
-      </div>
-      <div class="module-grid">
-        <a class="module-card" href="/history">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong data-i18n="nav.history">历史</strong>
-          <span data-i18n="home.card.history.desc">查看 OCR、确认和处理记录。</span>
-        </a>
-        <a class="module-card" href="/dashboard">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong data-i18n="nav.dashboard">看板</strong>
-          <span>查看当前录入和处理指标。</span>
-        </a>
-        <a class="module-card" href="/capture">
-          <small data-i18n="home.status.ready">可使用</small>
-          <strong data-i18n="home.card.capture.title">桌面录入</strong>
-          <span data-i18n="home.card.capture.desc">保留原来的桌面拍照/OCR demo 入口。</span>
-        </a>
-      </div>
-    </section>
-
-    <section class="module-section" aria-labelledby="adminTitle">
-      <div class="section-title">
-        <h2 id="adminTitle" data-i18n="home.section.admin">管理与运维</h2>
-      </div>
-      <div class="module-grid">
-        <a class="module-card" href="/admin">
-          <small data-i18n="home.status.ready">主管可用</small>
-          <strong data-i18n="home.card.admin.title">后台管理</strong>
-          <span data-i18n="home.card.admin.desc">管理账号权限、新手限制和主管权限。</span>
-        </a>
-        <a class="module-card" href="/ops-health">
-          <small data-i18n="home.status.ready">可查看</small>
-          <strong data-i18n="home.card.ops.title">运维健康</strong>
-          <span data-i18n="home.card.ops.desc">检查服务、配置、数据和后台作业状态。</span>
-        </a>
-      </div>
+    <section class="stats-panel" id="dailySection">
+      <h2 data-i18n="workbench.daily.title">最近作业</h2>
+      <div id="dailyList" class="daily-list"></div>
     </section>
   </main>
 
   <script src="/static/i18n.js"></script>
   <script>
-    const serviceStatus = document.querySelector('#serviceStatus');
-    const tr = (key) => window.I18n ? window.I18n.t(key) : key;
-    fetch('/health')
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error('health')))
-      .then(() => { serviceStatus.textContent = tr('home.status.ready'); })
-      .catch(() => { serviceStatus.textContent = tr('error.networkError'); });
+    const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent('/workbench')}`;
+        throw new Error('login required');
+      }
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      return data;
+    }
+
+    function roleLabel(role) {
+      return {
+        operator: tr('workbench.role.operator'),
+        auditor: tr('workbench.role.auditor'),
+        supervisor: tr('workbench.role.supervisor'),
+        manager: tr('workbench.role.manager'),
+        it_admin: tr('workbench.role.it_admin'),
+      }[role] || role;
+    }
+
+    function moduleLabel(module, field) {
+      const key = `workbench.module.${module.id}.${field}`;
+      const value = tr(key);
+      return value === key ? module[field] : value;
+    }
+
+    function moduleGroupLabel(group) {
+      const key = `workbench.group.${group || 'work'}`;
+      const value = tr(key);
+      return value === key ? (group || 'work') : value;
+    }
+
+    function renderModules(modules) {
+      document.querySelector('#moduleGrid').innerHTML = modules.map((module) => `
+        <a class="module-card" href="${esc(module.href)}">
+          <small>${esc(moduleGroupLabel(module.group))}</small>
+          <div>
+            <strong>${esc(moduleLabel(module, 'title'))}</strong>
+            <span>${esc(moduleLabel(module, 'description'))}</span>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    function renderDaily(rows) {
+      if (!rows.length) {
+        document.querySelector('#dailyList').innerHTML = `<div class="muted">${esc(tr('workbench.daily.empty'))}</div>`;
+        return;
+      }
+      document.querySelector('#dailyList').innerHTML = rows.map((row) => `
+        <div class="daily-item">
+          <span>${esc(row.date)}</span>
+          <strong>${esc(tr('workbench.daily.line', { count: row.scan_count, qty: row.quantity }))}</strong>
+        </div>
+      `).join('');
+    }
+
+    async function loadWorkbench() {
+      const payload = await requestJson('/api/workbench');
+      const user = payload.user;
+      const allowed = payload.scope.allowed_order_numbers;
+      document.querySelector('#userBadge').textContent = `${user.display_name || user.username} · ${roleLabel(user.role)}`;
+      document.querySelector('#roleBadge').textContent = roleLabel(user.role);
+      document.querySelector('#scopeBadge').textContent = allowed
+        ? tr('workbench.scope.assigned', { orders: allowed.join(', ') || tr('common.none') })
+        : tr('workbench.scope.global');
+      document.querySelector('#heroTitle').textContent = allowed
+        ? tr('workbench.hero.operator')
+        : tr('workbench.hero.manager');
+      document.querySelector('#scopeNote').textContent = allowed
+        ? tr('workbench.scope.assignedDetail', { orders: allowed.join(', ') || tr('common.none') })
+        : tr('workbench.scope.globalDetail');
+      document.querySelector('#myScanCount').textContent = payload.my_stats.scan_count;
+      document.querySelector('#myScanQty').textContent = payload.my_stats.scan_quantity;
+      if (payload.global_stats) {
+        document.querySelector('#globalStats').hidden = false;
+        document.querySelector('#globalOrders').textContent = payload.global_stats.order_count;
+        document.querySelector('#globalScans').textContent = payload.global_stats.scan_count;
+      }
+      renderModules(payload.modules || []);
+      renderDaily(payload.my_stats.daily || []);
+    }
+
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await requestJson('/api/auth/logout', { method: 'POST' }).catch(() => {});
+      window.location.href = '/login';
+    });
+
+    function bootWorkbench() {
+      loadWorkbench().catch((error) => {
+      document.querySelector('#scopeNote').textContent = error.message;
+      });
+    }
+
+    I18n.init().then(bootWorkbench);
+    window.addEventListener('i18n:change', bootWorkbench);
   </script>
 </body>
 </html>

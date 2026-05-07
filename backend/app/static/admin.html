@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin - TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f7f8fa; }
+    .admin-shell { display: grid; gap: 22px; padding-bottom: 48px; }
+    .admin-grid { display: grid; grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); gap: 18px; align-items: start; }
+    .panel { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+    .panel h2 { margin: 0; font-size: 24px; }
+    .form-grid { display: grid; gap: 12px; }
+    .table-wrap { overflow-x: auto; }
+    .status-line { min-height: 24px; color: var(--muted); font-weight: 850; }
+    .mini-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .access-denied { border-left: 8px solid var(--warning); }
+    @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/workbench">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="admin.title">管理员后台</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-button" href="/mobile" data-i18n="nav.mobile">手机</a>
+        <a class="nav-button" href="/outbound" data-i18n="nav.outbound">出库核对</a>
+        <a class="nav-button" href="/transfers" data-i18n="nav.transfers">调拨</a>
+        <button type="button" class="secondary" id="logoutBtn" data-i18n="admin.logout">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <h1 data-i18n="admin.title">管理员后台</h1>
+    <p class="subtitle" data-i18n="admin.subtitle">用于领导/管理员创建账号、调整角色、停用账号和重置密码；撤销、改数量等高风险出库操作跟随当前登录账号权限。</p>
+    <p class="muted" id="currentUser"></p>
+  </header>
+
+  <main class="admin-shell" id="adminContent" hidden>
+    <section class="admin-grid">
+      <div class="panel">
+        <h2 data-i18n="admin.createUser">创建账号</h2>
+        <form id="createUserForm" class="form-grid">
+          <div>
+            <label for="username" data-i18n="admin.username">账号</label>
+            <input id="username" autocomplete="off" required>
+          </div>
+          <div>
+            <label for="displayName" data-i18n="admin.displayName">显示名</label>
+            <input id="displayName" autocomplete="off">
+          </div>
+          <div>
+            <label for="role" data-i18n="admin.role">角色</label>
+            <select id="role">
+              <option value="operator" data-i18n="admin.role.operator">普通拣货员</option>
+              <option value="supervisor" data-i18n="admin.role.supervisor">主管</option>
+              <option value="manager" data-i18n="admin.role.manager">管理员/领导</option>
+              <option value="auditor" data-i18n="admin.role.auditor">只读审计</option>
+              <option value="it_admin" data-i18n="admin.role.it_admin">IT 管理</option>
+            </select>
+          </div>
+          <div>
+            <label for="assignedOrder" data-i18n="admin.assignedOrder">分配发货单号</label>
+            <input id="assignedOrder" autocomplete="off" placeholder="SO202604210093">
+          </div>
+          <div>
+            <label for="password" data-i18n="admin.password">初始密码</label>
+            <input id="password" type="password" autocomplete="new-password" minlength="10" required>
+          </div>
+          <button type="submit" data-i18n="admin.create">创建账号</button>
+        </form>
+        <div id="createStatus" class="status-line" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="panel">
+        <h2 data-i18n="admin.users">用户列表</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="admin.username">账号</th>
+                <th data-i18n="admin.displayName">显示名</th>
+                <th data-i18n="admin.role">角色</th>
+                <th data-i18n="admin.assignedOrderShort">分配单号</th>
+                <th>Status</th>
+                <th data-i18n="history.column.actions">操作</th>
+              </tr>
+            </thead>
+            <tbody id="userRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="admin.audit">最近审计日志</h2>
+      <div id="auditRows" class="status-line"></div>
+    </section>
+  </main>
+
+  <main class="admin-shell" id="accessDenied" hidden>
+    <section class="panel access-denied">
+      <h2 data-i18n="error.permissionDenied">权限不足</h2>
+      <p class="muted" data-i18n="admin.accessDenied">需要管理员权限。当前账号不能创建账号、分配单号或查看审计日志。</p>
+      <div class="actions">
+        <a class="nav-link" href="/workbench" data-i18n="admin.action.backWorkbench">返回工作台</a>
+        <a class="nav-link" href="/outbound" data-i18n="admin.action.viewOutbound">查看我的发货单</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script>
+    const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const userRows = document.querySelector('#userRows');
+    const auditRows = document.querySelector('#auditRows');
+    const createStatus = document.querySelector('#createStatus');
+    const adminContent = document.querySelector('#adminContent');
+    const accessDenied = document.querySelector('#accessDenied');
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        throw new Error('login required');
+      }
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      return data;
+    }
+
+    function showAccessDenied(message) {
+      adminContent.hidden = true;
+      accessDenied.hidden = false;
+      accessDenied.querySelector('p').textContent = message || '需要管理员权限。当前账号不能创建账号、分配单号或查看审计日志。';
+    }
+
+    function renderUsers(users) {
+      userRows.innerHTML = users.map((user) => `
+        <tr>
+          <td>${esc(user.username)}</td>
+          <td>${esc(user.display_name)}</td>
+          <td>${esc(user.role)}</td>
+          <td>
+            <div class="mini-actions">
+              <input class="mini" data-assigned-order="${esc(user.id)}" value="${esc(user.outbound_last_order_no || '')}" placeholder="SO...">
+              <button type="button" class="secondary mini" data-save-order="${esc(user.id)}">${esc(tr('common.save'))}</button>
+            </div>
+          </td>
+          <td>${esc(user.status)}</td>
+          <td><button type="button" class="secondary mini" data-reset-password="${esc(user.id)}">${esc(tr('admin.action.resetPassword'))}</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderAudit(logs) {
+      auditRows.innerHTML = logs.length ? logs.map((row) => `
+        <div>${esc(row.created_at)} · ${esc(row.actor_username || '-')} · ${esc(row.action)} · ${esc(row.target_type || '-')}:${esc(row.target_id || '-')}</div>
+      `).join('') : '-';
+    }
+
+    async function loadAdmin() {
+      try {
+        const me = await requestJson('/api/auth/me');
+        if (!me.user) {
+          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+          return;
+        }
+        if (!me.user.capabilities?.can_manage_users) {
+          showAccessDenied(tr('admin.accessDenied'));
+          return;
+        }
+        const users = await requestJson('/api/admin/users');
+        const audit = await requestJson('/api/admin/audit-logs');
+        document.querySelector('#currentUser').textContent = tr('admin.currentUser', {
+          name: me.user.display_name,
+          username: me.user.username,
+          role: me.user.role,
+        });
+        renderUsers(users.users || []);
+        renderAudit(audit.logs || []);
+        accessDenied.hidden = true;
+        adminContent.hidden = false;
+      } catch (error) {
+        if (error.message === 'login required') return;
+        showAccessDenied(error.message);
+      }
+    }
+
+    document.querySelector('#createUserForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      createStatus.textContent = tr('admin.status.creating');
+      try {
+        await requestJson('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.querySelector('#username').value,
+            display_name: document.querySelector('#displayName').value,
+            role: document.querySelector('#role').value,
+            outbound_last_order_no: document.querySelector('#assignedOrder').value,
+            password: document.querySelector('#password').value,
+          }),
+        });
+        event.target.reset();
+        createStatus.textContent = tr('admin.status.created');
+        await loadAdmin();
+      } catch (error) {
+        createStatus.textContent = tr('admin.status.createFailed', { message: error.message });
+      }
+    });
+
+    userRows.addEventListener('click', async (event) => {
+      const saveOrderButton = event.target.closest('[data-save-order]');
+      if (saveOrderButton) {
+        const input = document.querySelector(`[data-assigned-order="${saveOrderButton.dataset.saveOrder}"]`);
+        try {
+          await requestJson(`/api/admin/users/${saveOrderButton.dataset.saveOrder}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ outbound_last_order_no: input.value }),
+          });
+          createStatus.textContent = tr('admin.status.assignedOrderSaved', { order: input.value || '-' });
+          await loadAdmin();
+        } catch (error) {
+          createStatus.textContent = tr('admin.status.operationFailed', { message: error.message });
+        }
+        return;
+      }
+      const button = event.target.closest('[data-reset-password]');
+      if (!button) return;
+      const password = window.prompt(tr('admin.prompt.newPassword'));
+      if (!password) return;
+      try {
+        await requestJson(`/api/admin/users/${button.dataset.resetPassword}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        createStatus.textContent = tr('admin.status.passwordReset');
+        await loadAdmin();
+      } catch (error) {
+        createStatus.textContent = tr('admin.status.operationFailed', { message: error.message });
+      }
+    });
+
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await requestJson('/api/auth/logout', { method: 'POST' }).catch(() => {});
+      window.location.href = '/login';
+    });
+
+    I18n.init().then(loadAdmin);
+    window.addEventListener('i18n:change', loadAdmin);
+  </script>
+</body>
+</html>

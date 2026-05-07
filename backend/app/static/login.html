@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login - TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f5f7fa; }
+    .auth-shell { max-width: 980px; margin: 0 auto; padding: 42px 24px; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 18px; align-items: stretch; }
+    .auth-intro, .auth-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+    .auth-intro { min-height: 420px; display: grid; align-content: center; gap: 16px; padding: 32px; }
+    .auth-intro h1 { margin: 0; font-size: 36px; }
+    .auth-intro p { max-width: 520px; }
+    .auth-card { display: grid; gap: 18px; padding: 24px; }
+    .auth-card h2 { margin: 0; font-size: 26px; }
+    .form-grid { display: grid; gap: 14px; }
+    .status-line { min-height: 24px; color: var(--muted); font-weight: 850; }
+    @media (max-width: 860px) { .auth-shell { grid-template-columns: 1fr; padding: 20px 16px; } .auth-intro { min-height: 0; padding: 24px; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="app.project">Field Intake</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-button" href="/setup" data-i18n="auth.setup.title">初始化管理账号</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="auth-shell">
+    <section class="auth-intro">
+      <span class="pill pill-blue">TagLedger</span>
+      <h1 data-i18n="auth.login.heroTitle">按岗位进入正确的工作台</h1>
+      <p class="muted" data-i18n="auth.login.heroSubtitle">发货员只看到自己的单号和近几天作业；主管和管理者再进入整体统计、调拨和账号管理。先减少误点，再减少越权失败。</p>
+    </section>
+    <section class="auth-card">
+      <div>
+        <h2 data-i18n="auth.login.title">登录</h2>
+        <p class="muted" id="loginSubtitle"></p>
+      </div>
+      <form id="loginForm" class="form-grid">
+        <div>
+          <label for="username" data-i18n="auth.login.username">账号</label>
+          <input id="username" autocomplete="username" required>
+        </div>
+        <div>
+          <label for="password" data-i18n="auth.login.password">密码</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" data-i18n="auth.login.submit">登录</button>
+      </form>
+      <div id="status" class="status-line" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script>
+    const statusNode = document.querySelector('#status');
+    const form = document.querySelector('#loginForm');
+    const nextUrl = new URLSearchParams(window.location.search).get('next') || '/workbench';
+    const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+    function renderSubtitle() {
+      document.querySelector('#loginSubtitle').innerHTML = esc(tr('auth.login.subtitle', { setup: '/setup' }))
+        .replace('/setup', '<a href="/setup">/setup</a>');
+    }
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || tr('auth.login.failed'));
+      return data;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      statusNode.textContent = '';
+      try {
+        await requestJson('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.querySelector('#username').value,
+            password: document.querySelector('#password').value,
+          }),
+        });
+        window.location.href = nextUrl;
+      } catch (error) {
+        statusNode.textContent = error.message || tr('auth.login.failed');
+      }
+    });
+
+    I18n.init().then(renderSubtitle);
+    window.addEventListener('i18n:change', renderSubtitle);
+  </script>
+</body>
+</html>

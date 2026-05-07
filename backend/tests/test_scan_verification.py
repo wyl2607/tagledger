@@ -1,5 +1,6 @@
 from openpyxl import Workbook
 
+from backend.app.services.auth_service import create_session, create_user
 from backend.app.services.material_mapping import MaterialMatch
 from backend.app.services.outbound_reconciliation import register_outbound_scan
 
@@ -14,6 +15,19 @@ def _prepare_workbook(path) -> None:
     cutting.append(["数量", "备件编码", "备件名称", "库位"])
     cutting.append([1, "C.P.XS.000122001", "RTK", "A-B03-011"])
     workbook.save(path)
+
+
+def _login_scan_operator(client, session) -> None:
+    user = create_user(
+        session,
+        username="scan-phone-a",
+        display_name="Scan Phone A",
+        password="scan-phone-pass",
+        role="operator",
+        outbound_last_order_no="SO202604210135",
+    )
+    token, _ = create_session(session, user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set("mlocr_session", token)
 
 
 def test_mismatch_part_requires_verification_record(tmp_path, monkeypatch, session) -> None:
@@ -103,7 +117,7 @@ def test_mismatch_part_with_verification_record_succeeds(tmp_path, monkeypatch, 
 
 
 def test_scan_api_returns_422_when_verification_record_missing(
-    tmp_path, monkeypatch, client
+    tmp_path, monkeypatch, client, session
 ) -> None:
     path = tmp_path / "outbound.xlsx"
     _prepare_workbook(path)
@@ -132,6 +146,8 @@ def test_scan_api_returns_422_when_verification_record_missing(
         ],
     )
 
+    _login_scan_operator(client, session)
+
     response = client.post(
         "/api/outbound/scan",
         json={
@@ -146,7 +162,9 @@ def test_scan_api_returns_422_when_verification_record_missing(
     assert "verification_record_id is required" in response.text
 
 
-def test_scan_api_accepts_mismatch_with_verification_record(tmp_path, monkeypatch, client) -> None:
+def test_scan_api_accepts_mismatch_with_verification_record(
+    tmp_path, monkeypatch, client, session
+) -> None:
     path = tmp_path / "outbound.xlsx"
     _prepare_workbook(path)
 
@@ -173,6 +191,8 @@ def test_scan_api_accepts_mismatch_with_verification_record(tmp_path, monkeypatc
             )
         ],
     )
+
+    _login_scan_operator(client, session)
 
     response = client.post(
         "/api/outbound/scan",

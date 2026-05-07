@@ -1,9 +1,28 @@
+import json
+import re
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from backend.app.models import Category, Record, RecordStatus
+from backend.app.services.auth_service import create_session, create_user
 from backend.app.services.material_mapping import MaterialMatch
+
+STATIC_UI_PAGES = [
+    Path("backend/app/static/home.html"),
+    Path("backend/app/static/login.html"),
+    Path("backend/app/static/setup.html"),
+    Path("backend/app/static/admin.html"),
+    Path("backend/app/static/mobile.html"),
+    Path("backend/app/static/outbound.html"),
+    Path("backend/app/static/transfers.html"),
+]
+
+
+def _static_text(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8")
 
 
 def test_health(client: TestClient) -> None:
@@ -11,6 +30,22 @@ def test_health(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_database_url_can_be_overridden_for_isolated_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from backend.app import config as config_module
+
+    config_module.get_settings.cache_clear()
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'isolated.db'}")
+    try:
+        settings = config_module.get_settings()
+    finally:
+        config_module.get_settings.cache_clear()
+
+    assert settings.database_path == tmp_path / "isolated.db"
 
 
 def test_runtime_status_exposes_mobile_test_switches(client: TestClient) -> None:
@@ -152,19 +187,87 @@ def test_outbound_page_serves_html(client: TestClient) -> None:
     assert "displayValue(row.difference)" in response.text
     assert "row.quantity || '-'" not in response.text
     assert "String(value || '')" not in response.text
+    assert "/login?next=" in response.text
+    assert "/static/i18n.js" in response.text
+    assert "outbound.page.title" in response.text
 
 
-def test_outbound_query_accepts_multiple_selected_orders(client: TestClient, monkeypatch) -> None:
+def test_auth_pages_are_linked_from_static_routes(client: TestClient) -> None:
+    response = client.get("/workbench")
+
+    assert response.status_code == 200
+    assert "/api/workbench" in response.text
+    assert "/static/i18n.js" in response.text
+    assert "workbench.modules.title" in response.text
+
+
+def test_static_role_ui_contracts_are_explicit() -> None:
+    workbench = _static_text("backend/app/static/home.html")
+    mobile = _static_text("backend/app/static/mobile.html")
+    admin = _static_text("backend/app/static/admin.html")
+    transfers = _static_text("backend/app/static/transfers.html")
+
+    assert "renderModules(payload.modules || [])" in workbench
+    assert "payload.global_stats" in workbench
+    assert 'href="/admin"' not in mobile
+    assert 'href="/transfers"' not in mobile
+    assert 'href="/dashboard"' not in mobile
+    assert 'id="adminContent" hidden' in admin
+    assert 'id="accessDenied" hidden' in admin
+    assert 'id="createUserForm"' in admin
+    assert 'id="assignedOrder"' in admin
+    assert "outbound_last_order_no" in admin
+    assert "can_manage_users" in admin
+    assert 'id="createTransferCard" hidden' in transfers
+    assert "can_manage_transfers" in transfers
+
+
+def test_static_i18n_keys_exist_for_three_languages() -> None:
+    locale_payloads = {
+        locale: json.loads(
+            Path(f"backend/app/static/i18n/{locale}.json").read_text(encoding="utf-8")
+        )
+        for locale in ("zh", "en", "de")
+    }
+    key_pattern = re.compile(
+        r"""data-i18n(?:-placeholder)?=["']([^"']+)["']|tr\(["']([^"']+)["']"""
+    )
+    keys: set[str] = set()
+    for path in STATIC_UI_PAGES:
+        text = path.read_text(encoding="utf-8")
+        for match in key_pattern.finditer(text):
+            keys.add(next(group for group in match.groups() if group))
+
+    missing = {
+        locale: sorted(key for key in keys if key not in payload)
+        for locale, payload in locale_payloads.items()
+    }
+    assert missing == {"zh": [], "en": [], "de": []}
+
+
+def test_outbound_query_accepts_multiple_selected_orders(
+    client: TestClient, session: Session, monkeypatch
+) -> None:
     from backend.app.routes import outbound
 
     captured = {}
 
-    def fake_query(code, selected_orders=None):
+    def fake_query(code, selected_orders=None, allowed_orders=None):
         captured["code"] = code
         captured["selected_orders"] = selected_orders
+        captured["allowed_orders"] = allowed_orders
         return {"query": code, "selected_order_numbers": selected_orders or []}
 
     monkeypatch.setattr(outbound, "query_outbound", fake_query)
+    manager = create_user(
+        session,
+        username="query-manager",
+        display_name="Query Manager",
+        password="query-manager-pass",
+        role="manager",
+    )
+    token, _ = create_session(session, manager, ip_address="testclient", user_agent="pytest")
+    client.cookies.set("mlocr_session", token)
 
     response = client.get(
         "/api/outbound/query",
@@ -172,7 +275,11 @@ def test_outbound_query_accepts_multiple_selected_orders(client: TestClient, mon
     )
 
     assert response.status_code == 200
-    assert captured == {"code": "C.P.XS.000142004", "selected_orders": ["SO1", "SO2"]}
+    assert captured == {
+        "code": "C.P.XS.000142004",
+        "selected_orders": ["SO1", "SO2"],
+        "allowed_orders": None,
+    }
 
 
 def test_mobile_page_serves_phone_intake_view(client: TestClient) -> None:

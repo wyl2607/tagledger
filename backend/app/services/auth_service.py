@@ -51,6 +51,15 @@ def users_exist(session: Session) -> bool:
     return session.exec(select(User.id).limit(1)).first() is not None
 
 
+def normalize_assigned_order_no(value: str | None) -> str | None:
+    cleaned = "".join(ch for ch in (value or "").upper() if ch.isalnum())
+    if not cleaned:
+        return None
+    if cleaned.startswith("5"):
+        cleaned = "S" + cleaned[1:]
+    return cleaned[:80]
+
+
 def audit_event(
     session: Session,
     *,
@@ -92,6 +101,7 @@ def create_user(
     password: str,
     role: str,
     actor: User | None = None,
+    outbound_last_order_no: str | None = None,
 ) -> User:
     username = username.strip().lower()
     if not username:
@@ -106,6 +116,7 @@ def create_user(
         password_hash=hash_password(password),
         role=role,
         status="active",
+        outbound_last_order_no=normalize_assigned_order_no(outbound_last_order_no),
     )
     session.add(user)
     session.commit()
@@ -117,7 +128,11 @@ def create_user(
         actor=actor,
         target_type="user",
         target_id=str(user.id),
-        detail={"username": user.username, "role": user.role},
+        detail={
+            "username": user.username,
+            "role": user.role,
+            "outbound_last_order_no": user.outbound_last_order_no,
+        },
     )
     return user
 
@@ -131,6 +146,7 @@ def update_user_account(
     role: str | None = None,
     status: str | None = None,
     must_change_password: bool | None = None,
+    outbound_last_order_no: str | None = None,
 ) -> User:
     if role is not None and role not in ROLE_LEVELS:
         raise RuntimeError(f"unknown role: {role}")
@@ -149,6 +165,9 @@ def update_user_account(
     if must_change_password is not None:
         user.must_change_password = must_change_password
         changes["must_change_password"] = must_change_password
+    if outbound_last_order_no is not None:
+        user.outbound_last_order_no = normalize_assigned_order_no(outbound_last_order_no)
+        changes["outbound_last_order_no"] = user.outbound_last_order_no
     user.updated_at = utc_now()
     session.add(user)
     session.commit()
