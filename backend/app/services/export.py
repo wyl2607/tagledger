@@ -28,11 +28,8 @@ def _sanitize_csv_cell(value: object) -> object:
         return value
     if not value:
         return value
-    first = value[0]
     stripped = value.lstrip(" \t\r")
-    if first in DANGEROUS_CSV_PREFIXES or (
-        first in {" ", "\t", "\r"} and stripped and stripped[0] in DANGEROUS_CSV_PREFIXES
-    ):
+    if stripped and stripped[0] in DANGEROUS_CSV_PREFIXES:
         return f"'{value}"
     return value
 

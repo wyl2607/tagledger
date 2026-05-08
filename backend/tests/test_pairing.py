@@ -143,7 +143,12 @@ class TestPairingRedeem:
         monkeypatch.setattr(get_settings(), "pairing_block_minutes", 1)
 
         with TestClient(app) as c:
-            c.post(
+            first = c.post(
+                "/api/pairing/redeem",
+                json={"token": "bad-token"},
+                headers=_headers(),
+            )
+            second = c.post(
                 "/api/pairing/redeem",
                 json={"token": "bad-token"},
                 headers=_headers(),
@@ -153,7 +158,10 @@ class TestPairingRedeem:
                 json={"token": "bad-token"},
                 headers=_headers(),
             )
-            assert blocked.status_code == 401
+            assert first.status_code == 401
+            assert second.status_code == 401
+            assert blocked.status_code == 429
+            assert blocked.json()["detail"] == "rate limited"
             now = pm.time.time()
             assert pm._blocked_until["10.9.8.8"] == pytest.approx(now + 60, abs=1)
 

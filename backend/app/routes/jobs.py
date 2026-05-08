@@ -142,7 +142,7 @@ def get_record_image(
         else (upload_root / image_path_raw).resolve()
     )
     try:
-        image_path.relative_to(upload_root)
+        _ = image_path.relative_to(upload_root)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="image not found") from exc
     if not image_path.exists() or not image_path.is_file():
