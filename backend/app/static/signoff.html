@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign-off · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f5f7fa; }
+    .signoff-shell { display: grid; gap: 22px; padding-bottom: 48px; }
+    .panel { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+    .panel h2 { margin: 0; font-size: 22px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; justify-content: space-between; }
+    .filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .filter-row label { display: grid; gap: 4px; color: var(--muted); font-weight: 850; }
+    .filter-row select { min-width: 220px; }
+    .candidate-list { display: grid; gap: 12px; }
+    .candidate-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+    .candidate-main { display: grid; gap: 8px; min-width: 0; }
+    .candidate-title { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-weight: 950; font-size: 19px; }
+    .candidate-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--muted); font-weight: 800; }
+    .candidate-actions { display: grid; gap: 8px; align-content: start; min-width: 210px; }
+    .candidate-actions .secondary[disabled] { opacity: 0.72; cursor: not-allowed; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 14px; font-weight: 900; background: #e5e7eb; color: #374151; }
+    .status-ready_for_assist { background: #dbeafe; color: #1d4ed8; }
+    .status-assist_previewed { background: #fef3c7; color: #92400e; }
+    .status-manually_completed { background: #d1fae5; color: #065f46; }
+    .status-needs_review { background: #fee2e2; color: #991b1b; }
+    .pairing-box { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .pairing-box code { display: block; white-space: normal; overflow-wrap: anywhere; font-weight: 800; }
+    .access-denied { border-left: 8px solid var(--warning); }
+    @media (max-width: 820px) {
+      .candidate-card { grid-template-columns: 1fr; }
+      .candidate-actions { min-width: 0; }
+      .filter-row, .filter-row label, .filter-row select, .toolbar button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/workbench">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="signoff.title">退货签核</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-link" href="/workbench" data-i18n="admin.action.backWorkbench">返回工作台</a>
+        <button type="button" class="secondary" id="logoutBtn" data-i18n="admin.logout">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <h1 data-i18n="signoff.title">退货签核</h1>
+    <p class="subtitle" data-i18n="signoff.subtitle">主管和管理员在这里查看候选单，生成短期配对链接，并把 PC 助手保持在 dry-run 预览模式。</p>
+    <p class="muted" id="currentUser"></p>
+  </header>
+
+  <main class="signoff-shell" id="signoffContent" hidden>
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2 data-i18n="signoff.queue.title">候选单队列</h2>
+          <p class="muted" id="queueSummary" data-i18n="common.loading">加载中</p>
+        </div>
+        <div class="filter-row">
+          <label>
+            <span data-i18n="signoff.filter.status">状态</span>
+            <select id="statusFilter">
+              <option value="" data-i18n="common.all">全部</option>
+              <option value="ready_for_assist" data-i18n="signoff.status.ready_for_assist">待配对</option>
+              <option value="assist_previewed" data-i18n="signoff.status.assist_previewed">已预览</option>
+              <option value="needs_review" data-i18n="signoff.status.needs_review">需复审</option>
+              <option value="manually_completed" data-i18n="signoff.status.manually_completed">人工完成</option>
+            </select>
+          </label>
+          <button type="button" id="refreshBtn" data-i18n="signoff.action.refresh">刷新</button>
+        </div>
+      </div>
+      <div id="candidateList" class="candidate-list"></div>
+    </section>
+  </main>
+
+  <main class="signoff-shell" id="accessDenied" hidden>
+    <section class="panel access-denied">
+      <h2 data-i18n="error.permissionDenied">权限不足</h2>
+      <p class="muted" data-i18n="signoff.accessDenied">需要主管或管理员权限才能管理退货签核候选单。</p>
+      <div class="actions">
+        <a class="nav-link" href="/workbench" data-i18n="admin.action.backWorkbench">返回工作台</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js?v=role-nav"></script>
+  <script>
+    const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+
+    let latestPayload = null;
+
+    function statusLabel(status) {
+      const key = `signoff.status.${status}`;
+      const value = tr(key);
+      return value === key ? status : value;
+    }
+
+    function statusBadge(status) {
+      return `<span class="status-badge status-${esc(status)}">${esc(statusLabel(status))}</span>`;
+    }
+
+    function absolutePreviewUrl(path) {
+      return new URL(path, window.location.origin).toString();
+    }
+
+    async function copyText(text, button) {
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = tr('signoff.action.copied');
+      } catch (error) {
+        button.textContent = tr('signoff.action.copyFailed');
+      }
+      setTimeout(() => { button.textContent = tr('signoff.action.copyPreview'); }, 1600);
+    }
+
+    function renderPairing(target, payload) {
+      const url = absolutePreviewUrl(payload.preview_url);
+      target.innerHTML = `
+        <div class="pairing-box">
+          <strong>${esc(tr('signoff.pairing.ready'))}</strong>
+          <span class="muted">${esc(tr('signoff.pairing.expiresAt', { time: payload.expires_at }))}</span>
+          <code>${esc(url)}</code>
+          <code>${esc(payload.token)}</code>
+          <button type="button" class="copy-preview">${esc(tr('signoff.action.copyPreview'))}</button>
+          <button type="button" class="secondary revoke-pairing">${esc(tr('signoff.action.revokePairing'))}</button>
+        </div>
+      `;
+      target.querySelector('.copy-preview').addEventListener('click', (event) => {
+        copyText(url, event.currentTarget);
+      });
+      target.querySelector('.revoke-pairing').addEventListener('click', (event) => {
+        revokePairing(payload.pairing_key_id, target, event.currentTarget);
+      });
+    }
+
+    async function revokePairing(pairingKeyId, target, button) {
+      button.disabled = true;
+      button.textContent = tr('common.loading');
+      try {
+        const payload = await AuthUI.fetchJson(`/api/signoff/pairing-keys/${pairingKeyId}/revoke`, {
+          method: 'POST',
+        });
+        target.innerHTML = `
+          <div class="pairing-box">
+            <strong>${esc(tr('signoff.pairing.revoked'))}</strong>
+            <span class="muted">${esc(tr('signoff.pairing.revokedAt', { time: payload.pairing_key.revoked_at }))}</span>
+          </div>
+        `;
+      } catch (error) {
+        target.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
+    }
+
+    async function createPairing(candidateId, target, button) {
+      button.disabled = true;
+      button.textContent = tr('common.loading');
+      try {
+        const payload = await AuthUI.fetchJson(`/api/signoff/candidates/${candidateId}/pairing-keys`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ttl_minutes: 30 }),
+        });
+        renderPairing(target, payload);
+      } catch (error) {
+        target.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      } finally {
+        button.disabled = false;
+        button.textContent = tr('signoff.action.generatePairing');
+      }
+    }
+
+    function renderCandidates(payload) {
+      latestPayload = payload;
+      document.querySelector('#queueSummary').textContent = tr('signoff.queue.summary', {
+        shown: payload.candidates.length,
+        total: payload.total,
+      });
+      if (!payload.candidates.length) {
+        document.querySelector('#candidateList').innerHTML = `<p class="muted">${esc(tr('signoff.queue.empty'))}</p>`;
+        return;
+      }
+      document.querySelector('#candidateList').innerHTML = payload.candidates.map((candidate) => {
+        const canPair = ['ready_for_assist', 'assist_previewed'].includes(candidate.status);
+        return `
+        <article class="candidate-card" data-candidate-id="${esc(candidate.id)}" data-can-pair="${canPair ? '1' : '0'}">
+          <div class="candidate-main">
+            <div class="candidate-title">
+              <span>#${esc(candidate.id)}</span>
+              ${statusBadge(candidate.status)}
+              <span>${esc(candidate.business_key || '-')}</span>
+            </div>
+            <div class="candidate-meta">
+              <span>${esc(tr('signoff.field.returnReference'))}: ${esc(candidate.return_reference || '-')}</span>
+              <span>${esc(tr('signoff.field.productModel'))}: ${esc(candidate.product_model || '-')}</span>
+              <span>${esc(tr('signoff.field.serialNumber'))}: ${esc(candidate.serial_number || '-')}</span>
+              <span>${esc(tr('signoff.field.confirmedBy'))}: ${esc(candidate.confirmed_by || '-')}</span>
+            </div>
+          </div>
+          <div class="candidate-actions">
+            <button type="button" class="${canPair ? 'generate-pairing' : 'secondary'}" ${canPair ? '' : 'disabled'}>${esc(tr(canPair ? 'signoff.action.generatePairing' : 'signoff.action.closed'))}</button>
+            <div class="pairing-target"></div>
+          </div>
+        </article>
+      `;
+      }).join('');
+      document.querySelectorAll('.candidate-card').forEach((card) => {
+        if (card.dataset.canPair !== '1') return;
+        const candidateId = card.dataset.candidateId;
+        const button = card.querySelector('.generate-pairing');
+        const target = card.querySelector('.pairing-target');
+        button.addEventListener('click', () => createPairing(candidateId, target, button));
+      });
+    }
+
+    async function loadCandidates() {
+      const status = document.querySelector('#statusFilter').value;
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      const payload = await AuthUI.fetchJson(`/api/signoff/candidates${query}`);
+      renderCandidates(payload);
+    }
+
+    async function loadSignoff() {
+      const user = await AuthUI.currentUser();
+      if (!user) {
+        AuthUI.redirectToLogin();
+        return;
+      }
+      if (!AuthUI.hasCapability(user, 'can_manage_signoff')) {
+        document.querySelector('#accessDenied').hidden = false;
+        return;
+      }
+      document.querySelector('#currentUser').textContent = tr('admin.currentUser', {
+        name: user.display_name,
+        username: user.username,
+        role: user.role,
+      });
+      document.querySelector('#signoffContent').hidden = false;
+      await loadCandidates();
+    }
+
+    document.querySelector('#statusFilter').addEventListener('change', loadCandidates);
+    document.querySelector('#refreshBtn').addEventListener('click', loadCandidates);
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await AuthUI.logout();
+      window.location.href = '/login';
+    });
+
+    I18n.init().then(loadSignoff);
+    window.addEventListener('i18n:change', () => {
+      if (latestPayload) renderCandidates(latestPayload);
+    });
+  </script>
+</body>
+</html>

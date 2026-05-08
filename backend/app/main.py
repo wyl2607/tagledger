@@ -21,6 +21,7 @@ from backend.app.routes import (
     metrics,
     outbound,
     pairing,
+    signoff,
     transfers,
     upload,
 )
@@ -190,6 +191,14 @@ def setup_page(session: Session = Depends(get_session)) -> Response:
     return FileResponse(setup_path)
 
 
+@app.get("/signoff", include_in_schema=False)
+def signoff_page() -> FileResponse:
+    signoff_path = STATIC_DIR / "signoff.html"
+    if not signoff_path.exists():
+        raise HTTPException(status_code=404, detail="signoff page not found")
+    return FileResponse(signoff_path)
+
+
 @app.get("/admin", include_in_schema=False)
 def admin_page() -> FileResponse:
     admin_path = STATIC_DIR / "admin.html"
@@ -205,6 +214,7 @@ app.include_router(export.router)
 app.include_router(metrics.router)
 app.include_router(outbound.router)
 app.include_router(transfers.router)
+app.include_router(signoff.router)
 app.include_router(auth.router)
 app.include_router(auth.admin_router)
 app.include_router(auth.workbench_router)

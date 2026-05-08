@@ -74,6 +74,7 @@ def _user_payload(user: User) -> dict[str, object]:
             "can_manage_transfers": has_role(user, "supervisor"),
             "can_manage_users": has_role(user, "manager"),
             "can_view_audit_logs": has_role(user, "manager"),
+            "can_manage_signoff": has_role(user, "supervisor") or has_role(user, "manager"),
         },
         "must_change_password": user.must_change_password,
         "created_at": user.created_at.isoformat(),
@@ -229,17 +230,33 @@ def _module_payload(user: User) -> list[dict[str, object]]:
                     "href": "/dashboard",
                     "group": "records",
                 },
+                {
+                    "id": "signoff",
+                    "title": "退货签核",
+                    "description": "查看候选单、生成配对链接，并跟踪人工处理状态。",
+                    "href": "/signoff",
+                    "group": "admin",
+                },
             ]
         )
     if has_role(user, "manager"):
-        modules.append(
-            {
-                "id": "admin",
-                "title": "账号与权限",
-                "description": "管理账号等级、停用账号和重置密码。",
-                "href": "/admin",
-                "group": "admin",
-            }
+        modules.extend(
+            [
+                {
+                    "id": "signoff",
+                    "title": "退货签核",
+                    "description": "查看候选单、生成配对链接，并跟踪人工处理状态。",
+                    "href": "/signoff",
+                    "group": "admin",
+                },
+                {
+                    "id": "admin",
+                    "title": "账号与权限",
+                    "description": "管理账号等级、停用账号和重置密码。",
+                    "href": "/admin",
+                    "group": "admin",
+                },
+            ]
         )
     return modules
 

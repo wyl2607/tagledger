@@ -18,6 +18,7 @@ STATIC_UI_PAGES = [
     Path("backend/app/static/mobile.html"),
     Path("backend/app/static/outbound.html"),
     Path("backend/app/static/transfers.html"),
+    Path("backend/app/static/signoff.html"),
 ]
 
 
@@ -46,6 +47,22 @@ def test_database_url_can_be_overridden_for_isolated_runs(
         config_module.get_settings.cache_clear()
 
     assert settings.database_path == tmp_path / "isolated.db"
+
+
+def test_database_url_normalization_supports_alembic() -> None:
+    from backend.app.config import Settings, normalize_database_url
+
+    assert (
+        normalize_database_url("postgresql://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert (
+        normalize_database_url("postgres://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert Settings(database_url="sqlite:///data/app.db").resolved_database_url.endswith(
+        "/data/app.db"
+    )
 
 
 def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestClient) -> None:
@@ -207,11 +224,22 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "workbench.modules.title" in response.text
 
 
+def test_signoff_page_serves_management_console(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/signoff")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert 'data-i18n="signoff.title"' in response.text
+    assert "/api/signoff/candidates" in response.text
+    assert "can_manage_signoff" in response.text
+
+
 def test_static_role_ui_contracts_are_explicit() -> None:
     workbench = _static_text("backend/app/static/home.html")
     mobile = _static_text("backend/app/static/mobile.html")
     admin = _static_text("backend/app/static/admin.html")
     transfers = _static_text("backend/app/static/transfers.html")
+    signoff = _static_text("backend/app/static/signoff.html")
 
     assert "renderModules(payload.modules || [])" in workbench
     assert "payload.global_stats" in workbench
@@ -226,6 +254,11 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert "can_manage_users" in admin
     assert 'id="createTransferCard" hidden' in transfers
     assert "can_manage_transfers" in transfers
+    assert "can_manage_signoff" in signoff
+    assert "/api/signoff/candidates" in signoff
+    assert "copyPreview" in signoff
+    assert "'Content-Type': 'application/json'" in signoff
+    assert "/api/signoff/pairing-keys/${pairingKeyId}/revoke" in signoff
 
 
 def test_static_i18n_keys_exist_for_three_languages() -> None:

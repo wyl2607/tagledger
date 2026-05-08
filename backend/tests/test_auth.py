@@ -500,3 +500,74 @@ def test_manager_workbench_keeps_global_visibility(
     ]
     assert client.get("/api/transfers").status_code == 200
     assert client.get("/api/reports/factory-summary").status_code == 200
+
+
+def test_workbench_modules_include_signoff_for_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    supervisor = create_user(
+        session,
+        username="bridge-supervisor",
+        display_name="Bridge Supervisor",
+        password="bridge-supervisor-pass",
+        role="supervisor",
+    )
+    token, _ = create_session(session, supervisor, ip_address="testclient", user_agent="pytest")
+    from backend.tests.conftest import set_authenticated_session
+
+    set_authenticated_session(client, token)
+
+    response = client.get("/api/workbench")
+    assert response.status_code == 200
+    payload = response.json()
+    module_ids = [m["id"] for m in payload["modules"]]
+    assert "signoff" in module_ids
+    assert payload["user"]["capabilities"]["can_manage_signoff"] is True
+
+
+def test_workbench_modules_include_signoff_for_manager(
+    client: TestClient,
+    session: Session,
+) -> None:
+    manager = create_user(
+        session,
+        username="bridge-manager",
+        display_name="Bridge Manager",
+        password="bridge-manager-pass",
+        role="manager",
+    )
+    token, _ = create_session(session, manager, ip_address="testclient", user_agent="pytest")
+    from backend.tests.conftest import set_authenticated_session
+
+    set_authenticated_session(client, token)
+
+    response = client.get("/api/workbench")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user"]["capabilities"]["can_manage_signoff"] is True
+    assert "signoff" in [m["id"] for m in payload["modules"]]
+
+
+def test_workbench_modules_hide_signoff_for_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    operator = create_user(
+        session,
+        username="bridge-operator-wb",
+        display_name="Bridge Operator WB",
+        password="bridge-operator-wb-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
+    from backend.tests.conftest import set_authenticated_session
+
+    set_authenticated_session(client, token)
+
+    response = client.get("/api/workbench")
+    assert response.status_code == 200
+    payload = response.json()
+    module_ids = [m["id"] for m in payload["modules"]]
+    assert "signoff" not in module_ids
+    assert payload["user"]["capabilities"]["can_manage_signoff"] is False

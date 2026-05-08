@@ -33,6 +33,14 @@ def os_default_log_dir() -> Path:
     return os_default_data_dir() / "logs"
 
 
+def normalize_database_url(url: str) -> str:
+    raw_url = url.strip()
+    for prefix in ("postgresql://", "postgres://"):
+        if raw_url.startswith(prefix):
+            return raw_url.replace(prefix, "postgresql+psycopg://", 1)
+    return raw_url
+
+
 class Settings(BaseModel):
     database_url: str = "sqlite:///data/app.db"
     upload_dir: str = "data/uploads"
@@ -70,6 +78,16 @@ class Settings(BaseModel):
     @property
     def effective_log_dir(self) -> Path:
         return Path(self.log_dir) if self.log_dir else ROOT_DIR
+
+    @property
+    def resolved_database_url(self) -> str:
+        normalized = normalize_database_url(self.database_url)
+        if normalized.startswith("sqlite:///"):
+            raw_path = Path(normalized.removeprefix("sqlite:///"))
+            if raw_path.is_absolute():
+                return f"sqlite:///{raw_path.as_posix()}"
+            return f"sqlite:///{(ROOT_DIR / raw_path).as_posix()}"
+        return normalized
 
     @property
     def database_path(self) -> Path:
