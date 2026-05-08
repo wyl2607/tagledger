@@ -156,7 +156,7 @@ def test_history_page_serves_history_view(authenticated_client: TestClient) -> N
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "TagLedger History" in response.text
+    assert "历史记录 · TagLedger" in response.text
     assert 'data-i18n="history.title"' in response.text
     assert "/records/" in response.text
     assert "/export.csv" in response.text

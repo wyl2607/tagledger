@@ -1,0 +1,17 @@
+# Runtime-only dependencies for the desktop beta sidecar.
+# Excludes dev tools (pytest, ruff, httpx) and Postgres driver (desktop is SQLite-only).
+# Pinned upper bounds avoid surprise major bumps in beta builds.
+alembic>=1.18.0,<2.0
+fastapi>=0.115.0,<1.0
+openpyxl>=3.1.0,<4.0
+pandas>=2.2.0,<3.0
+pyarrow>=16.0.0,<22.0
+python-multipart>=0.0.9,<1.0
+sqlmodel>=0.0.22,<1.0
+uvicorn[standard]>=0.30.0,<1.0
+pyyaml>=6.0.0,<7.0
+# OCR + barcode (M2 bundles Tesseract binary separately)
+pytesseract>=0.3.10,<1.0
+Pillow>=10.0.0,<12.0
+opencv-python-headless>=4.9.0,<5.0
+pyzbar>=0.1.9,<1.0

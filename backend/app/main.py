@@ -11,8 +11,19 @@ from sqlmodel import Session
 from backend.app.auth import current_user_optional
 from backend.app.config import get_settings
 from backend.app.database import create_db_and_tables, get_session
+from backend.app.middleware.lan_guard import LanGuardMiddleware, PairingMiddleware
 from backend.app.models import User
-from backend.app.routes import auth, confirm, export, jobs, metrics, outbound, transfers, upload
+from backend.app.routes import (
+    auth,
+    confirm,
+    export,
+    jobs,
+    metrics,
+    outbound,
+    pairing,
+    transfers,
+    upload,
+)
 from backend.app.services.auth_service import CSRF_COOKIE, CSRF_HEADER, users_exist
 from backend.app.workers.submit_worker import enqueue_pending_confirmed
 
@@ -35,7 +46,12 @@ app = FastAPI(title="TagLedger", version="0.1.0", lifespan=lifespan)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/setup"}
+CSRF_EXEMPT_PATHS = {
+    "/api/auth/login",
+    "/api/auth/setup",
+    "/api/pairing/redeem",
+    "/api/pairing/regenerate",
+}
 CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
@@ -192,3 +208,16 @@ app.include_router(transfers.router)
 app.include_router(auth.router)
 app.include_router(auth.admin_router)
 app.include_router(auth.workbench_router)
+app.include_router(pairing.router)
+
+
+@app.get("/pair", include_in_schema=False)
+def pair_page() -> FileResponse:
+    pair_path = STATIC_DIR / "pair.html"
+    if not pair_path.exists():
+        raise HTTPException(status_code=404, detail="pair page not found")
+    return FileResponse(pair_path)
+
+
+app.add_middleware(LanGuardMiddleware)
+app.add_middleware(PairingMiddleware)

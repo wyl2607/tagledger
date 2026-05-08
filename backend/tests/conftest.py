@@ -58,7 +58,13 @@ def session(tmp_path) -> Generator[Session, None, None]:
 
 
 @pytest.fixture()
-def client(session: Session) -> Generator[TestClient, None, None]:
+def client(session: Session, monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "lan_guard_enabled", False)
+    monkeypatch.setattr(settings, "pairing_enabled", False)
+
     def override_get_session() -> Generator[Session, None, None]:
         yield session
 

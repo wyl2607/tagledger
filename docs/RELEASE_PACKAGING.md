@@ -78,3 +78,36 @@ Tesseract is installed outside the release package.
 - Windows: https://github.com/UB-Mannheim/tesseract/wiki
 
 The release package is a source package, not a single executable. A future PyInstaller package can be added later when the app interface and OCR dependencies stabilize.
+
+## Desktop Launcher (M3)
+
+Windows beta builds use a Tauri v2 launcher wrapped around the M2 PyInstaller onedir sidecar. Build the sidecar first, because the Tauri build fails if `dist/tagledger-server/tagledger_server.exe` is missing.
+
+```powershell
+pwsh -File packaging/windows/build_backend.ps1
+cd desktop
+npm install
+```
+
+Dev mode:
+
+```powershell
+npm run tauri dev
+```
+
+Release build:
+
+```powershell
+npm run tauri build
+```
+
+Outputs:
+
+```text
+desktop/src-tauri/target/release/bundle/msi/
+desktop/src-tauri/target/release/bundle/nsis/
+```
+
+M3 is Windows-only and unsigned. macOS and Linux desktop bundles are intentionally out of scope for this beta.
+
+The launcher Rust code has a macOS sidecar path scaffold (`dist-macos/tagledger-server/tagledger_server`) so the next milestone can add a signed/notarized macOS package without changing the process manager contract. Do not enable `.app` or `.dmg` targets until the macOS sidecar build and signing/notarization plan are ready.

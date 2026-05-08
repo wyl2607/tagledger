@@ -68,6 +68,92 @@ def test_github_preflight_workflow_runs_required_local_gates() -> None:
     assert "python -m pytest backend/tests -q" in workflow
 
 
+def test_windows_packaging_layout_present() -> None:
+    """M2 desktop-beta packaging skeleton exists and references the M1 entry point."""
+    spec = Path("packaging/windows/tagledger_server.spec").read_text(encoding="utf-8")
+    build = Path("packaging/windows/build_backend.ps1").read_text(encoding="utf-8")
+    vendor = Path("packaging/windows/vendor_tesseract.ps1").read_text(encoding="utf-8")
+    runtime_reqs = Path("requirements-runtime.txt").read_text(encoding="utf-8")
+
+    # Spec must point at backend/app/cli.py (the M1 launcher entry).
+    assert "'backend' / 'app' / 'cli.py'" in spec or "backend/app/cli.py" in spec
+    # Onedir, console build, no UPX (AV friendliness).
+    assert "console=True" in spec
+    assert "upx=False" in spec
+    # Tesseract bundle is wired through datas with destination 'tesseract'.
+    assert "vendor" in spec and "tesseract" in spec
+    # Postgres driver excluded (desktop is SQLite-only); opencv excluded in
+    # favor of opencv-python-headless.
+    assert "psycopg" in spec
+    assert "opencv" in spec
+
+    # Build orchestrator runs vendor → pip install → pyinstaller → smoke.
+    assert "vendor_tesseract.ps1" in build
+    assert "requirements-runtime.txt" in build
+    assert "tagledger_server.spec" in build
+    # Smoke must hit /health and assert bad Host returns 421.
+    assert "/health" in build
+    assert "421" in build
+
+    # Vendor script must verify chi_sim integrity (placeholder OK; mismatch path
+    # must throw on first proper run).
+    assert "chi_sim.traineddata" in vendor
+    assert "SHA256" in vendor.upper()
+    assert "throw" in vendor
+
+    # Runtime deps must drop dev-only and Postgres tooling.
+    deps = [
+        line.strip()
+        for line in runtime_reqs.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    deps_blob = "\n".join(deps)
+    assert "pytest" not in deps_blob
+    assert "ruff" not in deps_blob
+    assert "psycopg" not in deps_blob
+    assert "uvicorn[standard]" in deps_blob
+    assert "pytesseract" in deps_blob
+
+
+def test_windows_packaging_vendor_directory_excluded() -> None:
+    gitignore = Path("packaging/windows/.gitignore").read_text(encoding="utf-8")
+    # The downloaded Tesseract binary + tessdata are large and license-bundled
+    # separately; they must not enter version control.
+    assert "vendor/" in gitignore
+
+
+def test_desktop_launcher_layout_present() -> None:
+    """M3 Tauri launcher exists and is wired to the M2 sidecar bundle."""
+    cfg = Path("desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+    assert '"productName"' in cfg
+    # Must bundle the M2 onedir as a resource (not externalBin; onedir is a folder).
+    assert "tagledger-server" in cfg
+    assert "externalBin" not in cfg
+    # Windows-only beta: msi + nsis, no other targets.
+    assert '"msi"' in cfg
+    assert '"nsis"' in cfg
+    for forbidden in ('"dmg"', '"appimage"', '"deb"', '"rpm"'):
+        assert forbidden not in cfg, f"M3 must not enable {forbidden}"
+
+    cargo = Path("desktop/src-tauri/Cargo.toml").read_text(encoding="utf-8")
+    # Tauri v2, single-instance plugin wired.
+    assert "tauri = " in cargo
+    assert "tauri-plugin-single-instance" in cargo
+
+    # Build script must hard-fail if the M2 sidecar bundle is missing,
+    # so contributors don't ship a Windows launcher with no backend. macOS is
+    # scaffold-only until the signed sidecar bundle lands.
+    build_rs = Path("desktop/src-tauri/build.rs").read_text(encoding="utf-8")
+    assert "tagledger_server.exe" in build_rs
+    assert "dist-macos" in build_rs
+    assert "cargo:warning=macOS sidecar bundle missing" in build_rs
+    assert "panic!" in build_rs or "compile_error" in build_rs
+
+    gitignore = Path("desktop/.gitignore").read_text(encoding="utf-8")
+    for pat in ("target/", "node_modules/", "dist/", "src-tauri/gen/"):
+        assert pat in gitignore
+
+
 def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
     public_text = "\n".join(
         Path(path).read_text(encoding="utf-8") for path in ("README.md", "docs/WINDOWS_DEPLOY.md")

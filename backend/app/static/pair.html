@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>设备配对 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    .pair-shell {
+      min-height: calc(100vh - 72px);
+      display: grid;
+      place-items: center;
+    }
+    .pair-card {
+      width: min(520px, 100%);
+      text-align: center;
+    }
+    .pair-mark {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 20px;
+      background: var(--orange);
+      color: var(--ink);
+      font-size: 30px;
+      font-weight: 950;
+    }
+    .msg {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--soft);
+      color: var(--muted);
+      font-weight: 900;
+      line-height: 1.45;
+    }
+    .msg.success {
+      background: #dcfce7;
+      color: #14532d;
+    }
+    .msg.error {
+      background: #fee2e2;
+      color: #7f1d1d;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong>TagLedger</strong><span>手机配对</span></span>
+      </a>
+      <div class="nav-actions">
+        <a class="nav-button" href="/login">登录</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="pair-shell">
+    <section class="card pair-card">
+      <div class="pair-mark">TL</div>
+      <h1>设备配对</h1>
+      <p class="muted">正在把这台手机授权给当前 TagLedger 服务。</p>
+      <div class="msg" id="status" role="status" aria-live="polite">正在连接...</div>
+    </section>
+  </main>
+
+  <script>
+  (async () => {
+    const p = new URLSearchParams(location.search);
+    const t = p.get('t');
+    const el = document.getElementById('status');
+    if (!t) {
+      el.textContent = '缺少配对令牌，请重新扫描启动页二维码。';
+      el.className = 'msg error';
+      return;
+    }
+    try {
+      const r = await fetch('/api/pairing/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: t })
+      });
+      const data = await r.json();
+      if (data.ok) {
+        el.textContent = '配对成功，正在进入手机扫码页...';
+        el.className = 'msg success';
+        location.href = '/mobile';
+      } else {
+        el.textContent = `${data.detail || '配对失败'}，请回到电脑端重新生成二维码。`;
+        el.className = 'msg error';
+      }
+    } catch (e) {
+      el.textContent = '网络错误，请确认手机和电脑在同一个内网。';
+      el.className = 'msg error';
+    }
+  })();
+  </script>
+</body>
+</html>

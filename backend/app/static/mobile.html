@@ -1,68 +1,91 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN" class="notranslate">
 <head>
   <meta charset="utf-8">
+  <meta name="google" content="notranslate">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mobile Capture - TagLedger</title>
   <link rel="stylesheet" href="/static/ui.css">
   <style>
-    body { min-height: 100svh; overflow-x: hidden; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { min-height: 100svh; overflow-x: hidden; font-size: 14px; }
     .mobile-nav {
       position: sticky;
       top: 0;
       z-index: 30;
       background: rgba(254,254,254,.98);
       border-bottom: 1px solid var(--line);
-      padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+      padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
     }
     .mobile-nav-inner {
       max-width: 480px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 72px 1fr;
-      gap: 8px;
+      grid-template-columns: 52px minmax(0, 1fr) 112px;
+      gap: 6px;
       align-items: center;
     }
+    .mobile-nav .nav-button {
+      min-height: 42px;
+      padding: 0 6px;
+      border-radius: 12px;
+      font-size: 15px;
+    }
     .step-title {
-      min-height: 56px;
+      min-height: 42px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 16px;
+      border-radius: 12px;
       background: var(--soft);
-      font-size: 22px;
+      font-size: 17px;
       font-weight: 950;
+      white-space: nowrap;
     }
-    .lang-switch { grid-column: 1 / -1; width: 100%; grid-template-columns: 1fr 1fr 1fr; }
+    .mobile-nav .lang-switch {
+      grid-column: auto;
+      width: 100%;
+      min-height: 42px;
+      grid-template-columns: 1fr 1fr 1fr;
+      border-radius: 12px;
+      padding: 3px;
+    }
+    .mobile-nav .lang-switch button {
+      min-height: 34px;
+      padding: 0 4px;
+      border-radius: 9px;
+      font-size: 13px;
+    }
     main {
       max-width: 480px;
-      min-height: calc(100svh - 140px);
-      padding: 0 0 calc(96px + env(safe-area-inset-bottom));
+      min-height: calc(100svh - 68px);
+      padding: 0 0 calc(128px + env(safe-area-inset-bottom));
     }
     .wizard-step { display: none; }
     .wizard-step.active { display: block; }
     .capture-stage {
-      min-height: calc(100svh - 156px);
+      min-height: calc(100svh - 84px);
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      gap: 16px;
-      padding: 16px;
+      grid-template-rows: auto auto auto auto;
+      gap: 12px;
+      padding: 12px;
       background: #0a0a0a;
       color: #fff;
     }
     .capture-top {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      grid-template-columns: minmax(108px, .82fr) minmax(0, 1.18fr);
+      gap: 10px;
       align-items: end;
     }
-    .capture-top label { color: #fff; margin-top: 0; }
-    .capture-top select { background: #fff; color: var(--ink); }
+    .capture-top label { color: #fff; margin-top: 0; font-size: 14px; }
+    .capture-top select { min-height: 44px; background: #fff; color: var(--ink); font-size: 16px; }
     select option[data-done="true"] { color: var(--muted); }
-    .runtime-meta { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .runtime-meta { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+    .runtime-meta .pill { min-height: 30px; padding: 0 8px; font-size: 12px; }
     .locator {
       position: relative;
-      min-height: 420px;
+      min-height: clamp(240px, 38svh, 320px);
       border-radius: 16px;
       display: grid;
       place-items: center;
@@ -79,28 +102,28 @@
     }
     .locator-label {
       z-index: 2;
-      max-width: 260px;
+      max-width: 240px;
       text-align: center;
       color: #fff;
-      font-size: 24px;
+      font-size: 18px;
       font-weight: 950;
       line-height: 1.25;
     }
     .corner {
       position: absolute;
       z-index: 3;
-      width: 54px;
-      height: 54px;
+      width: 44px;
+      height: 44px;
       border-color: #fff;
       border-style: solid;
       pointer-events: none;
     }
-    .corner-tl { top: 24px; left: 24px; border-width: 6px 0 0 6px; }
-    .corner-tr { top: 24px; right: 24px; border-width: 6px 6px 0 0; }
-    .corner-bl { bottom: 24px; left: 24px; border-width: 0 0 6px 6px; }
-    .corner-br { right: 24px; bottom: 24px; border-width: 0 6px 6px 0; }
-    .capture-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .capture-buttons button { min-height: 64px; }
+    .corner-tl { top: 18px; left: 18px; border-width: 4px 0 0 4px; }
+    .corner-tr { top: 18px; right: 18px; border-width: 4px 4px 0 0; }
+    .corner-bl { bottom: 18px; left: 18px; border-width: 0 0 4px 4px; }
+    .corner-br { right: 18px; bottom: 18px; border-width: 0 4px 4px 0; }
+    .capture-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .capture-buttons button { min-height: 52px; font-size: 18px; }
     .photo-guide {
       border: 1px solid rgba(255,255,255,.3);
       border-radius: 16px;
@@ -114,16 +137,18 @@
     .outbound-panel {
       border: 1px solid rgba(255,255,255,.3);
       border-radius: 16px;
-      padding: 16px;
+      padding: 10px;
       background: rgba(255,255,255,.08);
       color: #fff;
     }
-    .outbound-panel label { color: #fff; margin-top: 0; }
-    .outbound-panel select { background: #fff; color: var(--ink); }
+    .outbound-panel h2 { margin-bottom: 8px; font-size: 20px; }
+    .outbound-panel label { color: #fff; margin: 8px 0 5px; font-size: 14px; }
+    .outbound-panel select { min-height: 44px; background: #fff; color: var(--ink); font-size: 16px; }
     .manual-match-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-    .manual-match-form input { background: #fff; color: var(--ink); min-width: 0; }
-    .manual-match-form button { width: auto; min-height: 48px; padding: 0 14px; background: #fff; color: var(--ink); }
-    .manual-match-status { display: grid; gap: 6px; margin-top: 8px; color: #fff; font-size: 14px; overflow-wrap: anywhere; }
+    .manual-match-form input { min-height: 44px; background: #fff; color: var(--ink); min-width: 0; font-size: 15px; }
+    .manual-match-form button { width: auto; min-height: 44px; padding: 0 10px; background: #fff; color: var(--ink); font-size: 15px; }
+    .manual-match-status { display: grid; gap: 4px; margin-top: 6px; color: #fff; font-size: 12px; line-height: 1.32; overflow-wrap: anywhere; }
+    .outbound-panel .manual-match-status span { display: none; }
     .outbound-card {
       border: 2px solid var(--line);
       border-radius: 16px;
@@ -187,19 +212,19 @@
     .scan-alt strong { display: block; }
     .scan-alt-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-top: 8px; }
     .scan-alt-row button { width: auto; min-height: 42px; padding: 0 12px; }
-    .outbound-mini-list { display: grid; gap: 8px; margin-top: 12px; }
+    .outbound-mini-list { display: grid; gap: 8px; margin-top: 8px; }
     .outbound-mini-row { border: 1px solid rgba(255,255,255,.24); border-radius: 12px; padding: 10px; background: rgba(255,255,255,.08); }
     .outbound-mini-row strong, .outbound-mini-row span { display: block; overflow-wrap: anywhere; }
     .outbound-mini-row button { min-height: 44px; margin-top: 8px; font-size: 16px; }
     .outbound-history-row { display: grid; gap: 6px; }
     .outbound-history-row button { width: 100%; }
     .outbound-history-meta { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-    .outbound-mini-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .outbound-mini-kpi { border: 1px solid rgba(255,255,255,.24); border-radius: 12px; padding: 10px; background: rgba(255,255,255,.08); }
+    .outbound-mini-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .outbound-mini-kpi { border: 1px solid rgba(255,255,255,.24); border-radius: 10px; padding: 8px; background: rgba(255,255,255,.08); }
     .outbound-mini-kpi strong, .outbound-mini-kpi span { display: block; overflow-wrap: anywhere; }
-    .outbound-mini-kpi strong { color: #fff; font-size: 24px; }
-    .outbound-mini-kpi span { color: rgba(255,255,255,.82); font-size: 13px; }
-    .outbound-progress { height: 10px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.25); }
+    .outbound-mini-kpi strong { color: #fff; font-size: 20px; }
+    .outbound-mini-kpi span { color: rgba(255,255,255,.82); font-size: 12px; }
+    .outbound-progress { height: 8px; margin-top: 5px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.25); }
     .outbound-progress span { display: block; height: 100%; border-radius: inherit; background: #22c55e; }
     .outbound-qty-controls { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; margin-top: 10px; }
     .outbound-qty-controls input { min-height: 52px; text-align: center; font-size: 22px; font-weight: 950; }
@@ -249,23 +274,30 @@
       right: 0;
       bottom: 0;
       z-index: 40;
-      padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
       background: rgba(254,254,254,.98);
       border-top: 1px solid var(--line);
     }
     .sticky-actions-inner {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      gap: 10px;
       max-width: 480px;
       margin: 0 auto;
     }
+    .sticky-actions button { min-height: 48px; border-radius: 14px; font-size: 18px; }
     .sticky-actions-inner.single { grid-template-columns: 1fr; }
+    body[data-step="capture"]:not([data-has-photo="true"]) main {
+      padding-bottom: calc(32px + env(safe-area-inset-bottom));
+    }
+    body[data-step="capture"]:not([data-has-photo="true"]) .sticky-actions {
+      display: none;
+    }
     .record { text-align: left; }
     .empty { color: var(--muted); text-align: center; }
     @media (max-width: 380px) {
       .capture-top, .capture-buttons, .row, .sticky-actions-inner { grid-template-columns: 1fr; }
-      .locator { min-height: 360px; }
+      .locator { min-height: 300px; }
     }
   </style>
 </head>
@@ -300,6 +332,17 @@
         <input id="cameraFile" class="visually-hidden" name="cameraFile" type="file" accept="image/*,.jpg,.jpeg,.png,.webp" capture="environment">
         <input id="galleryFile" class="visually-hidden" name="galleryFile" type="file" accept="image/*,.jpg,.jpeg,.png,.webp">
       </form>
+      <div class="locator" id="preview">
+        <span class="corner corner-tl"></span>
+        <span class="corner corner-tr"></span>
+        <span class="corner corner-bl"></span>
+        <span class="corner corner-br"></span>
+        <div class="locator-label" data-i18n="mobile.capture.locator">Place label inside the corners</div>
+      </div>
+      <div class="capture-buttons">
+        <button class="capture-primary" id="cameraBtn" type="button" data-i18n="mobile.capture.camera">Take photo</button>
+        <button class="secondary" id="galleryBtn" type="button" data-i18n="mobile.capture.gallery">Choose image</button>
+      </div>
       <section class="outbound-panel" aria-labelledby="outboundScanTitle">
         <h2 id="outboundScanTitle" data-i18n="outbound.mobile.title">Outbound order scan check</h2>
         <label for="outboundOrderSelect" data-i18n="outbound.mobile.currentOrder">Current outbound order</label>
@@ -320,17 +363,6 @@
         <div id="outboundCaptureScanResult" class="outbound-card" hidden></div>
         <div class="outbound-mini-list" id="outboundOrderPreview"></div>
       </section>
-      <div class="locator" id="preview">
-        <span class="corner corner-tl"></span>
-        <span class="corner corner-tr"></span>
-        <span class="corner corner-bl"></span>
-        <span class="corner corner-br"></span>
-        <div class="locator-label" data-i18n="mobile.capture.locator">Place label inside the corners</div>
-      </div>
-      <div class="capture-buttons">
-        <button class="capture-primary" id="cameraBtn" type="button" data-i18n="mobile.capture.camera">Take photo</button>
-        <button class="secondary" id="galleryBtn" type="button" data-i18n="mobile.capture.gallery">Choose image</button>
-      </div>
       <section class="photo-guide" aria-labelledby="mobilePhotoGuideTitle">
         <h2 id="mobilePhotoGuideTitle" data-i18n="guide.title">Photo guide</h2>
         <ol>
@@ -800,6 +832,8 @@
 
     function applyStep(nextStep) {
       step = nextStep;
+      document.body.dataset.step = step;
+      document.body.dataset.hasPhoto = selectedFile ? 'true' : 'false';
       document.querySelectorAll('[data-step]').forEach((section) => {
         section.classList.toggle('active', section.dataset.step === step);
       });
@@ -1771,6 +1805,7 @@
       uploadForm.reset();
       currentRecord = null;
       selectedFile = null;
+      document.body.dataset.hasPhoto = 'false';
       lastAutoUploadedSignature = '';
       if (selectedPreviewUrl) {
         URL.revokeObjectURL(selectedPreviewUrl);
@@ -1830,9 +1865,11 @@
       preview.querySelectorAll('img').forEach((img) => img.remove());
       if (!file) {
         selectedFile = null;
+        document.body.dataset.hasPhoto = 'false';
         return;
       }
       selectedFile = file;
+      document.body.dataset.hasPhoto = 'true';
       selectedPreviewUrl = URL.createObjectURL(file);
       const img = document.createElement('img');
       img.src = selectedPreviewUrl;

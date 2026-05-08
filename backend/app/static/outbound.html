@@ -3,18 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Outbound Reconciliation</title>
+  <title>出库核对 · TagLedger</title>
   <link rel="stylesheet" href="/static/ui.css">
   <style>
+    body { background: #f5f7fa; }
+    main.outbound-page { display: grid; gap: 16px; padding-bottom: 48px; }
+    .outbound-tools { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr); gap: 16px; align-items: start; }
     table { width: 100%; border-collapse: collapse; min-width: 920px; }
     th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
     th { background: var(--soft); font-weight: 950; }
     .table-wrap { overflow: auto; }
-    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-    .kpi { border: 1px solid var(--line); border-radius: 16px; padding: 16px; background: #fff; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .kpi { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fff; }
     .kpi span { display: block; color: var(--muted); }
     .kpi strong { font-size: 28px; }
-    .order-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .order-picker { max-height: 360px; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; overflow: auto; padding-right: 4px; }
     .order-choice { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #fff; font-weight: 850; }
     .scan-result { margin-top: 12px; border-radius: 16px; border: 1px solid var(--line); background: #fff; padding: 16px; }
     .scan-ok { border-color: #22c55e; background: #f0fdf4; }
@@ -24,10 +27,12 @@
     .status-matched { color: #15803d; font-weight: 950; }
     .status-over_shipped, .status-shipping_extra { color: #b45309; font-weight: 950; }
     .status-under_shipped, .status-cutting_missing_shipping { color: #b91c1c; font-weight: 950; }
-    @media (max-width: 800px) { .kpis { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) {
+      .outbound-tools, .kpis { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
-<body>
+<body data-page="outbound">
   <div class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/workbench"><span class="logo">TL</span><span><strong data-i18n="outbound.page.title">出库核对</strong><span data-i18n="outbound.page.brandSub">剪料表 / 发货单</span></span></a>
@@ -39,6 +44,8 @@
         </div>
         <a class="nav-button" href="/workbench" data-i18n="workbench.brand">工作台</a>
         <a class="nav-button" href="/mobile" data-i18n="nav.mobile">手机</a>
+        <a class="nav-button" href="/outbound" aria-current="page" data-i18n="nav.outbound">出库核对</a>
+        <a class="nav-button" href="/dashboard" data-i18n="nav.dashboard">看板</a>
         <a class="nav-button" href="/history" data-i18n="nav.history">历史</a>
       </div>
     </div>
@@ -47,7 +54,8 @@
     <h1 data-i18n="outbound.page.title">出库核对</h1>
     <p class="muted" data-i18n="outbound.page.subtitle">使用发货单后两个工作表：多物料订单发货单 + 拣货单。输入配件编码 / 瑞云料号 / SKU 查询对应出库单。</p>
   </header>
-  <main>
+  <main class="outbound-page">
+    <div class="outbound-tools">
     <section class="card">
       <h2 data-i18n="outbound.page.orders.title">当前可核对出库单号</h2>
       <p class="muted" data-i18n="outbound.page.orders.subtitle">发货员账号只会显示分配给自己的单号；主管和管理者可以选择多个单号做整体核对。</p>
@@ -58,6 +66,7 @@
       <div id="orderPicker" class="order-picker"></div>
     </section>
     <section class="card">
+      <h2 data-i18n="outbound.page.query.button">扫描/查询</h2>
       <label for="codeQuery" data-i18n="outbound.page.query.label">配件编码 / 瑞云料号 / SKU</label>
       <div class="actions">
         <input id="codeQuery" data-i18n-placeholder="outbound.page.query.placeholder" placeholder="例如 C.P.XS.000142004 或 MTL24LUM1US02">
@@ -65,6 +74,7 @@
       </div>
       <div id="queryResult" class="status"></div>
     </section>
+    </div>
     <section class="card">
       <h2 data-i18n="outbound.page.summary.title">总览</h2>
       <div class="kpis" id="kpis"></div>

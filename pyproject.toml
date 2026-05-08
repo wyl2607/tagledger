@@ -43,5 +43,8 @@ ignore = ["E501"]
 "backend/app/routes/*.py" = ["B008"]
 "backend/tests/*.py" = ["F811"]
 
+[project.scripts]
+tagledger-server = "backend.app.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["backend*"]

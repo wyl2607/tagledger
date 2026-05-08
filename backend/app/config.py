@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -8,6 +9,28 @@ from pydantic import BaseModel
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 logger = logging.getLogger(__name__)
+
+
+def os_default_data_dir() -> Path:
+    """Per-platform user data dir for the desktop launcher.
+
+    Windows: %APPDATA%\\TagLedger
+    macOS:   ~/Library/Application Support/TagLedger
+    Linux:   $XDG_DATA_HOME/tagledger or ~/.local/share/tagledger
+    """
+    if sys.platform == "win32":
+        base = os.getenv("APPDATA") or str(Path.home() / "AppData/Roaming")
+        return Path(base) / "TagLedger"
+    if sys.platform == "darwin":
+        return Path.home() / "Library/Application Support/TagLedger"
+    xdg = os.getenv("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "tagledger"
+    return Path.home() / ".local/share/tagledger"
+
+
+def os_default_log_dir() -> Path:
+    return os_default_data_dir() / "logs"
 
 
 class Settings(BaseModel):
@@ -33,19 +56,44 @@ class Settings(BaseModel):
     outbound_shipping_text_path: str = "data/outbound/shipping.txt"
     cookie_secure: bool = False
     csrf_protection: bool = True
+    lan_guard_enabled: bool = True
+    pairing_enabled: bool = True
+    pairing_rate_limit_per_min: int = 5
+    pairing_block_minutes: int = 10
+    data_dir: str | None = None
+    log_dir: str | None = None
+
+    @property
+    def effective_data_dir(self) -> Path:
+        return Path(self.data_dir) if self.data_dir else ROOT_DIR
+
+    @property
+    def effective_log_dir(self) -> Path:
+        return Path(self.log_dir) if self.log_dir else ROOT_DIR
 
     @property
     def database_path(self) -> Path:
         if not self.database_url.startswith("sqlite:///"):
             raise ValueError("Phase 1 only supports sqlite:/// database URLs")
-        return ROOT_DIR / self.database_url.removeprefix("sqlite:///")
+        relative = self.database_url.removeprefix("sqlite:///")
+        # When the desktop launcher provides a data dir AND the URL is still the
+        # default `sqlite:///data/app.db`, reroute the SQLite file under it so
+        # user data lives outside the install directory. An explicit, non-default
+        # database_url (e.g. tests pointing at a tmp file) is honored as-is.
+        if self.data_dir and relative == "data/app.db":
+            return Path(self.data_dir) / "app.db"
+        return ROOT_DIR / relative
 
     @property
     def upload_path(self) -> Path:
+        if self.data_dir:
+            return Path(self.data_dir) / "uploads"
         return ROOT_DIR / self.upload_dir
 
     @property
     def screenshot_path(self) -> Path:
+        if self.data_dir:
+            return Path(self.data_dir) / "screenshots"
         return ROOT_DIR / self.screenshot_dir
 
     @property
@@ -58,6 +106,8 @@ class Settings(BaseModel):
 
     @property
     def playwright_log_path(self) -> Path:
+        if self.log_dir:
+            return Path(self.log_dir) / "playwright.log"
         return ROOT_DIR / self.playwright_log
 
     @property
@@ -109,6 +159,10 @@ def get_settings() -> Settings:
             "no",
             "off",
         }
+    if os.getenv("TAGLEDGER_DATA_DIR"):
+        app_config["data_dir"] = os.getenv("TAGLEDGER_DATA_DIR")
+    if os.getenv("TAGLEDGER_LOG_DIR"):
+        app_config["log_dir"] = os.getenv("TAGLEDGER_LOG_DIR")
     settings = Settings(**app_config)
     if not settings.dry_run and (not settings.saas_username or not settings.saas_password):
         logger.warning("SAAS_USERNAME/SAAS_PASSWORD are not set; forcing SaaS dry_run=True")

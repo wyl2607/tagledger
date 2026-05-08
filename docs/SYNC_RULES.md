@@ -8,8 +8,11 @@ This document defines the only supported sync path for TagLedger development acr
 - Visibility: private GitHub repository.
 - Default branch: `main`.
 - Current UI work branch: `ui/mobile-history-v1`.
+- Current desktop beta development branch: `codex/desktop-m4-macos-launcher`.
 
 The GitHub remote is the source of truth for code sync. Local databases, uploaded images, screenshots, logs, OCR scratch files, browser storage state, and private requirement notes are never synced through Git.
+
+For the current desktop beta line, the active development baseline is the clean Mac checkout on `codex/desktop-m4-macos-launcher`. Treat the Windows machine as a real build and smoke-test host only until the branch is pushed and reviewed. Do not continue coding from a Windows worktree that was populated by rsync or contains verification scripts, screenshots, installers, or other dirty runtime artifacts.
 
 ## Branch Rules
 
@@ -63,6 +66,22 @@ git push origin ui/mobile-history-v1
 
 Use explicit `git add <intended-files>`. Do not use broad staging when local runtime files exist.
 
+For the desktop beta line, continue implementation and commits on the Mac branch:
+
+```bash
+cd <tagledger-checkout>
+git switch codex/desktop-m4-macos-launcher
+git status --short --branch
+
+./scripts/run_preflight.sh
+./scripts/security_check.sh
+scripts/site_ui_qa.py
+cd desktop && npm run build
+cd src-tauri && cargo check
+```
+
+The expected baseline before Windows handoff is a clean Mac worktree with the desktop branch commits in order. If local docs such as `docs/M4_MACOS_PLAN.md` are still untracked, classify and commit or intentionally keep them local before handoff; do not hide them by syncing a dirty tree.
+
 ## Windows Or Server Update Flow
 
 Use this flow on Windows or servers after Mac changes are pushed:
@@ -75,6 +94,24 @@ git pull --ff-only
 python -m pip install -e ".[dev,ocr,barcode]"
 python -m pytest backend/tests -q
 ```
+
+For desktop beta validation before push, Windows is a packaging and physical-device verification host, not the development baseline. Create or refresh a clean Windows test directory from the Mac HEAD instead of reusing a dirty rsync validation tree:
+
+```powershell
+# Example target: <clean-windows-test-dir>
+git status --short --branch
+git clean -ndx
+```
+
+Run only the Windows acceptance gates needed for the beta:
+
+```powershell
+.\packaging\windows\build_backend.ps1
+cd desktop
+npm run tauri build
+```
+
+Then complete launcher UI smoke and phone LAN QR validation from the built installer or launcher. Verification artifacts such as screenshots, click scripts, temporary PowerShell wrappers, installers, and logs stay on Windows and must not become the next coding baseline.
 
 For PowerShell, use the same Git commands, then:
 

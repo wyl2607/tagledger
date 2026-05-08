@@ -53,6 +53,22 @@
     .section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
     .section-head h2 { margin: 0; font-size: 24px; }
     .section-head p { margin: 6px 0 0; }
+    .quick-path {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .quick-path-item {
+      min-height: 92px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      font-weight: 900;
+    }
+    .quick-path-item strong { display: block; margin-bottom: 6px; font-size: 20px; }
+    .quick-path-item span { display: block; color: var(--muted); font-size: 16px; line-height: 1.35; }
     .module-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
     .module-card {
       min-height: 148px;
@@ -85,7 +101,7 @@
     }
     .daily-item:last-child { border-bottom: 0; }
     @media (max-width: 920px) {
-      .hero-panel, .module-grid, .stat-row { grid-template-columns: 1fr; }
+      .hero-panel, .quick-path, .module-grid, .stat-row { grid-template-columns: 1fr; }
       .hero-copy { min-height: 0; padding: 22px; }
       .hero-copy h1 { font-size: 30px; }
       .topbar-user { justify-content: stretch; }
@@ -133,6 +149,12 @@
           <div class="stat-tile"><span data-i18n="workbench.globalStats.scans">全员扫码</span><strong id="globalScans">0</strong></div>
         </div>
       </aside>
+    </section>
+
+    <section class="quick-path" aria-label="推荐工作路径">
+      <div class="quick-path-item"><strong>发货员</strong><span>手机扫码 → 我的发货单 → 我的近 7 天。</span></div>
+      <div class="quick-path-item"><strong>主管</strong><span>出库核对 → 调拨 → 全局看板。</span></div>
+      <div class="quick-path-item"><strong>管理者</strong><span>账号权限 → 分配单号 → 审计和统计。</span></div>
     </section>
 
     <section>
