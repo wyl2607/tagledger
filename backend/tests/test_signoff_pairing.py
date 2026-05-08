@@ -254,6 +254,35 @@ def test_signoff_decision_marks_candidate_manually_completed(
     assert stored_session.operator_decision == "manually_completed"
 
 
+def test_signoff_decision_revokes_pairing_key_and_blocks_old_preview(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+
+    response = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={
+            "decision": "manually_completed",
+            "external_completion_mark": "operator confirmed external save",
+        },
+    )
+
+    assert response.status_code == 200
+    stored_key = session.exec(select(SignoffPairingKey)).one()
+    assert stored_key.status == SignoffPairingKeyStatus.revoked
+    assert stored_key.revoked_at is not None
+    client.cookies.clear()
+    client.headers.clear()
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 404
+    candidate = session.get(ReturnSignoffCandidate, candidate_id)
+    assert candidate is not None
+    assert candidate.status == ReturnSignoffStatus.manually_completed
+
+
 def test_signoff_decision_rejected_moves_candidate_to_review(
     client: TestClient,
     session: Session,
@@ -290,6 +319,12 @@ def test_signoff_decision_rejected_is_recorded(
     payload = response.json()
     assert payload["candidate"]["status"] == ReturnSignoffStatus.needs_review
     assert payload["assist_session"]["operator_decision"] == "rejected"
+    stored_key = session.exec(select(SignoffPairingKey)).one()
+    assert stored_key.status == SignoffPairingKeyStatus.revoked
+    assert stored_key.revoked_at is not None
+    client.cookies.clear()
+    client.headers.clear()
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 404
 
 
 def test_signoff_decision_rejects_unknown_value(

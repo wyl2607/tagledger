@@ -28,6 +28,10 @@ from backend.app.models import (
 
 router = APIRouter(prefix="/api/signoff", tags=["signoff"])
 PAIRING_PREVIEW_RATE_LIMIT_SECONDS = 3
+PREVIEWABLE_SIGNOFF_STATUSES = {
+    ReturnSignoffStatus.ready_for_assist,
+    ReturnSignoffStatus.assist_previewed,
+}
 
 
 class SignoffCandidateCreateRequest(BaseModel):
@@ -208,6 +212,22 @@ def _latest_open_assist_session(
     ).first()
 
 
+def _revoke_active_pairing_keys(
+    session: Session,
+    candidate_id: int,
+    revoked_at: datetime,
+) -> None:
+    pairing_keys = session.exec(
+        select(SignoffPairingKey)
+        .where(SignoffPairingKey.candidate_id == candidate_id)
+        .where(SignoffPairingKey.status == SignoffPairingKeyStatus.active)
+    ).all()
+    for pairing_key in pairing_keys:
+        pairing_key.status = SignoffPairingKeyStatus.revoked
+        pairing_key.revoked_at = pairing_key.revoked_at or revoked_at
+        session.add(pairing_key)
+
+
 @router.post("/candidates", status_code=201)
 def create_signoff_candidate(
     payload: SignoffCandidateCreateRequest,
@@ -320,10 +340,7 @@ def create_signoff_pairing_key(
     candidate = session.get(ReturnSignoffCandidate, candidate_id)
     if candidate is None:
         raise HTTPException(status_code=404, detail="candidate not found")
-    if candidate.status not in (
-        ReturnSignoffStatus.ready_for_assist,
-        ReturnSignoffStatus.assist_previewed,
-    ):
+    if candidate.status not in PREVIEWABLE_SIGNOFF_STATUSES:
         raise HTTPException(
             status_code=409,
             detail=f"candidate status is {candidate.status}, pairing is not allowed",
@@ -396,6 +413,11 @@ def get_signoff_assist_preview(
     candidate = session.get(ReturnSignoffCandidate, pairing_key.candidate_id)
     if candidate is None:
         raise HTTPException(status_code=404, detail="candidate not found")
+    if candidate.status not in PREVIEWABLE_SIGNOFF_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"candidate status is {candidate.status}, preview is not allowed",
+        )
     evidence_photos = session.exec(
         select(EvidencePhoto)
         .where(EvidencePhoto.candidate_id == candidate.id)
@@ -452,6 +474,8 @@ def record_signoff_decision(
         candidate.status = ReturnSignoffStatus.needs_review
     else:
         candidate.status = ReturnSignoffStatus.assist_previewed
+    if candidate.status not in PREVIEWABLE_SIGNOFF_STATUSES:
+        _revoke_active_pairing_keys(session, candidate_id, now)
     candidate.updated_at = now
     session.add(assist_session)
     session.add(candidate)
