@@ -156,4 +156,5 @@ The PC-side assistant may prepare a draft, focus a field, stage an attachment, o
 ## Implementation Progress
 
 - 2026-05-08: Added local-only data models and migration for `return_signoff_candidates` and `evidence_photos`. This establishes the storage base for future phone-confirmed return sign-off candidates without adding external SaaS mutation or browser automation.
-- Next slice: add supervisor/manager-only candidate API and sanitized dry-run payload flow before any Chrome extension or external SaaS interaction.
+- 2026-05-08: Added supervisor/manager-only local candidate API for creating a return sign-off candidate from a confirmed TagLedger record, listing candidates, and reading candidate evidence. Evidence paths are stored as repository-relative references.
+- Next slice: add pairing keys and sanitized dry-run payload flow before any Chrome extension or external SaaS interaction.
