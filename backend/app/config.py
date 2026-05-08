@@ -33,6 +33,12 @@ class Settings(BaseModel):
     outbound_shipping_text_path: str = "data/outbound/shipping.txt"
     cookie_secure: bool = False
     csrf_protection: bool = True
+    lan_guard_enabled: bool = True
+    pairing_enabled: bool = True
+    pairing_rate_limit_per_min: int = 5
+    pairing_block_minutes: int = 10
+    data_dir: str | None = None
+    log_dir: str | None = None
 
     @property
     def database_path(self) -> Path:

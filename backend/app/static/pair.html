@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pair Device — TagLedger</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; text-align: center; padding-top: 60px; background: #fff; color: #333; }
+  .msg { margin-top: 20px; font-size: 16px; }
+  .error { color: #c00; }
+</style>
+</head>
+<body>
+<h1>TagLedger</h1>
+<div class="msg" id="status">Connecting...</div>
+<script>
+(async () => {
+  const p = new URLSearchParams(location.search);
+  const t = p.get('t');
+  const el = document.getElementById('status');
+  if (!t) {
+    el.textContent = 'Missing token — 缺少配对令牌';
+    el.className = 'msg error';
+    return;
+  }
+  try {
+    const r = await fetch('/api/pairing/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: t })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      el.textContent = 'Paired! Redirecting...';
+      location.href = '/mobile';
+    } else {
+      el.textContent = (data.detail || 'Pairing failed') + ' — 配对失败';
+      el.className = 'msg error';
+    }
+  } catch (e) {
+    el.textContent = 'Network error — 网络错误';
+    el.className = 'msg error';
+  }
+})();
+</script>
+</body>
+</html>
