@@ -20,6 +20,21 @@ class RecordStatus(StrEnum):
     duplicate = "duplicate"
 
 
+class ReturnSignoffStatus(StrEnum):
+    draft = "draft"
+    ready_for_assist = "ready_for_assist"
+    assist_previewed = "assist_previewed"
+    manually_completed = "manually_completed"
+    needs_review = "needs_review"
+
+
+class EvidencePhotoType(StrEnum):
+    machine_label = "machine_label"
+    return_label = "return_label"
+    package = "package"
+    other = "other"
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -45,6 +60,39 @@ class Record(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     submitted_at: datetime | None = None
+
+
+class ReturnSignoffCandidate(SQLModel, table=True):
+    __tablename__ = "return_signoff_candidates"
+
+    id: int | None = Field(default=None, primary_key=True)
+    factory_id: str = Field(default="factory_a", index=True)
+    status: ReturnSignoffStatus = Field(default=ReturnSignoffStatus.draft, index=True)
+    business_key: str = Field(index=True)
+    return_reference: str | None = Field(default=None, index=True)
+    product_model: str | None = Field(default=None, index=True)
+    serial_number: str | None = Field(default=None, index=True)
+    captured_at: datetime | None = Field(default=None, index=True)
+    confirmed_by: str | None = Field(default=None, index=True)
+    ocr_confidence_summary: str | None = None
+    notes: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class EvidencePhoto(SQLModel, table=True):
+    __tablename__ = "evidence_photos"
+
+    id: int | None = Field(default=None, primary_key=True)
+    factory_id: str = Field(default="factory_a", index=True)
+    candidate_id: int = Field(index=True)
+    source_record_id: int | None = Field(default=None, index=True)
+    photo_type: EvidencePhotoType = Field(default=EvidencePhotoType.other, index=True)
+    storage_ref: str
+    capture_device: str = Field(default="phone", index=True)
+    ocr_text_summary: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class OutboundScan(SQLModel, table=True):

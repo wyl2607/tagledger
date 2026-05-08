@@ -48,6 +48,22 @@ def test_database_url_can_be_overridden_for_isolated_runs(
     assert settings.database_path == tmp_path / "isolated.db"
 
 
+def test_database_url_normalization_supports_alembic() -> None:
+    from backend.app.config import Settings, normalize_database_url
+
+    assert (
+        normalize_database_url("postgresql://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert (
+        normalize_database_url("postgres://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert Settings(database_url="sqlite:///data/app.db").resolved_database_url.endswith(
+        "/data/app.db"
+    )
+
+
 def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/runtime/status")
 

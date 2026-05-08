@@ -1,7 +1,7 @@
 """add_transfer_id
 
 Revision ID: 0005_add_transfer_id
-Revises: 0004_outbound_rollback_and_verification
+Revises: 0004_outbound_verify
 Create Date: 2026-05-06 01:35:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0005_add_transfer_id"
-down_revision: Union[str, Sequence[str], None] = "0004_outbound_rollback_and_verification"
+down_revision: Union[str, Sequence[str], None] = "0004_outbound_verify"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

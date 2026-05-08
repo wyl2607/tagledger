@@ -1,7 +1,7 @@
 """outbound_rollback_and_verification
 
 Revision ID: 0004_outbound_verify
-Revises: 0003_add_factory_id_to_all_tables
+Revises: 0003_factory_id_all_tables
 Create Date: 2026-05-06 00:05:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0004_outbound_verify"
-down_revision: Union[str, Sequence[str], None] = "0003_add_factory_id_to_all_tables"
+down_revision: Union[str, Sequence[str], None] = "0003_factory_id_all_tables"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
