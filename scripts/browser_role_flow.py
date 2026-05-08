@@ -230,8 +230,12 @@ def main() -> None:
         ):
             operator_mobile_page.locator("#outboundConfirmScanBtn").click()
         expect(operator_mobile_page.locator("#outboundCaptureScanResult")).to_contain_text(
-            "已出库",
+            "出库已记录",
             timeout=20_000,
+        )
+        expect(operator_mobile_page.locator("#outboundNextScanBtn")).to_contain_text(
+            "扫下一件",
+            timeout=10_000,
         )
         if operator_mobile_page.locator("#outboundCompleteOrderBtn").count():
             raise AssertionError("operator mobile can see complete-order supervisor action")
