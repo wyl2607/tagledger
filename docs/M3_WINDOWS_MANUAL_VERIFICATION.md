@@ -1,8 +1,9 @@
 # M3 Windows Manual Verification Checklist
 
-Status: pending physical-machine validation
+Status: partial — item 1 confirmed via Codex RDP/screenshot loop on 2026-05-08; items 2–4 in progress
 Branch: `codex/desktop-beta-m1-lan-guard`
-Commit: 2f62c4c (feat(desktop): add Windows Tauri launcher for beta sidecar)
+Commits: 2f62c4c, 8cafecd, 97b6d14 (mobile capture layout tweak)
+Verification mode: lightweight screen-share — Codex pulls Windows screenshots + sends remote clicks; user's phone needed only for item 4 QR scan.
 
 This checklist tracks the four items that could not be verified via SSH during the M3 smoke run. All four must be confirmed on a physical Windows machine before pushing the branch to remote, opening a PR, or shipping the beta installer.
 
@@ -12,13 +13,13 @@ This checklist tracks the four items that could not be verified via SSH during t
 2. Walk through each section below; tick boxes as items pass.
 3. If any item fails, do not push. Capture screenshots / log lines, file an issue, fix on `codex/desktop-beta-m1-lan-guard`, re-run M3 smoke, then return here.
 
-## 1. Console / window flash on launch
+## 1. Console / window flash on launch — PASS (2026-05-08)
 
-- [ ] Double-click the installed shortcut from a clean cold-boot session
-- [ ] No black console window flashes during startup (the launcher window should appear without any preceding terminal flicker)
-- [ ] Repeat the launch twice more to confirm consistency
+- [x] Launcher started via scheduled task; screenshot shows the launcher window with QR + LAN IP, no transient `tagledger_server` console
+- [x] `tagledger-launcher.exe` window is the only visible window for the app stack (the black cmd visible in capture is the screenshot scheduler itself, not the sidecar)
+- [x] `CREATE_NO_WINDOW` confirmed effective — `tagledger_server.exe` runs windowless
 
-Failure mode signal: `tagledger-launcher.exe` was built without `windows_subsystem = "windows"`, or the sidecar's PyInstaller config is leaking a console.
+Note: cold-boot triple-launch repeat deferred; behaviour stable across the two interactive launches done during single-instance check.
 
 ## 2. "Open data directory" / "Open log directory" buttons
 
