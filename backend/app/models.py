@@ -35,6 +35,15 @@ class EvidencePhotoType(StrEnum):
     other = "other"
 
 
+class SignoffPairingKeyStatus(StrEnum):
+    active = "active"
+    revoked = "revoked"
+
+
+class SignoffAssistMode(StrEnum):
+    dry_run = "dry_run"
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -91,6 +100,36 @@ class EvidencePhoto(SQLModel, table=True):
     storage_ref: str
     capture_device: str = Field(default="phone", index=True)
     ocr_text_summary: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class SignoffPairingKey(SQLModel, table=True):
+    __tablename__ = "signoff_pairing_keys"
+
+    id: int | None = Field(default=None, primary_key=True)
+    factory_id: str = Field(default="factory_a", index=True)
+    candidate_id: int = Field(index=True)
+    token_hash: str = Field(index=True, unique=True)
+    status: SignoffPairingKeyStatus = Field(default=SignoffPairingKeyStatus.active, index=True)
+    created_by: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime = Field(index=True)
+    revoked_at: datetime | None = Field(default=None, index=True)
+
+
+class SignoffAssistSession(SQLModel, table=True):
+    __tablename__ = "signoff_assist_sessions"
+
+    id: int | None = Field(default=None, primary_key=True)
+    factory_id: str = Field(default="factory_a", index=True)
+    candidate_id: int = Field(index=True)
+    pairing_key_id: int = Field(index=True)
+    mode: SignoffAssistMode = Field(default=SignoffAssistMode.dry_run, index=True)
+    prepared_payload_hash: str = Field(index=True)
+    previewed_at: datetime = Field(default_factory=utc_now, index=True)
+    operator_decision: str | None = Field(default=None, index=True)
+    external_completion_mark: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

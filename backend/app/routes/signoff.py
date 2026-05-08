@@ -1,4 +1,7 @@
-from datetime import datetime
+import hashlib
+import json
+import secrets
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,6 +18,10 @@ from backend.app.models import (
     RecordStatus,
     ReturnSignoffCandidate,
     ReturnSignoffStatus,
+    SignoffAssistMode,
+    SignoffAssistSession,
+    SignoffPairingKey,
+    SignoffPairingKeyStatus,
     User,
 )
 
@@ -26,6 +33,23 @@ class SignoffCandidateCreateRequest(BaseModel):
     business_key: str | None = Field(default=None, max_length=160)
     return_reference: str | None = Field(default=None, max_length=160)
     notes: str | None = Field(default=None, max_length=1000)
+
+
+class SignoffPairingKeyCreateRequest(BaseModel):
+    ttl_minutes: int = Field(default=30, ge=5, le=240)
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _payload_hash(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _utc_now_for_db() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _candidate_payload(candidate: ReturnSignoffCandidate) -> dict[str, object]:
@@ -51,7 +75,7 @@ def _evidence_payload(photo: EvidencePhoto) -> dict[str, object]:
         "candidate_id": photo.candidate_id,
         "source_record_id": photo.source_record_id,
         "photo_type": photo.photo_type.value,
-        "storage_ref": photo.storage_ref,
+        "storage_ref": _display_storage_ref(photo.storage_ref),
         "capture_device": photo.capture_device,
         "created_at": photo.created_at.isoformat(),
         "updated_at": photo.updated_at.isoformat(),
@@ -65,6 +89,35 @@ def _candidate_with_evidence_payload(
     return {
         "candidate": _candidate_payload(candidate),
         "evidence_photos": [_evidence_payload(photo) for photo in evidence_photos],
+    }
+
+
+def _assist_payload(
+    candidate: ReturnSignoffCandidate,
+    evidence_photos: list[EvidencePhoto],
+) -> dict[str, object]:
+    return {
+        "mode": SignoffAssistMode.dry_run.value,
+        "candidate": {
+            "id": candidate.id or 0,
+            "business_key": candidate.business_key,
+            "return_reference": candidate.return_reference,
+            "product_model": candidate.product_model,
+            "serial_number": candidate.serial_number,
+            "captured_at": candidate.captured_at.isoformat() if candidate.captured_at else None,
+            "ocr_confidence_summary": candidate.ocr_confidence_summary,
+            "notes": candidate.notes,
+        },
+        "evidence_photos": [
+            {
+                "id": photo.id or 0,
+                "photo_type": photo.photo_type.value,
+                "storage_ref": _display_storage_ref(photo.storage_ref),
+                "capture_device": photo.capture_device,
+            }
+            for photo in evidence_photos
+        ],
+        "manual_completion_required": True,
     }
 
 
@@ -90,7 +143,11 @@ def _business_key_from_record(
 
 
 def _storage_ref_from_record(record: Record) -> str:
-    image_path = Path(record.image_path)
+    return _display_storage_ref(record.image_path)
+
+
+def _display_storage_ref(storage_ref: str) -> str:
+    image_path = Path(storage_ref)
     try:
         return image_path.resolve().relative_to(ROOT_DIR).as_posix()
     except (OSError, ValueError):
@@ -216,3 +273,94 @@ def get_signoff_candidate(
         .order_by(EvidencePhoto.id)
     ).all()
     return _candidate_with_evidence_payload(candidate, evidence_photos)
+
+
+@router.post("/candidates/{candidate_id}/pairing-keys", status_code=201)
+def create_signoff_pairing_key(
+    candidate_id: int,
+    payload: SignoffPairingKeyCreateRequest | None = None,
+    user: User = Depends(require_supervisor),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    candidate = session.get(ReturnSignoffCandidate, candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="candidate not found")
+    if candidate.status not in (
+        ReturnSignoffStatus.ready_for_assist,
+        ReturnSignoffStatus.assist_previewed,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"candidate status is {candidate.status}, pairing is not allowed",
+        )
+
+    ttl_minutes = payload.ttl_minutes if payload is not None else 30
+    token = secrets.token_urlsafe(24)
+    expires_at = _utc_now_for_db() + timedelta(minutes=ttl_minutes)
+    pairing_key = SignoffPairingKey(
+        factory_id=candidate.factory_id,
+        candidate_id=candidate_id,
+        token_hash=_hash_token(token),
+        created_by=user.username,
+        expires_at=expires_at,
+    )
+    session.add(pairing_key)
+    session.commit()
+    session.refresh(pairing_key)
+
+    return {
+        "candidate_id": candidate_id,
+        "pairing_key_id": pairing_key.id or 0,
+        "token": token,
+        "expires_at": expires_at.isoformat(),
+        "preview_url": f"/api/signoff/assist/{token}/preview",
+    }
+
+
+@router.get("/assist/{token}/preview")
+def get_signoff_assist_preview(
+    token: str,
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    token_hash = _hash_token(token)
+    pairing_key = session.exec(
+        select(SignoffPairingKey).where(SignoffPairingKey.token_hash == token_hash)
+    ).first()
+    now = _utc_now_for_db()
+    if (
+        pairing_key is None
+        or pairing_key.status != SignoffPairingKeyStatus.active
+        or pairing_key.expires_at <= now
+    ):
+        raise HTTPException(status_code=404, detail="pairing key not found")
+
+    candidate = session.get(ReturnSignoffCandidate, pairing_key.candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="candidate not found")
+    evidence_photos = session.exec(
+        select(EvidencePhoto)
+        .where(EvidencePhoto.candidate_id == candidate.id)
+        .order_by(EvidencePhoto.id)
+    ).all()
+    payload = _assist_payload(candidate, evidence_photos)
+    prepared_payload_hash = _payload_hash(payload)
+
+    assist_session = SignoffAssistSession(
+        factory_id=candidate.factory_id,
+        candidate_id=candidate.id or 0,
+        pairing_key_id=pairing_key.id or 0,
+        prepared_payload_hash=prepared_payload_hash,
+        previewed_at=now,
+        updated_at=now,
+    )
+    candidate.status = ReturnSignoffStatus.assist_previewed
+    candidate.updated_at = now
+    session.add(assist_session)
+    session.add(candidate)
+    session.commit()
+
+    return {
+        "payload": payload,
+        "prepared_payload_hash": prepared_payload_hash,
+        "previewed_at": now.isoformat(),
+    }
