@@ -1,16 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TagLedger History</title>
+  <title>历史记录 · TagLedger</title>
   <link rel="stylesheet" href="/static/ui.css">
   <style>
     main { padding-top: 0; }
     .card { margin-bottom: 24px; }
     details.card summary { min-height: 56px; display: flex; align-items: center; cursor: pointer; font-size: 26px; font-weight: 950; }
-    .toolbar { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(220px, 1fr) minmax(150px, .7fr) minmax(150px, .7fr) auto auto; gap: 16px; align-items: end; margin-top: 16px; }
-    #statuses { min-height: 160px; }
+    .toolbar { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(320px, 1.6fr) minmax(150px, .7fr) minmax(150px, .7fr) auto auto; gap: 16px; align-items: end; margin-top: 16px; }
+    #statuses { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+    .status-filter-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .status-filter {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 950;
+      cursor: pointer;
+      user-select: none;
+    }
+    .status-filter input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+    .status-filter:has(input:checked) { border-color: var(--orange); background: #fff2ec; }
     .table-wrap { overflow: auto; padding: 0; }
     table { width: 100%; border-collapse: collapse; min-width: 960px; }
     th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: middle; font-size: 18px; }
@@ -79,6 +95,15 @@
             <option value="submission_failed" data-i18n="status.submissionFailed">submission_failed</option>
             <option value="duplicate" data-i18n="status.duplicate">duplicate</option>
           </select>
+          <div class="status-filter-group" aria-label="Status filters">
+            <label class="status-filter"><input type="checkbox" data-status-option value="uploaded"><span data-i18n="status.uploaded">uploaded</span></label>
+            <label class="status-filter"><input type="checkbox" data-status-option value="ocr_done"><span data-i18n="status.ocrDone">ocr_done</span></label>
+            <label class="status-filter"><input type="checkbox" data-status-option value="needs_review"><span data-i18n="status.needsReview">needs_review</span></label>
+            <label class="status-filter"><input type="checkbox" data-status-option value="confirmed"><span data-i18n="status.confirmed">confirmed</span></label>
+            <label class="status-filter"><input type="checkbox" data-status-option value="submitted"><span data-i18n="status.submitted">submitted</span></label>
+            <label class="status-filter"><input type="checkbox" data-status-option value="submission_failed"><span data-i18n="status.submissionFailed">submission_failed</span></label>
+            <label class="status-filter"><input type="checkbox" data-status-option value="duplicate"><span data-i18n="status.duplicate">duplicate</span></label>
+          </div>
         </div>
         <div><label for="dateFrom" data-i18n="history.filter.dateFrom">From</label><input id="dateFrom" type="date"></div>
         <div><label for="dateTo" data-i18n="history.filter.dateTo">To</label><input id="dateTo" type="date"></div>
@@ -130,6 +155,7 @@
     const rows = document.querySelector('#rows');
     const keyword = document.querySelector('#keyword');
     const statuses = document.querySelector('#statuses');
+    const statusCheckboxes = Array.from(document.querySelectorAll('[data-status-option]'));
     const dateFrom = document.querySelector('#dateFrom');
     const dateTo = document.querySelector('#dateTo');
     const pageInfo = document.querySelector('#pageInfo');
@@ -168,7 +194,14 @@
     }
 
     function selectedStatuses() {
-      return Array.from(statuses.selectedOptions).map((option) => option.value);
+      return statusCheckboxes.filter((option) => option.checked).map((option) => option.value);
+    }
+
+    function syncHiddenStatusSelect() {
+      const selected = new Set(selectedStatuses());
+      Array.from(statuses.options).forEach((option) => {
+        option.selected = selected.has(option.value);
+      });
     }
 
     function selectedOperatorId() {
@@ -293,9 +326,16 @@
     document.querySelector('#refreshBtn').addEventListener('click', () => loadRecords().catch(() => {}));
     prevBtn.addEventListener('click', () => { page = Math.max(0, page - 1); render(); });
     nextBtn.addEventListener('click', () => { page += 1; render(); });
-    [keyword, statuses, dateFrom, dateTo].forEach((control) => {
+    [keyword, dateFrom, dateTo].forEach((control) => {
       control.addEventListener('input', () => { page = 0; render(); });
       control.addEventListener('change', () => { page = 0; render(); });
+    });
+    statusCheckboxes.forEach((control) => {
+      control.addEventListener('change', () => {
+        syncHiddenStatusSelect();
+        page = 0;
+        render();
+      });
     });
     window.addEventListener('i18n:change', render);
 
