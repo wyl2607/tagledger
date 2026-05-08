@@ -62,7 +62,6 @@
     }
     .status-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .status-counts .status-pill { width: 100%; justify-content: space-between; gap: 12px; border: 0; }
-    .nav-actions .nav-button[aria-current="page"] { background: var(--orange); border-color: var(--orange); }
     @media (max-width: 960px) {
       .dashboard-head, .dashboard-grid, .kpi-grid { grid-template-columns: 1fr; }
       .dashboard-head h1 { font-size: 30px; }
@@ -85,6 +84,8 @@
         </div>
         <a class="nav-button" href="/workbench" data-i18n="workbench.brand">工作台</a>
         <a class="nav-button" href="/dashboard" aria-current="page" data-i18n="nav.dashboard">看板</a>
+        <a class="nav-button" href="/outbound" data-i18n="nav.outbound">出库核对</a>
+        <a class="nav-button" href="/transfers" data-i18n="nav.transfers">调拨</a>
       </div>
     </div>
   </div>

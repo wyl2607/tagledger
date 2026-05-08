@@ -10,6 +10,8 @@
     .auth-shell { max-width: 600px; margin: 0 auto; padding: 42px 24px; display: grid; gap: 18px; }
     .auth-card { display: grid; gap: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
     .auth-card h1 { margin: 0; font-size: 30px; }
+    .setup-next { display: grid; gap: 10px; margin-top: 4px; }
+    .setup-next div { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; font-weight: 850; }
     .form-grid { display: grid; gap: 14px; }
     .status-line { min-height: 24px; color: var(--muted); font-weight: 850; }
   </style>
@@ -37,6 +39,11 @@
       <div>
         <h1 data-i18n="auth.setup.title">初始化管理账号</h1>
         <p class="muted" data-i18n="auth.setup.subtitle">只在第一次安装时使用。密码至少 10 位，创建后请用该账号登录。</p>
+      </div>
+      <div class="setup-next" aria-label="初始化后步骤">
+        <div>1. 创建管理账号后进入后台。</div>
+        <div>2. 在后台创建发货员账号，并给发货员分配出库单号。</div>
+        <div>3. 发货员登录后只会看到自己的手机扫码和发货单。</div>
       </div>
       <form id="setupForm" class="form-grid">
         <div>
