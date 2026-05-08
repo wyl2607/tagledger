@@ -52,3 +52,31 @@ class TestLanGuardDisabled:
         resp = client.get("/health", headers=_set_host(None, "evil.com"))
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
+
+
+class TestLanGuardAllowedHostsEnv:
+    """TAGLEDGER_ALLOWED_HOSTS lets the Tauri launcher inject the LAN IP it
+    chose for the QR (the UDP probe may pick the wrong interface on multi-homed
+    hosts). Regression-guard the env path so it doesn't silently drop."""
+
+    def test_env_hosts_added_to_detection(self, monkeypatch):
+        monkeypatch.setenv("TAGLEDGER_ALLOWED_HOSTS", "tauri.local, 10.99.0.1 ")
+        import backend.app.middleware.lan_guard as lg
+
+        allowed = lg._detect_allowed_hosts()
+        assert "tauri.local" in allowed
+        assert "10.99.0.1" in allowed
+
+    def test_env_host_accepted_end_to_end(self, monkeypatch):
+        monkeypatch.setenv("TAGLEDGER_ALLOWED_HOSTS", "myalias.lan")
+        import backend.app.middleware.lan_guard as lg
+
+        # Force re-detection so the env value is picked up.
+        lg._allowed_hosts = None
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "127.0.0.1")
+        with TestClient(app) as c:
+            resp = c.get("/health", headers=_set_host(None, "myalias.lan"))
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "ok"
+        # Reset cache so other tests get a fresh detection.
+        lg._allowed_hosts = None
