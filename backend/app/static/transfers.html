@@ -112,6 +112,7 @@
     const listNode = document.querySelector('#transferList');
     const createCard = document.querySelector('#createTransferCard');
     const listCard = document.querySelector('#transferListCard');
+    let transferSubmitSeq = 0;
 
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -137,6 +138,7 @@
 
     async function createTransfer() {
       createBtn.disabled = true;
+      const idempotencyKey = `transfer-${Date.now()}-${transferSubmitSeq += 1}`;
       try {
         const payload = await AuthUI.fetchJson('/api/transfers', {
           method: 'POST',
@@ -147,6 +149,7 @@
             part_key: document.querySelector('#transferPart').value,
             quantity: Number(document.querySelector('#transferQty').value || 1),
             reason: document.querySelector('#transferReason').value || 'transfer',
+            idempotency_key: idempotencyKey,
           }),
         });
         createResult.innerHTML = `<span class="pill pill-green">${esc(tr('transfer.create.done', { id: payload.transfer_id }))}</span>`;

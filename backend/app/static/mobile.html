@@ -269,6 +269,7 @@
           </div>
         </div>
         <div class="operator-summary" id="outboundCaptureSummary"></div>
+        <div id="outboundCaptureScanResult" class="outbound-card" hidden></div>
         <div class="outbound-mini-list" id="outboundOrderPreview"></div>
       </section>
       <div class="locator" id="preview">
@@ -429,8 +430,9 @@
     const manualMaterialStatus = document.querySelector('#manualMaterialStatus');
     const outboundCaptureSummary = document.querySelector('#outboundCaptureSummary');
     const outboundOrderPreview = document.querySelector('#outboundOrderPreview');
-    const outboundScanBlock = document.querySelector('#outboundScanBlock');
-    const outboundScanResult = document.querySelector('#outboundScanResult');
+    const outboundEditScanBlock = document.querySelector('#outboundScanBlock');
+    const outboundEditScanResult = document.querySelector('#outboundScanResult');
+    const outboundCaptureScanResult = document.querySelector('#outboundCaptureScanResult');
     const recentRecords = document.querySelector('#recentRecords');
     const operatorSummary = document.querySelector('#operatorSummary');
     const runtimeMeta = document.querySelector('#runtimeMeta');
@@ -484,6 +486,18 @@
     const outboundOrderStorageKey = 'machineLabelSelectedOutboundOrder';
     let outboundStatusRequestId = 0;
     let currentUser = null;
+    let outboundScanBlock = outboundEditScanBlock;
+    let outboundScanResult = outboundEditScanResult;
+
+    function useOutboundResultTarget(target = step === 'capture' ? 'capture' : 'edit') {
+      if (target === 'capture') {
+        outboundScanBlock = outboundCaptureScanResult;
+        outboundScanResult = outboundCaptureScanResult;
+        return;
+      }
+      outboundScanBlock = outboundEditScanBlock;
+      outboundScanResult = outboundEditScanResult;
+    }
 
     function getOperatorId() {
       const key = 'machineLabelOperatorId';
@@ -563,26 +577,35 @@
     }
 
     function renderAlternativeLocations(payload, code, orderNo, recordId) {
-      const alternatives = (payload?.alternative_locations || []).filter((item) => item && item.location_code);
+      const explicitAlternatives = (payload?.alternative_locations || []).filter((item) => item && item.location_code);
+      const requiredLocations = (payload?.available_locations || [])
+        .map((locationCode) => ({ location_code: locationCode, quantity: null }))
+        .filter((item) => item.location_code);
+      const alternatives = explicitAlternatives.length ? explicitAlternatives : requiredLocations;
       const selectedLocation = selectedLocationForPayload(payload);
       const selectedQtyRaw = payload?.inventory_location?.quantity ?? payload?.current_location_stock;
       const hasSelectedQty = selectedQtyRaw !== null && selectedQtyRaw !== undefined && selectedQtyRaw !== '';
       const selectedQty = hasSelectedQty ? Number(selectedQtyRaw) : null;
       const selectedHasStock = selectedQty !== null ? selectedQty > 0 : null;
-      const isOutOfStock = selectedHasStock === false && !hasPositiveAlternatives(payload);
+      const isOutOfStock = selectedHasStock === false && explicitAlternatives.length > 0 && !hasPositiveAlternatives(payload);
       if (!alternatives.length && !isOutOfStock) return '';
       const rows = alternatives.length
         ? alternatives.map((item) => `
           <div class="scan-alt-row">
-            <span>${escapeHtml(`${item.location_code} · ${displayValue(item.quantity, 0)}`)}</span>
+            <span>${escapeHtml(item.quantity === null || item.quantity === undefined || item.quantity === '' ? item.location_code : `${item.location_code} · ${displayValue(item.quantity, 0)}`)}</span>
             <button type="button" class="secondary" data-switch-location="${escapeHtml(item.location_code)}" data-switch-code="${escapeHtml(code)}" data-switch-order="${escapeHtml(orderNo || '')}" data-switch-record-id="${escapeHtml(recordId || '')}">${escapeHtml(tr('scan.alt.switch'))}</button>
           </div>
         `).join('')
         : `<span>${escapeHtml(tr('scan.alt.empty'))}</span>`;
+      const title = isOutOfStock
+        ? tr('scan.alt.outOfStock')
+        : (payload?.location_required
+          ? tr('scan.alt.availableLocations')
+          : `${tr('scan.alt.title')}${selectedLocation ? ` (${selectedLocation})` : ''}`);
       return `
         <div class="scan-alt">
-          <strong>${escapeHtml(tr('scan.alt.title'))}${selectedLocation ? ` (${escapeHtml(selectedLocation)})` : ''}</strong>
-          ${isOutOfStock ? `<span>${escapeHtml(tr('scan.alt.outOfStock'))}</span>` : rows}
+          <strong>${escapeHtml(title)}</strong>
+          ${isOutOfStock ? '' : rows}
         </div>
       `;
     }
@@ -983,7 +1006,7 @@
         return null;
       }
       manualMaterialStatus.innerHTML = `<span>${escapeHtml(tr('outbound.manual.tryCode', { code }))}</span>`;
-      const payload = await previewOutboundCode(code, { quantity: 1 });
+      const payload = await previewOutboundCode(code, { quantity: 1, target: 'capture', resetLocation: true });
       renderManualMaterialStatus(payload, code);
       return payload;
     }
@@ -1037,7 +1060,7 @@
         <details><summary>${escapeHtml(tr('outbound.mobile.otherOrdersSummary'))}</summary>${otherOrders.length ? otherOrders.map((order) => `<div class="outbound-mini-row"><strong>${escapeHtml(order.order_no)} · ${escapeHtml(tr('outbound.mobile.remaining', { count: order.remaining_total }))}</strong><span>${escapeHtml(tr('outbound.mobile.otherOrderLine', { required: order.required_total, scanned: order.scanned_total, completeLines: order.complete_line_total, lines: order.line_total }))}</span></div>`).join('') : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.noOtherRemaining'))}</strong></div>`}</details>
       `;
       outboundOrderPreview.querySelectorAll('[data-manual-code]').forEach((button) => {
-        button.addEventListener('click', () => previewOutboundCode(button.getAttribute('data-manual-code') || '', { quantity: 1 }));
+        button.addEventListener('click', () => previewOutboundCode(button.getAttribute('data-manual-code') || '', { quantity: 1, target: 'capture', resetLocation: true }).catch((error) => showToast(error.message, 'error')));
       });
       outboundOrderPreview.querySelectorAll('[data-set-complete]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -1174,6 +1197,8 @@
     async function previewOutboundCode(code, options = {}) {
       const orderNo = outboundOrderSelect.value;
       if (!orderNo || !code) return null;
+      useOutboundResultTarget(options.target || (step === 'capture' ? 'capture' : 'edit'));
+      if (options.resetLocation) selectedOutboundLocation = '';
       selectedOutboundOrder = orderNo;
       const recordId = options.recordId ?? currentRecord?.id ?? null;
       const payload = await requestJson('/api/outbound/scan/preview', {
@@ -1343,6 +1368,19 @@
           outboundScanBlock.hidden = true;
           outboundScanResult.innerHTML = '';
         });
+        return;
+      }
+      if (payload?.location_required && !selectedOutboundLocation) {
+        outboundScanResult.className = 'outbound-card outbound-miss';
+        outboundScanResult.innerHTML = `
+          <strong>${escapeHtml(tr('scan.alt.chooseLocation'))}</strong>
+          <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
+          <span>${escapeHtml(tr('outbound.scan.code', { code }))}</span>
+          <span>${escapeHtml(tr('outbound.scan.matchedPart', { part: row.part_code || payload.matched_part?.part_code || '-' }))}</span>
+          <span>${escapeHtml(tr('scan.alt.chooseLocationHint'))}</span>
+          ${renderAlternativeLocations(payload, code, orderNo, recordId)}
+        `;
+        bindAlternativeLocationSwitch();
         return;
       }
       const remaining = Math.max(1, Number(row.remaining_qty || payload.remaining_qty || 1));
