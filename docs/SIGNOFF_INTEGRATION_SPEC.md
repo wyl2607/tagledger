@@ -152,3 +152,8 @@ The PC-side assistant may prepare a draft, focus a field, stage an attachment, o
 - Operators can mark a candidate as manually completed or needs review inside TagLedger.
 - Logs and committed files contain no real SaaS credentials, account details, tenant identifiers, internal network addresses, local machine paths, browser session artifacts, precise third-party URLs, screenshots, or page-locator details.
 - The slice can be validated without contacting or mutating the external RMA SaaS.
+
+## Implementation Progress
+
+- 2026-05-08: Added local-only data models and migration for `return_signoff_candidates` and `evidence_photos`. This establishes the storage base for future phone-confirmed return sign-off candidates without adding external SaaS mutation or browser automation.
+- Next slice: add supervisor/manager-only candidate API and sanitized dry-run payload flow before any Chrome extension or external SaaS interaction.
