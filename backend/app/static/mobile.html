@@ -130,11 +130,59 @@
       padding: 16px;
       background: #fff;
       line-height: 1.45;
+      scroll-margin: 164px 0 112px;
     }
     .outbound-card strong, .outbound-card span { display: block; overflow-wrap: anywhere; }
     .outbound-ok { border-color: #22c55e; background: #f0fdf4; }
     .outbound-miss { border-color: #f59e0b; background: #fffbeb; }
     .outbound-none { border-color: #ef4444; background: #fef2f2; }
+    .scan-result-card { display: grid; gap: 14px; color: var(--ink); }
+    .scan-result-head {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .scan-result-icon {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: #16a34a;
+      color: #fff;
+      font-size: 30px;
+      font-weight: 950;
+    }
+    .scan-result-title { margin: 0; color: #14532d; font-size: 24px; line-height: 1.15; }
+    .scan-result-subtitle { margin-top: 4px; color: #166534; font-size: 15px; font-weight: 850; }
+    .scan-result-code {
+      padding: 12px;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      background: #f7fee7;
+    }
+    .scan-result-code strong { color: #14532d; font-size: 19px; letter-spacing: .2px; }
+    .scan-result-code span { margin-top: 4px; color: #475569; font-size: 15px; font-weight: 850; }
+    .scan-result-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .scan-result-metric {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid #d9f99d;
+      border-radius: 12px;
+      background: #fff;
+      text-align: center;
+    }
+    .scan-result-metric strong { color: #14532d; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .scan-result-metric span { margin-top: 6px; color: #475569; font-size: 13px; font-weight: 950; }
+    .scan-result-meta { display: grid; gap: 4px; font-size: 15px; font-weight: 850; }
+    .scan-result-actions { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .scan-result-actions button {
+      min-height: 64px;
+      border-radius: 14px;
+      font-size: 22px;
+      font-weight: 950;
+    }
     .scan-alt { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #fff; }
     .scan-alt strong { display: block; }
     .scan-alt-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-top: 8px; }
@@ -1467,7 +1515,36 @@
       selectedOutboundLocation = selectedLocationForPayload(payload);
       const otherOrders = (payload?.matching_other_orders || []).map((item) => item.order_no).join(', ');
       outboundScanResult.className = `outbound-card ${cls}`;
-      outboundScanResult.innerHTML = `
+      if (payload?.scan_saved) {
+        outboundScanResult.innerHTML = `
+          <div class="scan-result-card">
+            <div class="scan-result-head">
+              <div class="scan-result-icon">✓</div>
+              <div>
+                <h3 class="scan-result-title">${escapeHtml(tr('outbound.scan.savedTitle'))}</h3>
+                <span class="scan-result-subtitle">${escapeHtml(tr('outbound.scan.savedSubtitle'))}</span>
+              </div>
+            </div>
+            <div class="scan-result-code">
+              <strong>${escapeHtml(row?.part_code || payload?.matched_part?.part_code || '-')}</strong>
+              <span>${escapeHtml(row?.name || payload?.matched_part?.name || '-')}</span>
+            </div>
+            <div class="scan-result-metrics">
+              <div class="scan-result-metric"><strong>${escapeHtml(displayValue(payload.quantity, 1))}</strong><span>${escapeHtml(tr('outbound.scan.savedQty'))}</span></div>
+              <div class="scan-result-metric"><strong>${escapeHtml(displayValue(row?.remaining_qty, 0))}</strong><span>${escapeHtml(tr('outbound.scan.partRemainingShort'))}</span></div>
+              <div class="scan-result-metric"><strong>${escapeHtml(displayValue(status?.remaining_total, 0))}</strong><span>${escapeHtml(tr('outbound.scan.orderRemainingShort'))}</span></div>
+            </div>
+            <div class="scan-result-meta">
+              <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
+              ${otherOrders ? `<span>${escapeHtml(tr('outbound.scan.otherOrderList', { orders: otherOrders }))}</span>` : ''}
+            </div>
+            <div class="scan-result-actions">
+              <button type="button" id="outboundNextScanBtn">${escapeHtml(tr('outbound.action.nextScan'))}</button>
+            </div>
+          </div>
+        `;
+      } else {
+        outboundScanResult.innerHTML = `
         <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
         <span>${escapeHtml(tr('outbound.scan.scannedCode', { code }))}</span>
@@ -1477,16 +1554,25 @@
         ${payload?.requires_verification ? `<span>${escapeHtml(tr('outbound.scan.verificationHint'))}</span>` : ''}
         ${renderAlternativeLocations(payload, code, orderNo, recordId)}
         <span>${escapeHtml(tr('outbound.scan.orderStatus', { required: displayValue(status?.required_total), scanned: displayValue(status?.scanned_total), remaining: displayValue(status?.remaining_total) }))}</span>
-        ${payload?.scan_saved ? `<div class="outbound-card-actions">${canManageOutboundActions() ? `<button type="button" id="outboundUndoLastBtn" class="secondary">${escapeHtml(tr('outbound.action.undoLast'))}</button>` : ''}<button type="button" id="outboundNextScanBtn">${escapeHtml(tr('outbound.action.nextScan'))}</button></div>` : ''}
         ${otherOrders ? `<span>${escapeHtml(tr('outbound.scan.otherOrderList', { orders: otherOrders }))}</span>` : ''}
       `;
+      }
       const undoBtn = outboundScanResult.querySelector('#outboundUndoLastBtn');
       if (undoBtn) undoBtn.addEventListener('click', () => voidLastOutboundScan().catch((error) => showToast(error.message, 'error')));
       const nextBtn = outboundScanResult.querySelector('#outboundNextScanBtn');
       if (nextBtn) nextBtn.addEventListener('click', resetForNext);
       bindAlternativeLocationSwitch();
+      const scrollResultIntoView = () => {
+        if (!payload?.scan_saved) return;
+        window.requestAnimationFrame(() => {
+          outboundScanResult.scrollIntoView({ block: 'start', behavior: 'auto' });
+        });
+      };
       if (outboundOrderSelect.value === orderNo) renderOutboundOrderStatus(status);
-      refreshOutboundStatus().catch(() => {});
+      scrollResultIntoView();
+      refreshOutboundStatus()
+        .then(scrollResultIntoView)
+        .catch(() => {});
     }
 
     async function loadOutboundOrders() {
