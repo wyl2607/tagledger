@@ -158,4 +158,5 @@ The PC-side assistant may prepare a draft, focus a field, stage an attachment, o
 - 2026-05-08: Added local-only data models and migration for `return_signoff_candidates` and `evidence_photos`. This establishes the storage base for future phone-confirmed return sign-off candidates without adding external SaaS mutation or browser automation.
 - 2026-05-08: Added supervisor/manager-only local candidate API for creating a return sign-off candidate from a confirmed TagLedger record, listing candidates, and reading candidate evidence. Evidence paths are stored as repository-relative references.
 - 2026-05-08: Added short-lived pairing keys and a token-based dry-run preview endpoint. Pairing tokens are stored as hashes, preview payloads exclude raw OCR text and absolute paths, and previewing records an assist session without contacting external SaaS.
-- Next slice: add an operator-facing local review/decision endpoint for accepted/rejected/needs-correction assist outcomes.
+- 2026-05-08: Added the local assist decision endpoint for `accepted`, `rejected`, `needs_correction`, and `manually_completed`. Decisions update the latest open assist session and move candidates to `assist_previewed`, `needs_review`, or `manually_completed` without claiming third-party completion.
+- Next slice: expose the sign-off queue in the supervisor UI or SaaS Bridge diagnostics.

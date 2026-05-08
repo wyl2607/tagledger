@@ -3,6 +3,7 @@ import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -37,6 +38,11 @@ class SignoffCandidateCreateRequest(BaseModel):
 
 class SignoffPairingKeyCreateRequest(BaseModel):
     ttl_minutes: int = Field(default=30, ge=5, le=240)
+
+
+class SignoffDecisionRequest(BaseModel):
+    decision: Literal["accepted", "rejected", "needs_correction", "manually_completed"]
+    external_completion_mark: str | None = Field(default=None, max_length=1000)
 
 
 def _hash_token(token: str) -> str:
@@ -170,6 +176,18 @@ def _active_candidate_for_record(session: Session, record_id: int) -> ReturnSign
             )
         )
         .order_by(ReturnSignoffCandidate.id.desc())
+    ).first()
+
+
+def _latest_open_assist_session(
+    session: Session,
+    candidate_id: int,
+) -> SignoffAssistSession | None:
+    return session.exec(
+        select(SignoffAssistSession)
+        .where(SignoffAssistSession.candidate_id == candidate_id)
+        .where(SignoffAssistSession.operator_decision.is_(None))  # type: ignore[attr-defined]
+        .order_by(SignoffAssistSession.id.desc())
     ).first()
 
 
@@ -363,4 +381,51 @@ def get_signoff_assist_preview(
         "payload": payload,
         "prepared_payload_hash": prepared_payload_hash,
         "previewed_at": now.isoformat(),
+    }
+
+
+@router.post("/candidates/{candidate_id}/decisions")
+def record_signoff_decision(
+    candidate_id: int,
+    payload: SignoffDecisionRequest,
+    _: User = Depends(require_supervisor),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    candidate = session.get(ReturnSignoffCandidate, candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="candidate not found")
+    assist_session = _latest_open_assist_session(session, candidate_id)
+    if assist_session is None:
+        raise HTTPException(status_code=409, detail="candidate has no open assist preview")
+
+    now = _utc_now_for_db()
+    assist_session.operator_decision = payload.decision
+    assist_session.external_completion_mark = payload.external_completion_mark
+    assist_session.updated_at = now
+    if payload.decision == "manually_completed":
+        candidate.status = ReturnSignoffStatus.manually_completed
+    elif payload.decision in ("rejected", "needs_correction"):
+        candidate.status = ReturnSignoffStatus.needs_review
+    else:
+        candidate.status = ReturnSignoffStatus.assist_previewed
+    candidate.updated_at = now
+    session.add(assist_session)
+    session.add(candidate)
+    session.commit()
+    session.refresh(assist_session)
+    session.refresh(candidate)
+
+    return {
+        "candidate": _candidate_payload(candidate),
+        "assist_session": {
+            "id": assist_session.id or 0,
+            "candidate_id": assist_session.candidate_id,
+            "pairing_key_id": assist_session.pairing_key_id,
+            "mode": assist_session.mode.value,
+            "prepared_payload_hash": assist_session.prepared_payload_hash,
+            "previewed_at": assist_session.previewed_at.isoformat(),
+            "operator_decision": assist_session.operator_decision,
+            "external_completion_mark": assist_session.external_completion_mark,
+            "updated_at": assist_session.updated_at.isoformat(),
+        },
     }

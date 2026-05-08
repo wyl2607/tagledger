@@ -155,7 +155,7 @@ def test_pairing_preview_uses_relative_storage_ref(
     _login_supervisor(client, session)
     candidate_id = _signoff_candidate(client, session)
     evidence = session.exec(select(EvidencePhoto)).one()
-    evidence.storage_ref = "/Users/yumei/private/absolute.jpg"
+    evidence.storage_ref = "/var/tmp/tagledger-private/absolute.jpg"
     session.add(evidence)
     session.commit()
     token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
@@ -163,4 +163,138 @@ def test_pairing_preview_uses_relative_storage_ref(
     response = client.get(f"/api/signoff/assist/{token}/preview")
 
     assert response.status_code == 200
-    assert "/Users/yumei" not in str(response.json())
+    assert "/var/tmp/tagledger-private" not in str(response.json())
+
+
+def test_signoff_decision_marks_candidate_manually_completed(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    preview = client.get(f"/api/signoff/assist/{token}/preview")
+    assert preview.status_code == 200
+
+    response = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={
+            "decision": "manually_completed",
+            "external_completion_mark": "operator confirmed external save",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["candidate"]["status"] == ReturnSignoffStatus.manually_completed
+    assert payload["assist_session"]["operator_decision"] == "manually_completed"
+    assert (
+        payload["assist_session"]["external_completion_mark"] == "operator confirmed external save"
+    )
+    stored_session = session.exec(select(SignoffAssistSession)).one()
+    assert stored_session.operator_decision == "manually_completed"
+
+
+def test_signoff_decision_rejected_moves_candidate_to_review(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+
+    response = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "needs_correction"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["candidate"]["status"] == ReturnSignoffStatus.needs_review
+
+
+def test_signoff_decision_rejected_is_recorded(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+
+    response = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "rejected"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["candidate"]["status"] == ReturnSignoffStatus.needs_review
+    assert payload["assist_session"]["operator_decision"] == "rejected"
+
+
+def test_signoff_decision_rejects_unknown_value(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+
+    response = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "external_submitted"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_signoff_decision_requires_preview_and_cannot_overwrite(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+
+    no_preview = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "accepted"},
+    )
+    assert no_preview.status_code == 409
+
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+    first = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "accepted"},
+    )
+    assert first.status_code == 200
+    second = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "manually_completed"},
+    )
+    assert second.status_code == 409
+
+
+def test_signoff_decision_requires_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+
+    operator = create_user(
+        session,
+        username="decision-operator",
+        display_name="Decision Operator",
+        password="decision-operator-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
+    set_authenticated_session(client, token)
+
+    response = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "accepted"},
+    )
+
+    assert response.status_code == 403
