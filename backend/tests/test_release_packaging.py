@@ -56,6 +56,18 @@ def test_docs_describe_smart_entry_and_legacy_capture_boundary() -> None:
     assert "`/capture`" in windows_deploy
 
 
+def test_github_preflight_workflow_runs_required_local_gates() -> None:
+    workflow = Path(".github/workflows/preflight.yml").read_text(encoding="utf-8")
+
+    assert "name: preflight" in workflow
+    assert "pull_request:" in workflow
+    assert "push:" in workflow
+    assert "python-version: '3.12'" in workflow
+    assert 'python -m pip install -e ".[dev,barcode,ocr]"' in workflow
+    assert "ruff check backend scripts" in workflow
+    assert "python -m pytest backend/tests -q" in workflow
+
+
 def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
     public_text = "\n".join(
         Path(path).read_text(encoding="utf-8") for path in ("README.md", "docs/WINDOWS_DEPLOY.md")

@@ -3,7 +3,14 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from backend.app.models import Category, Record, RecordStatus
+from backend.app.models import (
+    Category,
+    InventoryLocation,
+    InventoryMovement,
+    OutboundScan,
+    Record,
+    RecordStatus,
+)
 
 
 def add_record(
@@ -141,8 +148,102 @@ def test_metrics_all_endpoint_returns_full_payload(client: TestClient, session: 
         "processing_time",
         "ocr_quality",
         "error_prevention",
+        "logistics",
         "savings",
         "generated_at",
     }
     assert payload["summary"]["confirmed_count"] == 1
     assert len(payload["throughput"]) == 30
+
+
+def test_logistics_metrics_summarize_inventory_and_outbound_activity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    now = datetime.now(UTC)
+    session.add_all(
+        [
+            InventoryLocation(
+                part_key="CPXS000122001",
+                location_code="A-01",
+                quantity=5,
+                status="active",
+                zero_stock=False,
+            ),
+            InventoryLocation(
+                part_key="CPXS000122001",
+                location_code="A-02",
+                quantity=0,
+                status="active",
+                zero_stock=True,
+            ),
+            InventoryLocation(
+                part_key="CPXS000122002",
+                location_code="B-01",
+                quantity=9,
+                status="disabled",
+                zero_stock=False,
+            ),
+            InventoryMovement(
+                movement_type="inbound",
+                part_key="CPXS000122001",
+                location_code="A-01",
+                quantity_delta=5,
+                before_qty=0,
+                after_qty=5,
+                created_at=now,
+            ),
+            InventoryMovement(
+                movement_type="transfer_out",
+                part_key="CPXS000122001",
+                location_code="A-02",
+                quantity_delta=-2,
+                before_qty=2,
+                after_qty=0,
+                created_at=now - timedelta(days=9),
+            ),
+            OutboundScan(
+                order_no="SO202605070001",
+                part_code="CPXS000122001",
+                source_code="CPXS000122001",
+                matched_code="CPXS000122001",
+                quantity=3,
+                status="active",
+            ),
+            OutboundScan(
+                order_no="SO202605070002",
+                part_code="CPXS000122002",
+                source_code="CPXS000122002",
+                matched_code="CPXS000122002",
+                quantity=4,
+                status="void",
+            ),
+        ]
+    )
+    session.commit()
+
+    response = client.get("/api/metrics/logistics", params={"days": 7})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["inventory"] == {
+        "location_count": 3,
+        "active_location_count": 2,
+        "disabled_location_count": 1,
+        "zero_stock_location_count": 1,
+        "restock_needed_count": 1,
+        "part_count": 2,
+        "total_quantity": 14,
+    }
+    assert payload["movements"] == {
+        "days": 7,
+        "movement_count": 1,
+        "inbound_quantity": 5,
+        "outbound_quantity": 0,
+        "transfer_quantity": 0,
+    }
+    assert payload["outbound"] == {
+        "active_scan_count": 1,
+        "active_scan_quantity": 3,
+        "active_order_count": 1,
+    }

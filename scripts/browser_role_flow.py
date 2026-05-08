@@ -134,13 +134,20 @@ def main() -> None:
         first_order = page.locator("[data-order-choice]").first.input_value()
         if not first_order:
             raise AssertionError("no outbound order found in workbook")
+        second_order = first_order
+        if page.locator("[data-order-choice]").count() > 1:
+            second_order = page.locator("[data-order-choice]").nth(1).input_value()
+        assigned_orders = [first_order]
+        if second_order and second_order != first_order:
+            assigned_orders.append(second_order)
+        assigned_order_text = ", ".join(assigned_orders)
 
         page.goto(f"{BASE_URL}/admin", wait_until="networkidle")
         expect(page.locator("#createUserForm")).to_be_visible()
         page.locator("#username").fill("shipper-one")
         page.locator("#displayName").fill("Shipper One")
         page.locator("#role").select_option("operator")
-        page.locator("#assignedOrder").fill(first_order)
+        page.locator("[data-testid='assigned-order-input']").fill(assigned_order_text)
         page.locator("#password").fill("shipper-one-pass")
         page.locator("#createUserForm button[type='submit']").click()
         expect(page.locator("#createStatus")).not_to_be_empty(timeout=10_000)
@@ -151,7 +158,7 @@ def main() -> None:
         page.wait_for_url("**/login", timeout=10_000)
         login(page, "shipper-one", "shipper-one-pass")
         expect(page.get_by_text("只看你的发货单，先把当前单做完")).to_be_visible()
-        expect(page.get_by_text(f"分配单号 {first_order}")).to_be_visible()
+        expect(page.get_by_text(f"分配单号 {assigned_order_text}")).to_be_visible()
         expect(page.get_by_text("账号与权限")).not_to_be_visible()
         expect(page.get_by_text("跨场子调拨")).not_to_be_visible()
         page.screenshot(path=ARTIFACT_DIR / "operator-workbench-desktop.png", full_page=True)
@@ -164,9 +171,12 @@ def main() -> None:
         page.goto(f"{BASE_URL}/outbound", wait_until="networkidle")
         order_choices = page.locator("[data-order-choice]")
         choice_count = order_choices.count()
-        if choice_count != 1:
-            raise AssertionError(f"operator saw {choice_count} orders, expected 1")
-        if order_choices.first.input_value() != first_order:
+        if choice_count != len(assigned_orders):
+            raise AssertionError(
+                f"operator saw {choice_count} orders, expected {len(assigned_orders)}"
+            )
+        visible_orders = [order_choices.nth(index).input_value() for index in range(choice_count)]
+        if visible_orders != assigned_orders:
             raise AssertionError("operator outbound order scope changed unexpectedly")
         page.screenshot(path=ARTIFACT_DIR / "operator-outbound.png", full_page=True)
 
@@ -178,9 +188,54 @@ def main() -> None:
         operator_mobile_page = operator_mobile.new_page()
         login(operator_mobile_page, "shipper-one", "shipper-one-pass")
         operator_mobile_page.goto(f"{BASE_URL}/mobile#capture", wait_until="networkidle")
+        mobile_order_options = operator_mobile_page.locator("#outboundOrderSelect option")
+        visible_mobile_orders = [
+            mobile_order_options.nth(index).get_attribute("value")
+            for index in range(mobile_order_options.count())
+        ]
+        for order in assigned_orders:
+            if order not in visible_mobile_orders:
+                raise AssertionError(f"operator mobile missing assigned order {order}")
+        with operator_mobile_page.expect_response(
+            lambda response: (
+                f"/api/outbound/orders/{first_order}/status" in response.url
+                and response.status == 200
+            ),
+            timeout=20_000,
+        ):
+            operator_mobile_page.locator("#outboundOrderSelect").select_option(first_order)
         expect(operator_mobile_page.locator("#outboundOrderSelect")).to_have_value(first_order)
-        expect(operator_mobile_page.locator("[data-manual-code]").first).to_be_visible(
+        expect(operator_mobile_page.locator("#outboundCaptureSummary")).to_contain_text(
+            first_order,
+            timeout=20_000,
+        )
+        expect(operator_mobile_page.locator("#manualMaterialCode")).to_be_visible(timeout=10_000)
+        quick_scan_buttons = operator_mobile_page.locator("[data-manual-code]")
+        expect(quick_scan_buttons.first).to_be_visible(timeout=20_000)
+        quick_scan_buttons.first.click()
+        expect(operator_mobile_page.locator("#outboundCaptureScanResult")).to_be_visible(
             timeout=10_000
+        )
+        location_switches = operator_mobile_page.locator("[data-switch-location]")
+        if location_switches.count():
+            location_switches.first.click()
+        expect(operator_mobile_page.locator("#outboundConfirmScanBtn")).to_be_visible(
+            timeout=10_000
+        )
+        with operator_mobile_page.expect_response(
+            lambda response: "/api/outbound/scan" in response.url
+            and response.request.method == "POST"
+            and response.status == 200,
+            timeout=20_000,
+        ):
+            operator_mobile_page.locator("#outboundConfirmScanBtn").click()
+        expect(operator_mobile_page.locator("#outboundCaptureScanResult")).to_contain_text(
+            "出库已记录",
+            timeout=20_000,
+        )
+        expect(operator_mobile_page.locator("#outboundNextScanBtn")).to_contain_text(
+            "扫下一件",
+            timeout=10_000,
         )
         if operator_mobile_page.locator("#outboundCompleteOrderBtn").count():
             raise AssertionError("operator mobile can see complete-order supervisor action")
@@ -201,9 +256,10 @@ def main() -> None:
         login(page, "browser-manager", "browser-manager-pass")
         page.goto(f"{BASE_URL}/admin", wait_until="networkidle")
         assigned_value = page.locator("input[data-assigned-order]").first.input_value()
-        if assigned_value != first_order:
+        saved_orders = [value.strip() for value in assigned_value.split(",") if value.strip()]
+        if saved_orders != assigned_orders:
             raise AssertionError(
-                f"assigned order value mismatch: {assigned_value} != {first_order}"
+                f"assigned order value mismatch: {saved_orders} != {assigned_orders}"
             )
 
         page.goto(f"{BASE_URL}/transfers", wait_until="networkidle")

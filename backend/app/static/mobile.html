@@ -130,11 +130,59 @@
       padding: 16px;
       background: #fff;
       line-height: 1.45;
+      scroll-margin: 164px 0 112px;
     }
     .outbound-card strong, .outbound-card span { display: block; overflow-wrap: anywhere; }
     .outbound-ok { border-color: #22c55e; background: #f0fdf4; }
     .outbound-miss { border-color: #f59e0b; background: #fffbeb; }
     .outbound-none { border-color: #ef4444; background: #fef2f2; }
+    .scan-result-card { display: grid; gap: 14px; color: var(--ink); }
+    .scan-result-head {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .scan-result-icon {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: #16a34a;
+      color: #fff;
+      font-size: 30px;
+      font-weight: 950;
+    }
+    .scan-result-title { margin: 0; color: #14532d; font-size: 24px; line-height: 1.15; }
+    .scan-result-subtitle { margin-top: 4px; color: #166534; font-size: 15px; font-weight: 850; }
+    .scan-result-code {
+      padding: 12px;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      background: #f7fee7;
+    }
+    .scan-result-code strong { color: #14532d; font-size: 19px; letter-spacing: .2px; }
+    .scan-result-code span { margin-top: 4px; color: #475569; font-size: 15px; font-weight: 850; }
+    .scan-result-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .scan-result-metric {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid #d9f99d;
+      border-radius: 12px;
+      background: #fff;
+      text-align: center;
+    }
+    .scan-result-metric strong { color: #14532d; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .scan-result-metric span { margin-top: 6px; color: #475569; font-size: 13px; font-weight: 950; }
+    .scan-result-meta { display: grid; gap: 4px; font-size: 15px; font-weight: 850; }
+    .scan-result-actions { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .scan-result-actions button {
+      min-height: 64px;
+      border-radius: 14px;
+      font-size: 22px;
+      font-weight: 950;
+    }
     .scan-alt { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #fff; }
     .scan-alt strong { display: block; }
     .scan-alt-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-top: 8px; }
@@ -269,6 +317,7 @@
           </div>
         </div>
         <div class="operator-summary" id="outboundCaptureSummary"></div>
+        <div id="outboundCaptureScanResult" class="outbound-card" hidden></div>
         <div class="outbound-mini-list" id="outboundOrderPreview"></div>
       </section>
       <div class="locator" id="preview">
@@ -429,8 +478,9 @@
     const manualMaterialStatus = document.querySelector('#manualMaterialStatus');
     const outboundCaptureSummary = document.querySelector('#outboundCaptureSummary');
     const outboundOrderPreview = document.querySelector('#outboundOrderPreview');
-    const outboundScanBlock = document.querySelector('#outboundScanBlock');
-    const outboundScanResult = document.querySelector('#outboundScanResult');
+    const outboundEditScanBlock = document.querySelector('#outboundScanBlock');
+    const outboundEditScanResult = document.querySelector('#outboundScanResult');
+    const outboundCaptureScanResult = document.querySelector('#outboundCaptureScanResult');
     const recentRecords = document.querySelector('#recentRecords');
     const operatorSummary = document.querySelector('#operatorSummary');
     const runtimeMeta = document.querySelector('#runtimeMeta');
@@ -484,6 +534,18 @@
     const outboundOrderStorageKey = 'machineLabelSelectedOutboundOrder';
     let outboundStatusRequestId = 0;
     let currentUser = null;
+    let outboundScanBlock = outboundEditScanBlock;
+    let outboundScanResult = outboundEditScanResult;
+
+    function useOutboundResultTarget(target = step === 'capture' ? 'capture' : 'edit') {
+      if (target === 'capture') {
+        outboundScanBlock = outboundCaptureScanResult;
+        outboundScanResult = outboundCaptureScanResult;
+        return;
+      }
+      outboundScanBlock = outboundEditScanBlock;
+      outboundScanResult = outboundEditScanResult;
+    }
 
     function getOperatorId() {
       const key = 'machineLabelOperatorId';
@@ -563,26 +625,35 @@
     }
 
     function renderAlternativeLocations(payload, code, orderNo, recordId) {
-      const alternatives = (payload?.alternative_locations || []).filter((item) => item && item.location_code);
+      const explicitAlternatives = (payload?.alternative_locations || []).filter((item) => item && item.location_code);
+      const requiredLocations = (payload?.available_locations || [])
+        .map((locationCode) => ({ location_code: locationCode, quantity: null }))
+        .filter((item) => item.location_code);
+      const alternatives = explicitAlternatives.length ? explicitAlternatives : requiredLocations;
       const selectedLocation = selectedLocationForPayload(payload);
       const selectedQtyRaw = payload?.inventory_location?.quantity ?? payload?.current_location_stock;
       const hasSelectedQty = selectedQtyRaw !== null && selectedQtyRaw !== undefined && selectedQtyRaw !== '';
       const selectedQty = hasSelectedQty ? Number(selectedQtyRaw) : null;
       const selectedHasStock = selectedQty !== null ? selectedQty > 0 : null;
-      const isOutOfStock = selectedHasStock === false && !hasPositiveAlternatives(payload);
+      const isOutOfStock = selectedHasStock === false && explicitAlternatives.length > 0 && !hasPositiveAlternatives(payload);
       if (!alternatives.length && !isOutOfStock) return '';
       const rows = alternatives.length
         ? alternatives.map((item) => `
           <div class="scan-alt-row">
-            <span>${escapeHtml(`${item.location_code} · ${displayValue(item.quantity, 0)}`)}</span>
+            <span>${escapeHtml(item.quantity === null || item.quantity === undefined || item.quantity === '' ? item.location_code : `${item.location_code} · ${displayValue(item.quantity, 0)}`)}</span>
             <button type="button" class="secondary" data-switch-location="${escapeHtml(item.location_code)}" data-switch-code="${escapeHtml(code)}" data-switch-order="${escapeHtml(orderNo || '')}" data-switch-record-id="${escapeHtml(recordId || '')}">${escapeHtml(tr('scan.alt.switch'))}</button>
           </div>
         `).join('')
         : `<span>${escapeHtml(tr('scan.alt.empty'))}</span>`;
+      const title = isOutOfStock
+        ? tr('scan.alt.outOfStock')
+        : (payload?.location_required
+          ? tr('scan.alt.availableLocations')
+          : `${tr('scan.alt.title')}${selectedLocation ? ` (${selectedLocation})` : ''}`);
       return `
         <div class="scan-alt">
-          <strong>${escapeHtml(tr('scan.alt.title'))}${selectedLocation ? ` (${escapeHtml(selectedLocation)})` : ''}</strong>
-          ${isOutOfStock ? `<span>${escapeHtml(tr('scan.alt.outOfStock'))}</span>` : rows}
+          <strong>${escapeHtml(title)}</strong>
+          ${isOutOfStock ? '' : rows}
         </div>
       `;
     }
@@ -983,7 +1054,7 @@
         return null;
       }
       manualMaterialStatus.innerHTML = `<span>${escapeHtml(tr('outbound.manual.tryCode', { code }))}</span>`;
-      const payload = await previewOutboundCode(code, { quantity: 1 });
+      const payload = await previewOutboundCode(code, { quantity: 1, target: 'capture', resetLocation: true });
       renderManualMaterialStatus(payload, code);
       return payload;
     }
@@ -1037,7 +1108,7 @@
         <details><summary>${escapeHtml(tr('outbound.mobile.otherOrdersSummary'))}</summary>${otherOrders.length ? otherOrders.map((order) => `<div class="outbound-mini-row"><strong>${escapeHtml(order.order_no)} · ${escapeHtml(tr('outbound.mobile.remaining', { count: order.remaining_total }))}</strong><span>${escapeHtml(tr('outbound.mobile.otherOrderLine', { required: order.required_total, scanned: order.scanned_total, completeLines: order.complete_line_total, lines: order.line_total }))}</span></div>`).join('') : `<div class="outbound-mini-row"><strong>${escapeHtml(tr('outbound.mobile.noOtherRemaining'))}</strong></div>`}</details>
       `;
       outboundOrderPreview.querySelectorAll('[data-manual-code]').forEach((button) => {
-        button.addEventListener('click', () => previewOutboundCode(button.getAttribute('data-manual-code') || '', { quantity: 1 }));
+        button.addEventListener('click', () => previewOutboundCode(button.getAttribute('data-manual-code') || '', { quantity: 1, target: 'capture', resetLocation: true }).catch((error) => showToast(error.message, 'error')));
       });
       outboundOrderPreview.querySelectorAll('[data-set-complete]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -1174,6 +1245,8 @@
     async function previewOutboundCode(code, options = {}) {
       const orderNo = outboundOrderSelect.value;
       if (!orderNo || !code) return null;
+      useOutboundResultTarget(options.target || (step === 'capture' ? 'capture' : 'edit'));
+      if (options.resetLocation) selectedOutboundLocation = '';
       selectedOutboundOrder = orderNo;
       const recordId = options.recordId ?? currentRecord?.id ?? null;
       const payload = await requestJson('/api/outbound/scan/preview', {
@@ -1345,6 +1418,19 @@
         });
         return;
       }
+      if (payload?.location_required && !selectedOutboundLocation) {
+        outboundScanResult.className = 'outbound-card outbound-miss';
+        outboundScanResult.innerHTML = `
+          <strong>${escapeHtml(tr('scan.alt.chooseLocation'))}</strong>
+          <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
+          <span>${escapeHtml(tr('outbound.scan.code', { code }))}</span>
+          <span>${escapeHtml(tr('outbound.scan.matchedPart', { part: row.part_code || payload.matched_part?.part_code || '-' }))}</span>
+          <span>${escapeHtml(tr('scan.alt.chooseLocationHint'))}</span>
+          ${renderAlternativeLocations(payload, code, orderNo, recordId)}
+        `;
+        bindAlternativeLocationSwitch();
+        return;
+      }
       const remaining = Math.max(1, Number(row.remaining_qty || payload.remaining_qty || 1));
       pendingOutboundScan = { code, orderNo, recordId, quantity: 1 };
       outboundScanResult.className = 'outbound-card outbound-ok';
@@ -1429,7 +1515,36 @@
       selectedOutboundLocation = selectedLocationForPayload(payload);
       const otherOrders = (payload?.matching_other_orders || []).map((item) => item.order_no).join(', ');
       outboundScanResult.className = `outbound-card ${cls}`;
-      outboundScanResult.innerHTML = `
+      if (payload?.scan_saved) {
+        outboundScanResult.innerHTML = `
+          <div class="scan-result-card">
+            <div class="scan-result-head">
+              <div class="scan-result-icon">✓</div>
+              <div>
+                <h3 class="scan-result-title">${escapeHtml(tr('outbound.scan.savedTitle'))}</h3>
+                <span class="scan-result-subtitle">${escapeHtml(tr('outbound.scan.savedSubtitle'))}</span>
+              </div>
+            </div>
+            <div class="scan-result-code">
+              <strong>${escapeHtml(row?.part_code || payload?.matched_part?.part_code || '-')}</strong>
+              <span>${escapeHtml(row?.name || payload?.matched_part?.name || '-')}</span>
+            </div>
+            <div class="scan-result-metrics">
+              <div class="scan-result-metric"><strong>${escapeHtml(displayValue(payload.quantity, 1))}</strong><span>${escapeHtml(tr('outbound.scan.savedQty'))}</span></div>
+              <div class="scan-result-metric"><strong>${escapeHtml(displayValue(row?.remaining_qty, 0))}</strong><span>${escapeHtml(tr('outbound.scan.partRemainingShort'))}</span></div>
+              <div class="scan-result-metric"><strong>${escapeHtml(displayValue(status?.remaining_total, 0))}</strong><span>${escapeHtml(tr('outbound.scan.orderRemainingShort'))}</span></div>
+            </div>
+            <div class="scan-result-meta">
+              <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
+              ${otherOrders ? `<span>${escapeHtml(tr('outbound.scan.otherOrderList', { orders: otherOrders }))}</span>` : ''}
+            </div>
+            <div class="scan-result-actions">
+              <button type="button" id="outboundNextScanBtn">${escapeHtml(tr('outbound.action.nextScan'))}</button>
+            </div>
+          </div>
+        `;
+      } else {
+        outboundScanResult.innerHTML = `
         <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
         <span>${escapeHtml(tr('outbound.scan.scannedCode', { code }))}</span>
@@ -1439,16 +1554,25 @@
         ${payload?.requires_verification ? `<span>${escapeHtml(tr('outbound.scan.verificationHint'))}</span>` : ''}
         ${renderAlternativeLocations(payload, code, orderNo, recordId)}
         <span>${escapeHtml(tr('outbound.scan.orderStatus', { required: displayValue(status?.required_total), scanned: displayValue(status?.scanned_total), remaining: displayValue(status?.remaining_total) }))}</span>
-        ${payload?.scan_saved ? `<div class="outbound-card-actions">${canManageOutboundActions() ? `<button type="button" id="outboundUndoLastBtn" class="secondary">${escapeHtml(tr('outbound.action.undoLast'))}</button>` : ''}<button type="button" id="outboundNextScanBtn">${escapeHtml(tr('outbound.action.nextScan'))}</button></div>` : ''}
         ${otherOrders ? `<span>${escapeHtml(tr('outbound.scan.otherOrderList', { orders: otherOrders }))}</span>` : ''}
       `;
+      }
       const undoBtn = outboundScanResult.querySelector('#outboundUndoLastBtn');
       if (undoBtn) undoBtn.addEventListener('click', () => voidLastOutboundScan().catch((error) => showToast(error.message, 'error')));
       const nextBtn = outboundScanResult.querySelector('#outboundNextScanBtn');
       if (nextBtn) nextBtn.addEventListener('click', resetForNext);
       bindAlternativeLocationSwitch();
+      const scrollResultIntoView = () => {
+        if (!payload?.scan_saved) return;
+        window.requestAnimationFrame(() => {
+          outboundScanResult.scrollIntoView({ block: 'start', behavior: 'auto' });
+        });
+      };
       if (outboundOrderSelect.value === orderNo) renderOutboundOrderStatus(status);
-      refreshOutboundStatus().catch(() => {});
+      scrollResultIntoView();
+      refreshOutboundStatus()
+        .then(scrollResultIntoView)
+        .catch(() => {});
     }
 
     async function loadOutboundOrders() {

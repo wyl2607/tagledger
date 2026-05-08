@@ -47,11 +47,34 @@ def _normalize_idempotency_key(value: str | None) -> str | None:
     return key[:120] if key else None
 
 
+def _transfer_request_signature(
+    *,
+    source_factory: str,
+    target_factory: str,
+    part_key: str,
+    quantity: int,
+    reason: str,
+) -> str:
+    return json.dumps(
+        {
+            "source_factory": source_factory,
+            "target_factory": target_factory,
+            "part_key": part_key,
+            "quantity": quantity,
+            "reason": reason,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _find_existing_transfer_id(
     session: Session,
     *,
     operator: User,
     idempotency_key: str,
+    request_signature: str,
 ) -> str | None:
     rows = session.exec(
         select(AuditLog)
@@ -69,6 +92,8 @@ def _find_existing_transfer_id(
         except json.JSONDecodeError:
             continue
         if detail.get("idempotency_key") == idempotency_key:
+            if detail.get("request_signature") != request_signature:
+                raise RuntimeError("idempotency_key reused with different transfer payload")
             transfer_id = str(detail.get("transfer_id") or row.target_id or "")
             return transfer_id or None
     return None
@@ -245,12 +270,20 @@ def create_transfer(
     transfer_qty = int(quantity)
     if transfer_qty <= 0:
         raise RuntimeError("quantity must be > 0")
+    request_signature = _transfer_request_signature(
+        source_factory=source_factory_id,
+        target_factory=target_factory_id,
+        part_key=normalized_part,
+        quantity=transfer_qty,
+        reason=normalized_reason,
+    )
     normalized_idempotency_key = _normalize_idempotency_key(idempotency_key)
     if normalized_idempotency_key:
         existing_transfer_id = _find_existing_transfer_id(
             session,
             operator=operator,
             idempotency_key=normalized_idempotency_key,
+            request_signature=request_signature,
         )
         if existing_transfer_id:
             existing_payload = _transfer_payload_from_existing(
@@ -350,6 +383,7 @@ def create_transfer(
                     "source_location_code": source_location.location_code,
                     "target_location_code": target_location.location_code,
                     "idempotency_key": normalized_idempotency_key,
+                    "request_signature": request_signature,
                 },
                 ensure_ascii=False,
             ),

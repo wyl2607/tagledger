@@ -142,6 +142,46 @@ def test_transfer_idempotency_key_prevents_duplicate_stock_moves(
     assert len(movements) == 2
 
 
+def test_transfer_idempotency_key_rejects_changed_payload(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _switch_supervisor(client, session)
+    _seed_location(
+        session,
+        factory_id="factory_a",
+        part_key="CPXS000122098",
+        location_code="A-98",
+        quantity=10,
+    )
+    first = client.post(
+        "/api/transfers",
+        json={
+            "source_factory": "factory_a",
+            "target_factory": "factory_b",
+            "part_key": "CPXS000122098",
+            "quantity": 4,
+            "reason": "line_balance",
+            "idempotency_key": "transfer-click-002",
+        },
+    )
+    changed = client.post(
+        "/api/transfers",
+        json={
+            "source_factory": "factory_a",
+            "target_factory": "factory_b",
+            "part_key": "CPXS000122098",
+            "quantity": 5,
+            "reason": "line_balance",
+            "idempotency_key": "transfer-click-002",
+        },
+    )
+
+    assert first.status_code == 200
+    assert changed.status_code == 409
+    assert "idempotency_key reused with different transfer payload" in changed.json()["detail"]
+
+
 def test_transfer_rejects_insufficient_inventory(client: TestClient, session: Session) -> None:
     _switch_supervisor(client, session)
     _seed_location(

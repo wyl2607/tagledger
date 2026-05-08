@@ -35,6 +35,14 @@ def metrics_savings(session: Session = Depends(get_session)) -> dict:
     return metrics.estimated_savings(session)
 
 
+@router.get("/logistics")
+def metrics_logistics(
+    days: int = Query(default=7, ge=1, le=365),
+    session: Session = Depends(get_session),
+) -> dict:
+    return metrics.logistics_metrics(session, days=days)
+
+
 @router.get("/all")
 def metrics_all(
     days: int = Query(default=30, ge=1, le=365),

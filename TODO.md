@@ -50,3 +50,12 @@
 - [ ] 人工核对 5 条 dry-run 结果
 - [ ] 开启 enable_saas_submit: true + dry_run: false
 - [ ] 可选: cleanup_old_images.ps1 自动化调度
+
+## Windows / LAN Field Validation
+
+- [ ] 在真实 Windows 现场机上用 `scripts/run_lan.ps1` 启动并确认二维码 URL 可被同 Wi-Fi 手机打开。
+- [ ] 现场确认 Windows 防火墙入站规则策略：默认不自动改防火墙，必要时由管理员显式执行 `-AddFirewallRule` 或手动放行端口。
+- [ ] 用手机摄像头扫码进入 `/mobile`，完成登录、选择发货单、扫码/手输料号、提交出库的端到端验证。
+- [ ] 在现场网络验证 `/login?next=...`、登出后受保护页面跳转、发货员越权访问调拨/后台的权限提示。
+- [ ] 如需在 Windows 本机跑浏览器自动化，安装 Playwright Chromium 后复测浏览器角色流。
+- [ ] 如需启用真实 OCR，安装 Tesseract 可执行文件并复测 `test_tesseract_provider.py`。
