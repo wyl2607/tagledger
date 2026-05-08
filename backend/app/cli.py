@@ -37,12 +37,38 @@ def pick_free_port(host: str, port: int) -> int:
     raise RuntimeError(f"No free port in range {port}-{port + 50}")
 
 
+def _write_secret(path: Path, content: str) -> None:
+    path.write_text(content)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _configure_logging(log_dir: Path | None) -> None:
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    redactor = _TokenRedactingFilter()
+    root.addFilter(redactor)
+    if log_dir is None:
+        return
+    log_dir.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(log_dir / "server.log", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    handler.addFilter(redactor)
+    root.addHandler(handler)
+
+
 def main():
     parser = argparse.ArgumentParser("tagledger-server")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--data-dir")
     parser.add_argument("--log-dir")
+    parser.add_argument(
+        "--pair-token-out",
+        help="Optional extra path to write the pair token (in addition to <data-dir>/runtime/pair_token).",
+    )
     args = parser.parse_args()
 
     if args.data_dir:
@@ -55,18 +81,17 @@ def main():
     runtime = Path(args.data_dir or ".") / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
     (runtime / "port").write_text(str(port))
+    (runtime / "pid").write_text(str(os.getpid()))
 
     from backend.app.pairing import get_pair_token
 
-    pair_token_path = runtime / "pair_token"
-    pair_token_path.write_text(get_pair_token() or "")
-    try:
-        os.chmod(pair_token_path, 0o600)
-    except OSError:
-        pass
+    token = get_pair_token() or ""
+    _write_secret(runtime / "pair_token", token)
+    if args.pair_token_out:
+        _write_secret(Path(args.pair_token_out), token)
 
-    root_logger = logging.getLogger()
-    root_logger.addFilter(_TokenRedactingFilter())
+    log_dir = Path(args.log_dir) if args.log_dir else None
+    _configure_logging(log_dir)
 
     import uvicorn
 

@@ -1,4 +1,5 @@
 import ipaddress
+import os
 import socket
 
 from fastapi import Request
@@ -75,6 +76,12 @@ def _detect_allowed_hosts() -> set[str]:
                 allowed.add(str(ip))
         except ValueError:
             pass
+    # Tauri launcher (or tests) can inject extra hosts via env.
+    extra = os.getenv("TAGLEDGER_ALLOWED_HOSTS", "")
+    for raw in extra.split(","):
+        host = raw.strip()
+        if host:
+            allowed.add(host)
     return allowed
 
 

@@ -3,10 +3,6 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 from backend.app.pairing import (
-    _failed_attempts,
-    _paired_cookies,
-)
-from backend.app.pairing import (
     get_pair_token as pair_get_token,
 )
 from backend.app.pairing import (
@@ -19,18 +15,18 @@ from backend.app.pairing import (
 
 @pytest.fixture(autouse=True)
 def _reset_pairing_state():
-    _pair_token = None
-    _paired_cookies.clear()
-    _failed_attempts.clear()
     import backend.app.pairing as pm
 
-    pm._pair_token = pm.secrets.token_urlsafe(24)[:32]
+    pm._pair_token = pm._new_token()
+    pm._pair_token_issued_at = pm.time.time()
     pm._paired_cookies.clear()
     pm._failed_attempts.clear()
+    pm._blocked_until.clear()
     yield
     pm._pair_token = None
     pm._paired_cookies.clear()
     pm._failed_attempts.clear()
+    pm._blocked_until.clear()
 
 
 def _patch_remote(monkeypatch, ip: str):
@@ -183,7 +179,8 @@ class TestPairingRegenerate:
             )
             assert resp.status_code == 401
 
-    def test_previously_redeemed_cookie_still_works_after_regenerate(self, monkeypatch):
+    def test_old_cookie_invalidated_after_regenerate(self, monkeypatch):
+        """Per Codex spec: regenerate forces every paired device to pair again."""
         import backend.app.middleware.lan_guard as lg
 
         monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
@@ -194,4 +191,32 @@ class TestPairingRegenerate:
 
         import backend.app.pairing as pm
 
-        assert pm.is_paired(cookie_value) is True
+        assert pm.is_paired(cookie_value) is False
+
+        # Sanity: a request bearing the now-stale cookie is rejected by the middleware.
+        with TestClient(app) as c:
+            c.cookies.set("tl_pair", cookie_value)
+            resp = c.get("/api/jobs", headers=_headers())
+            assert resp.status_code == 403
+            assert resp.json()["detail"] == "pairing required"
+
+
+class TestPairingTTL:
+    def test_expired_token_returns_401(self, monkeypatch):
+        """Token older than PAIR_TOKEN_TTL_SECONDS is treated as missing."""
+        import backend.app.middleware.lan_guard as lg
+        import backend.app.pairing as pm
+
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        token = pm._pair_token
+        # Backdate issuance past the TTL.
+        pm._pair_token_issued_at = pm.time.time() - pm.PAIR_TOKEN_TTL_SECONDS - 1
+        assert pm.get_pair_token() is None
+
+        with TestClient(app) as c:
+            resp = c.post(
+                "/api/pairing/redeem",
+                json={"token": token},
+                headers=_headers(),
+            )
+            assert resp.status_code == 401
