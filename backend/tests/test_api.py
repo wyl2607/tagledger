@@ -324,11 +324,19 @@ def test_write_endpoints_require_login_even_with_valid_csrf(
     )
     retry_one = client.post(f"/jobs/retry/{record.id}")
     retry_all = client.post("/jobs/retry")
+    list_jobs = client.get("/jobs")
+    get_job = client.get(f"/jobs/{record.id}")
+    export_csv = client.get("/export.csv")
+    get_image = client.get(f"/records/{record.id}/image")
 
     assert upload.status_code == 401
     assert confirm.status_code == 401
     assert retry_one.status_code == 401
     assert retry_all.status_code == 401
+    assert list_jobs.status_code == 401
+    assert get_job.status_code == 401
+    assert export_csv.status_code == 401
+    assert get_image.status_code == 401
 
 
 def test_outbound_query_accepts_multiple_selected_orders(
@@ -869,7 +877,10 @@ def test_export_csv_contains_records(authenticated_client: TestClient, session: 
 def test_get_record_image_returns_file(
     authenticated_client: TestClient, session: Session, tmp_path
 ) -> None:
-    image_path = tmp_path / "history-image.jpg"
+    from backend.app.config import get_settings
+
+    image_path = get_settings().upload_path / "history-image.jpg"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
     image_path.write_bytes(b"fake jpeg bytes")
     record = Record(
         image_path=str(image_path),
@@ -884,6 +895,48 @@ def test_get_record_image_returns_file(
 
     assert response.status_code == 200
     assert response.content == b"fake jpeg bytes"
+
+
+def test_get_record_image_rejects_outside_upload_dir(
+    authenticated_client: TestClient, session: Session, tmp_path
+) -> None:
+    image_path = tmp_path / "outside-image.jpg"
+    image_path.write_bytes(b"outside bytes")
+    record = Record(
+        image_path=str(image_path),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    response = authenticated_client.get(f"/records/{record.id}/image")
+
+    assert response.status_code == 404
+
+
+def test_export_csv_escapes_formula_injection_values(
+    authenticated_client: TestClient, session: Session
+) -> None:
+    session.add(
+        Record(
+            image_path="export-danger.jpg",
+            category=Category.A,
+            model="=HYPERLINK(\"http://example.com\")",
+            vin_or_bin="+VIN-DANG",
+            serial_number="@SN-DANG",
+            status=RecordStatus.confirmed,
+        )
+    )
+    session.commit()
+
+    response = authenticated_client.get("/export.csv")
+
+    assert response.status_code == 200
+    assert "'=HYPERLINK" in response.text
+    assert "'+VIN-DANG" in response.text
+    assert "'@SN-DANG" in response.text
 
 
 def test_list_jobs_supports_status_limit_and_offset(

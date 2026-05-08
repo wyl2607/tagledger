@@ -76,6 +76,7 @@ def list_jobs(
     operator_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> list[RecordListItem]:
     statement = select(Record).order_by(Record.id.desc())
@@ -89,7 +90,11 @@ def list_jobs(
 
 
 @router.get("/jobs/{record_id}", response_model=RecordRead)
-def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRead:
+def get_job(
+    record_id: int,
+    _: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> RecordRead:
     record = session.get(Record, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
@@ -120,11 +125,26 @@ def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRe
 
 
 @router.get("/records/{record_id}/image", include_in_schema=False)
-def get_record_image(record_id: int, session: Session = Depends(get_session)) -> FileResponse:
+def get_record_image(
+    record_id: int,
+    _: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> FileResponse:
     record = session.get(Record, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
-    image_path = Path(record.image_path)
+    settings = get_settings()
+    upload_root = settings.upload_path.resolve()
+    image_path_raw = Path(record.image_path)
+    image_path = (
+        image_path_raw.resolve()
+        if image_path_raw.is_absolute()
+        else (upload_root / image_path_raw).resolve()
+    )
+    try:
+        image_path.relative_to(upload_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="image not found") from exc
     if not image_path.exists() or not image_path.is_file():
         raise HTTPException(status_code=404, detail="image not found")
     return FileResponse(image_path)

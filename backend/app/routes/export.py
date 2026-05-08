@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.params import Query
 from sqlmodel import Session
 
+from backend.app.auth import require_login
 from backend.app.database import get_session
-from backend.app.models import RecordStatus
+from backend.app.models import RecordStatus, User
 from backend.app.services.export import export_records_csv_filtered
 
 router = APIRouter()
@@ -17,6 +18,7 @@ def export_csv(
     keyword: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> Response:
     csv_text = export_records_csv_filtered(
