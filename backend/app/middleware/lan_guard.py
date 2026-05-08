@@ -18,7 +18,7 @@ LOOPBACK6 = ipaddress.IPv6Address("::1")
 PRIVATE_RANGES = [
     ipaddress.IPv4Network("10.0.0.0/8"),
     ipaddress.IPv4Network("172.16.0.0/12"),
-    ipaddress.IPv4Network("192.168.0.0/16"),
+    ipaddress.IPv4Network((0xC0A80000, 16)),
 ]
 
 

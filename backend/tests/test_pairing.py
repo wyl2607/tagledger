@@ -58,7 +58,7 @@ class TestPairingStatus:
     def test_status_from_non_loopback_returns_403(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         with TestClient(app) as c:
             resp = c.get("/api/pairing/status", headers=_headers())
             assert resp.status_code == 403
@@ -68,7 +68,7 @@ class TestPairingRedeem:
     def test_redeem_valid_token_sets_cookie(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         token = pair_get_token()
         with TestClient(app) as c:
             resp = c.post(
@@ -84,7 +84,7 @@ class TestPairingRedeem:
     def test_redeem_same_token_twice_second_401(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         token = pair_get_token()
         with TestClient(app) as c:
             resp1 = c.post(
@@ -104,7 +104,7 @@ class TestPairingRedeem:
     def test_redeem_bad_token_returns_401(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         with TestClient(app) as c:
             resp = c.post(
                 "/api/pairing/redeem",
@@ -116,7 +116,7 @@ class TestPairingRedeem:
     def test_six_bad_redeems_rate_limited(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         with TestClient(app) as c:
             for i in range(5):
                 resp = c.post(
@@ -138,7 +138,7 @@ class TestPairingEnforcement:
     def test_non_loopback_no_cookie_returns_403(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         with TestClient(app) as c:
             resp = c.get("/api/jobs", headers=_headers())
             assert resp.status_code == 403
@@ -147,9 +147,9 @@ class TestPairingEnforcement:
     def test_non_loopback_with_valid_cookie_passes_pairing(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         token = pair_get_token()
-        cookie_value = pair_redeem(token, "192.168.1.50")
+        cookie_value = pair_redeem(token, "10.9.8.7")
         with TestClient(app) as c:
             c.cookies.set("tl_pair", cookie_value)
             resp = c.get("/api/jobs", headers=_headers())
@@ -168,7 +168,7 @@ class TestPairingRegenerate:
     def test_old_token_invalid_after_regenerate(self, monkeypatch):
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         old_token = pair_get_token()
         pair_regenerate()
         with TestClient(app) as c:
@@ -183,9 +183,9 @@ class TestPairingRegenerate:
         """Per Codex spec: regenerate forces every paired device to pair again."""
         import backend.app.middleware.lan_guard as lg
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         token_before = pair_get_token()
-        cookie_value = pair_redeem(token_before, "192.168.1.50")
+        cookie_value = pair_redeem(token_before, "10.9.8.7")
         pair_regenerate()
         assert pair_get_token() != token_before
 
@@ -207,7 +207,7 @@ class TestPairingTTL:
         import backend.app.middleware.lan_guard as lg
         import backend.app.pairing as pm
 
-        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "192.168.1.50")
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.7")
         token = pm._pair_token
         # Backdate issuance past the TTL.
         pm._pair_token_issued_at = pm.time.time() - pm.PAIR_TOKEN_TTL_SECONDS - 1
