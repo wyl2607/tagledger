@@ -17,6 +17,7 @@ from backend.app.routes import (
     auth,
     confirm,
     export,
+    inventory,
     jobs,
     metrics,
     outbound,
@@ -173,6 +174,14 @@ def transfers_page() -> FileResponse:
     return FileResponse(transfers_path)
 
 
+@app.get("/inventory", include_in_schema=False)
+def inventory_page() -> FileResponse:
+    inventory_path = STATIC_DIR / "inventory.html"
+    if not inventory_path.exists():
+        raise HTTPException(status_code=404, detail="inventory page not found")
+    return FileResponse(inventory_path)
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     login_path = STATIC_DIR / "login.html"
@@ -211,6 +220,7 @@ app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(confirm.router)
 app.include_router(export.router)
+app.include_router(inventory.router)
 app.include_router(metrics.router)
 app.include_router(outbound.router)
 app.include_router(transfers.router)

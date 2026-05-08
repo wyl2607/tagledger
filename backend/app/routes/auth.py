@@ -71,6 +71,7 @@ def _user_payload(user: User) -> dict[str, object]:
         "outbound_last_order_no": user.outbound_last_order_no,
         "capabilities": {
             "can_view_global_stats": has_role(user, "supervisor"),
+            "can_manage_inventory": has_role(user, "supervisor"),
             "can_manage_transfers": has_role(user, "supervisor"),
             "can_manage_users": has_role(user, "manager"),
             "can_view_audit_logs": has_role(user, "manager"),
@@ -216,6 +217,13 @@ def _module_payload(user: User) -> list[dict[str, object]]:
     if has_role(user, "supervisor"):
         modules.extend(
             [
+                {
+                    "id": "inventory",
+                    "title": "库存与库位",
+                    "description": "按工厂、物料和库位查看库存，手工调整数量或挪动库位。",
+                    "href": "/inventory",
+                    "group": "inventory",
+                },
                 {
                     "id": "transfers",
                     "title": "跨场子调拨",
