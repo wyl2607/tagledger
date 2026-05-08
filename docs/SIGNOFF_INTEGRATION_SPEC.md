@@ -82,6 +82,8 @@ The pairing key links a phone-confirmed return sign-off candidate to a PC-side a
 - The key authorizes the PC-side assistant to fetch only the sanitized candidate payload.
 - The key does not grant permission to perform final SaaS submission.
 - The key must not contain customer credentials, tenant identifiers, network addresses, or browser storage material.
+- A supervisor or manager can revoke a key before expiry.
+- Preview access records usage count and last preview time, and repeated preview calls on the same key are rate-limited.
 - The PC assistant should display the candidate identity and payload hash so the operator can verify that the phone-side capture and PC-side page correspond to the same return.
 
 ## Phone-Side Responsibilities
@@ -160,4 +162,5 @@ The PC-side assistant may prepare a draft, focus a field, stage an attachment, o
 - 2026-05-08: Added short-lived pairing keys and a token-based dry-run preview endpoint. Pairing tokens are stored as hashes, preview payloads exclude raw OCR text and absolute paths, and previewing records an assist session without contacting external SaaS.
 - 2026-05-08: Added the local assist decision endpoint for `accepted`, `rejected`, `needs_correction`, and `manually_completed`. Decisions update the latest open assist session and move candidates to `assist_previewed`, `needs_review`, or `manually_completed` without claiming third-party completion.
 - 2026-05-08: Added the supervisor/manager `/signoff` management page for listing candidates, filtering by status, generating short-lived pairing codes, and copying preview URLs. Operator accounts see an access-denied state instead of the queue.
+- 2026-05-08: Hardened pairing keys with supervisor/manager revocation, preview usage count, last preview timestamp, and per-key preview rate limiting before the real PC assistant slice.
 - Next slice: add the PC assistant preparation surface that consumes the preview payload while still stopping before any external final submit action.

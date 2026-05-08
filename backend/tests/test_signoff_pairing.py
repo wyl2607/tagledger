@@ -102,6 +102,65 @@ def test_pairing_preview_returns_sanitized_payload_and_records_session(
     candidate = session.get(ReturnSignoffCandidate, candidate_id)
     assert candidate is not None
     assert candidate.status == ReturnSignoffStatus.assist_previewed
+    stored_key = session.exec(select(SignoffPairingKey)).one()
+    assert stored_key.preview_count == 1
+    assert stored_key.last_previewed_at is not None
+
+
+def test_pairing_preview_rate_limits_same_key(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    client.cookies.clear()
+    client.headers.clear()
+
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+    second = client.get(f"/api/signoff/assist/{token}/preview")
+
+    assert second.status_code == 429
+    assert second.json()["detail"] == "pairing key preview rate limit exceeded"
+
+
+def test_pairing_key_can_be_revoked_by_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    created = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys")
+    token = created.json()["token"]
+    pairing_key_id = created.json()["pairing_key_id"]
+
+    response = client.post(f"/api/signoff/pairing-keys/{pairing_key_id}/revoke")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pairing_key"]["status"] == SignoffPairingKeyStatus.revoked
+    assert payload["pairing_key"]["revoked_at"] is not None
+    stored = session.get(SignoffPairingKey, pairing_key_id)
+    assert stored is not None
+    assert stored.status == SignoffPairingKeyStatus.revoked
+    client.cookies.clear()
+    client.headers.clear()
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 404
+
+
+def test_pairing_key_revoke_requires_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    pairing_key_id = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()[
+        "pairing_key_id"
+    ]
+    client.cookies.clear()
+    client.headers.clear()
+
+    assert client.post(f"/api/signoff/pairing-keys/{pairing_key_id}/revoke").status_code == 403
 
 
 def test_pairing_preview_rejects_expired_or_unknown_token(

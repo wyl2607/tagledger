@@ -27,6 +27,7 @@ from backend.app.models import (
 )
 
 router = APIRouter(prefix="/api/signoff", tags=["signoff"])
+PAIRING_PREVIEW_RATE_LIMIT_SECONDS = 3
 
 
 class SignoffCandidateCreateRequest(BaseModel):
@@ -72,6 +73,22 @@ def _candidate_payload(candidate: ReturnSignoffCandidate) -> dict[str, object]:
         "notes": candidate.notes,
         "created_at": candidate.created_at.isoformat(),
         "updated_at": candidate.updated_at.isoformat(),
+    }
+
+
+def _pairing_key_payload(pairing_key: SignoffPairingKey) -> dict[str, object]:
+    return {
+        "id": pairing_key.id or 0,
+        "candidate_id": pairing_key.candidate_id,
+        "status": pairing_key.status.value,
+        "created_by": pairing_key.created_by,
+        "created_at": pairing_key.created_at.isoformat(),
+        "expires_at": pairing_key.expires_at.isoformat(),
+        "revoked_at": pairing_key.revoked_at.isoformat() if pairing_key.revoked_at else None,
+        "preview_count": pairing_key.preview_count,
+        "last_previewed_at": (
+            pairing_key.last_previewed_at.isoformat() if pairing_key.last_previewed_at else None
+        ),
     }
 
 
@@ -335,6 +352,24 @@ def create_signoff_pairing_key(
     }
 
 
+@router.post("/pairing-keys/{pairing_key_id}/revoke")
+def revoke_signoff_pairing_key(
+    pairing_key_id: int,
+    _: User = Depends(require_supervisor),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    pairing_key = session.get(SignoffPairingKey, pairing_key_id)
+    if pairing_key is None:
+        raise HTTPException(status_code=404, detail="pairing key not found")
+    now = _utc_now_for_db()
+    pairing_key.status = SignoffPairingKeyStatus.revoked
+    pairing_key.revoked_at = pairing_key.revoked_at or now
+    session.add(pairing_key)
+    session.commit()
+    session.refresh(pairing_key)
+    return {"pairing_key": _pairing_key_payload(pairing_key)}
+
+
 @router.get("/assist/{token}/preview")
 def get_signoff_assist_preview(
     token: str,
@@ -351,6 +386,12 @@ def get_signoff_assist_preview(
         or pairing_key.expires_at <= now
     ):
         raise HTTPException(status_code=404, detail="pairing key not found")
+    if (
+        pairing_key.last_previewed_at is not None
+        and (now - pairing_key.last_previewed_at).total_seconds()
+        < PAIRING_PREVIEW_RATE_LIMIT_SECONDS
+    ):
+        raise HTTPException(status_code=429, detail="pairing key preview rate limit exceeded")
 
     candidate = session.get(ReturnSignoffCandidate, pairing_key.candidate_id)
     if candidate is None:
@@ -371,10 +412,13 @@ def get_signoff_assist_preview(
         previewed_at=now,
         updated_at=now,
     )
+    pairing_key.preview_count += 1
+    pairing_key.last_previewed_at = now
     candidate.status = ReturnSignoffStatus.assist_previewed
     candidate.updated_at = now
     session.add(assist_session)
     session.add(candidate)
+    session.add(pairing_key)
     session.commit()
 
     return {

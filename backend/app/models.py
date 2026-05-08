@@ -116,6 +116,8 @@ class SignoffPairingKey(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
     expires_at: datetime = Field(index=True)
     revoked_at: datetime | None = Field(default=None, index=True)
+    preview_count: int = Field(default=0)
+    last_previewed_at: datetime | None = Field(default=None, index=True)
 
 
 class SignoffAssistSession(SQLModel, table=True):

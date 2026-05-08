@@ -50,6 +50,27 @@ def create_db_and_tables() -> None:
                 "WHERE serial_number IS NOT NULL AND status != 'duplicate'"
             )
         )
+        signoff_pairing_columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(signoff_pairing_keys)")).fetchall()
+        }
+        if signoff_pairing_columns:
+            if "preview_count" not in signoff_pairing_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE signoff_pairing_keys ADD COLUMN preview_count INTEGER DEFAULT 0"
+                    )
+                )
+            if "last_previewed_at" not in signoff_pairing_columns:
+                conn.execute(
+                    text("ALTER TABLE signoff_pairing_keys ADD COLUMN last_previewed_at DATETIME")
+                )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_signoff_pairing_keys_last_previewed_at "
+                    "ON signoff_pairing_keys(last_previewed_at)"
+                )
+            )
 
 
 def get_session() -> Generator[Session, None, None]:

@@ -147,11 +147,33 @@
           <code>${esc(url)}</code>
           <code>${esc(payload.token)}</code>
           <button type="button" class="copy-preview">${esc(tr('signoff.action.copyPreview'))}</button>
+          <button type="button" class="secondary revoke-pairing">${esc(tr('signoff.action.revokePairing'))}</button>
         </div>
       `;
       target.querySelector('.copy-preview').addEventListener('click', (event) => {
         copyText(url, event.currentTarget);
       });
+      target.querySelector('.revoke-pairing').addEventListener('click', (event) => {
+        revokePairing(payload.pairing_key_id, target, event.currentTarget);
+      });
+    }
+
+    async function revokePairing(pairingKeyId, target, button) {
+      button.disabled = true;
+      button.textContent = tr('common.loading');
+      try {
+        const payload = await AuthUI.fetchJson(`/api/signoff/pairing-keys/${pairingKeyId}/revoke`, {
+          method: 'POST',
+        });
+        target.innerHTML = `
+          <div class="pairing-box">
+            <strong>${esc(tr('signoff.pairing.revoked'))}</strong>
+            <span class="muted">${esc(tr('signoff.pairing.revokedAt', { time: payload.pairing_key.revoked_at }))}</span>
+          </div>
+        `;
+      } catch (error) {
+        target.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
     }
 
     async function createPairing(candidateId, target, button) {

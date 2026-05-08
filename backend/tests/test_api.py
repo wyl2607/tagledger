@@ -258,6 +258,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert "/api/signoff/candidates" in signoff
     assert "copyPreview" in signoff
     assert "'Content-Type': 'application/json'" in signoff
+    assert "/api/signoff/pairing-keys/${pairingKeyId}/revoke" in signoff
 
 
 def test_static_i18n_keys_exist_for_three_languages() -> None:
