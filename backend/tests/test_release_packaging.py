@@ -122,6 +122,35 @@ def test_windows_packaging_vendor_directory_excluded() -> None:
     assert "vendor/" in gitignore
 
 
+def test_desktop_launcher_layout_present() -> None:
+    """M3 Tauri launcher exists and is wired to the M2 sidecar bundle."""
+    cfg = Path("desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+    assert '"productName"' in cfg
+    # Must bundle the M2 onedir as a resource (not externalBin; onedir is a folder).
+    assert "tagledger-server" in cfg
+    assert "externalBin" not in cfg
+    # Windows-only beta: msi + nsis, no other targets.
+    assert '"msi"' in cfg
+    assert '"nsis"' in cfg
+    for forbidden in ('"dmg"', '"appimage"', '"deb"', '"rpm"'):
+        assert forbidden not in cfg, f"M3 must not enable {forbidden}"
+
+    cargo = Path("desktop/src-tauri/Cargo.toml").read_text(encoding="utf-8")
+    # Tauri v2, single-instance plugin wired.
+    assert "tauri = " in cargo
+    assert "tauri-plugin-single-instance" in cargo
+
+    # Build script must hard-fail if the M2 sidecar bundle is missing,
+    # so contributors don't ship a launcher with no backend.
+    build_rs = Path("desktop/src-tauri/build.rs").read_text(encoding="utf-8")
+    assert "tagledger_server.exe" in build_rs
+    assert "panic!" in build_rs or "compile_error" in build_rs
+
+    gitignore = Path("desktop/.gitignore").read_text(encoding="utf-8")
+    for pat in ("target/", "node_modules/", "dist/", "src-tauri/gen/"):
+        assert pat in gitignore
+
+
 def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
     public_text = "\n".join(
         Path(path).read_text(encoding="utf-8") for path in ("README.md", "docs/WINDOWS_DEPLOY.md")

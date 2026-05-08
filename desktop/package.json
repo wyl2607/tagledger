@@ -1,0 +1,19 @@
+{
+  "name": "tagledger-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.1",
+    "vite": "^7.2.7"
+  }
+}
