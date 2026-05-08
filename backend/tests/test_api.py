@@ -16,6 +16,7 @@ STATIC_UI_PAGES = [
     Path("backend/app/static/setup.html"),
     Path("backend/app/static/admin.html"),
     Path("backend/app/static/mobile.html"),
+    Path("backend/app/static/inventory.html"),
     Path("backend/app/static/outbound.html"),
     Path("backend/app/static/transfers.html"),
     Path("backend/app/static/signoff.html"),
@@ -194,6 +195,16 @@ def test_dashboard_page_serves_html(authenticated_client: TestClient) -> None:
     assert 'id="activeOutboundQty"' in response.text
 
 
+def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/inventory")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert 'data-i18n="inventory.title"' in response.text
+    assert "/api/inventory/locations" in response.text
+    assert "/api/inventory/move" in response.text
+
+
 def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/outbound")
 
@@ -238,6 +249,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     workbench = _static_text("backend/app/static/home.html")
     mobile = _static_text("backend/app/static/mobile.html")
     admin = _static_text("backend/app/static/admin.html")
+    inventory = _static_text("backend/app/static/inventory.html")
     transfers = _static_text("backend/app/static/transfers.html")
     signoff = _static_text("backend/app/static/signoff.html")
 
@@ -251,6 +263,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'id="createUserForm"' in admin
     assert 'id="assignedOrder"' in admin
     assert "outbound_last_order_no" in admin
+    assert "can_manage_inventory" in inventory
     assert "can_manage_users" in admin
     assert 'id="createTransferCard" hidden' in transfers
     assert "can_manage_transfers" in transfers

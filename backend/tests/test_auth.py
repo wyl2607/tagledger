@@ -484,7 +484,7 @@ def test_manager_workbench_keeps_global_visibility(
     assert workbench.status_code == 200
     payload = workbench.json()
     assert payload["scope"]["allowed_order_numbers"] is None
-    assert {"admin", "dashboard", "transfers"}.issubset(
+    assert {"admin", "dashboard", "inventory", "transfers"}.issubset(
         {module["id"] for module in payload["modules"]}
     )
     assert payload["global_stats"]["order_count"] == 2

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>库存与库位 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f5f7fa; }
+    .inventory-page { display: grid; gap: 18px; padding-bottom: 48px; }
+    .inventory-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+    .inventory-head h1 { font-size: 34px; }
+    .inventory-head p { max-width: 820px; margin-top: 8px; font-weight: 800; }
+    .filters, .panel { padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+    .filters label, .form-grid label { display: grid; gap: 5px; color: var(--muted); font-weight: 900; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .kpi { min-height: 96px; display: grid; align-content: center; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+    .kpi span { color: var(--muted); font-weight: 900; }
+    .kpi strong { font-size: 30px; line-height: 1; }
+    .work-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 14px; }
+    .location-grid { display: grid; gap: 10px; }
+    .zone { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .zone h3 { margin: 0; font-size: 18px; }
+    .location-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+    .location-card[aria-selected="true"] { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 107, 53, .16); }
+    .location-card strong { font-size: 18px; overflow-wrap: anywhere; }
+    .location-card .meta { color: var(--muted); font-weight: 850; overflow-wrap: anywhere; }
+    .qty { font-size: 26px; font-weight: 950; }
+    .restock { color: #991b1b; }
+    .temporary { color: #1d4ed8; }
+    .form-grid { display: grid; gap: 12px; }
+    .form-grid button { width: 100%; }
+    @media (max-width: 920px) {
+      .inventory-head, .filters, .kpi-grid, .work-grid { grid-template-columns: 1fr; }
+      .inventory-head h1 { font-size: 30px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/workbench">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="inventory.title">库存与库位</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-button" href="/workbench" data-i18n="workbench.brand">工作台</a>
+        <a class="nav-button" href="/transfers" data-i18n="nav.transfers">调拨</a>
+        <button type="button" class="secondary" id="logoutBtn" data-i18n="admin.logout">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="inventory-page" id="inventoryContent" hidden>
+    <section class="inventory-head">
+      <div>
+        <h1 data-i18n="inventory.title">库存与库位</h1>
+        <p class="muted" data-i18n="inventory.subtitle">把库存总账和厂区库位图放到一个入口：临时库位用完自动隐藏，永久库位用完保留补货提示，所有修改都会写入流水。</p>
+      </div>
+      <button type="button" id="refreshBtn" data-i18n="inventory.action.refresh">刷新库存</button>
+    </section>
+
+    <section class="filters">
+      <label>
+        <span data-i18n="inventory.filter.factory">工厂</span>
+        <select id="factoryFilter">
+          <option value="" data-i18n="common.all">全部</option>
+          <option value="factory_a">factory_a</option>
+          <option value="factory_b">factory_b</option>
+          <option value="factory_c">factory_c</option>
+        </select>
+      </label>
+      <label>
+        <span data-i18n="inventory.filter.part">物料</span>
+        <input id="partFilter" data-i18n-placeholder="inventory.filter.partPlaceholder" placeholder="料号 / SKU">
+      </label>
+      <label>
+        <span data-i18n="inventory.filter.hidden">隐藏库位</span>
+        <select id="hiddenFilter">
+          <option value="false" data-i18n="inventory.hidden.visibleOnly">只看可见</option>
+          <option value="true" data-i18n="inventory.hidden.include">包含停用/临时空库位</option>
+        </select>
+      </label>
+      <button type="button" id="applyFilterBtn" data-i18n="inventory.action.apply">应用筛选</button>
+    </section>
+
+    <section class="kpi-grid" aria-label="Inventory summary">
+      <div class="kpi"><span data-i18n="inventory.kpi.visible">可见库位</span><strong id="visibleCount">0</strong></div>
+      <div class="kpi"><span data-i18n="inventory.kpi.restock">需补货</span><strong id="restockCount">0</strong></div>
+      <div class="kpi"><span data-i18n="inventory.kpi.retired">已隐藏临时库位</span><strong id="retiredCount">0</strong></div>
+      <div class="kpi"><span data-i18n="inventory.kpi.quantity">可见库存数</span><strong id="totalQty">0</strong></div>
+    </section>
+
+    <section class="work-grid">
+      <div class="panel">
+        <h2 data-i18n="inventory.map.title">厂区库位图</h2>
+        <p class="muted" data-i18n="inventory.map.subtitle">按库位前缀分区显示。点击库位后可在右侧调整数量或挪到新库位。</p>
+        <div id="locationGrid" class="location-grid"></div>
+      </div>
+
+      <aside class="panel">
+        <h2 data-i18n="inventory.editor.title">手动编辑</h2>
+        <p class="muted" id="selectedInfo" data-i18n="inventory.editor.empty">先选择一个库位。</p>
+        <div class="form-grid">
+          <label>
+            <span data-i18n="inventory.editor.quantity">校正数量</span>
+            <input id="adjustQty" type="text" inputmode="numeric" pattern="[0-9]*">
+          </label>
+          <label>
+            <span data-i18n="inventory.editor.reason">原因</span>
+            <input id="adjustReason" data-i18n-placeholder="inventory.editor.reasonPlaceholder" placeholder="盘点 / 纠错 / 临时库位用完">
+          </label>
+          <button type="button" id="adjustBtn" data-i18n="inventory.action.adjust">写入数量调整</button>
+          <hr>
+          <label>
+            <span data-i18n="inventory.move.target">目标库位</span>
+            <input id="moveTarget" data-i18n-placeholder="inventory.move.targetPlaceholder" placeholder="例如 B-04">
+          </label>
+          <label>
+            <span data-i18n="inventory.move.quantity">挪动数量</span>
+            <input id="moveQty" type="text" inputmode="numeric" pattern="[0-9]*">
+          </label>
+          <label>
+            <span data-i18n="inventory.move.kind">目标库位类型</span>
+            <select id="moveKind">
+              <option value="temporary" data-i18n="inventory.kind.temporary">临时</option>
+              <option value="permanent" data-i18n="inventory.kind.permanent">永久</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="inventory.move.reason">挪动原因</span>
+            <input id="moveReason" data-i18n-placeholder="inventory.move.reasonPlaceholder" placeholder="地图拖拽 / 整理库位">
+          </label>
+          <button type="button" id="moveBtn" data-i18n="inventory.action.move">挪动到目标库位</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <main class="inventory-page" id="accessDenied" hidden>
+    <section class="panel">
+      <h2 data-i18n="error.permissionDenied">权限不足</h2>
+      <p class="muted" data-i18n="inventory.accessDenied">需要主管或管理员权限才能编辑库存与库位。</p>
+      <a class="nav-link" href="/workbench" data-i18n="admin.action.backWorkbench">返回工作台</a>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js?v=role-nav"></script>
+  <script>
+    const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+    let latestPayload = null;
+    let selectedLocation = null;
+
+    function zoneName(locationCode) {
+      return String(locationCode || 'LOC').split(/[-_]/)[0] || 'LOC';
+    }
+
+    function renderSummary(summary) {
+      document.querySelector('#visibleCount').textContent = summary.visible_location_count || 0;
+      document.querySelector('#restockCount').textContent = summary.restock_required_count || 0;
+      document.querySelector('#retiredCount').textContent = summary.retired_location_count || 0;
+      document.querySelector('#totalQty').textContent = summary.total_quantity || 0;
+    }
+
+    function renderLocations(locations) {
+      if (!locations.length) {
+        document.querySelector('#locationGrid').innerHTML = `<p class="muted">${esc(tr('inventory.empty'))}</p>`;
+        return;
+      }
+      const zones = new Map();
+      locations.forEach((location) => {
+        const zone = zoneName(location.location_code);
+        if (!zones.has(zone)) zones.set(zone, []);
+        zones.get(zone).push(location);
+      });
+      document.querySelector('#locationGrid').innerHTML = [...zones.entries()].map(([zone, rows]) => `
+        <section class="zone">
+          <h3>${esc(zone)}</h3>
+          ${rows.map((location) => `
+            <button type="button" class="location-card" data-location-id="${esc(location.id)}" aria-selected="${selectedLocation?.id === location.id ? 'true' : 'false'}">
+              <span>
+                <strong>${esc(location.location_code)}</strong>
+                <span class="meta">${esc(location.part_key)} · ${esc(location.factory_id)} · <span class="${location.location_kind === 'temporary' ? 'temporary' : ''}">${esc(tr(`inventory.kind.${location.location_kind}`))}</span></span>
+                ${location.restock_required ? `<span class="meta restock">${esc(tr('inventory.restockRequired'))}</span>` : ''}
+              </span>
+              <span class="qty">${esc(location.quantity)}</span>
+            </button>
+          `).join('')}
+        </section>
+      `).join('');
+      document.querySelectorAll('.location-card').forEach((card) => {
+        card.addEventListener('click', () => selectLocation(Number(card.dataset.locationId)));
+      });
+    }
+
+    function selectLocation(id) {
+      selectedLocation = (latestPayload?.locations || []).find((row) => Number(row.id) === id) || null;
+      document.querySelector('#selectedInfo').textContent = selectedLocation
+        ? `${selectedLocation.location_code} · ${selectedLocation.part_key} · ${selectedLocation.quantity}`
+        : tr('inventory.editor.empty');
+      document.querySelector('#adjustQty').value = selectedLocation ? selectedLocation.quantity : '';
+      document.querySelector('#moveQty').value = selectedLocation ? '1' : '';
+      renderLocations(latestPayload?.locations || []);
+    }
+
+    async function loadInventory() {
+      const params = new URLSearchParams();
+      const factory = document.querySelector('#factoryFilter').value;
+      const part = document.querySelector('#partFilter').value.trim();
+      if (factory) params.set('factory_id', factory);
+      if (part) params.set('part_key', part);
+      params.set('include_hidden', document.querySelector('#hiddenFilter').value);
+      latestPayload = await AuthUI.fetchJson(`/api/inventory/locations?${params.toString()}`);
+      renderSummary(latestPayload.summary || {});
+      renderLocations(latestPayload.locations || []);
+      if (selectedLocation && !(latestPayload.locations || []).some((row) => row.id === selectedLocation.id)) {
+        selectedLocation = null;
+        selectLocation(0);
+      }
+    }
+
+    async function adjustSelected() {
+      if (!selectedLocation) return;
+      await AuthUI.fetchJson(`/api/inventory/locations/${selectedLocation.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quantity: Number(document.querySelector('#adjustQty').value),
+          reason: document.querySelector('#adjustReason').value,
+        }),
+      });
+      await loadInventory();
+    }
+
+    async function moveSelected() {
+      if (!selectedLocation) return;
+      await AuthUI.fetchJson('/api/inventory/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_location_id: selectedLocation.id,
+          target_location_code: document.querySelector('#moveTarget').value,
+          quantity: Number(document.querySelector('#moveQty').value),
+          target_location_kind: document.querySelector('#moveKind').value,
+          reason: document.querySelector('#moveReason').value,
+        }),
+      });
+      await loadInventory();
+    }
+
+    async function bootInventory() {
+      const user = await AuthUI.currentUser();
+      if (!user) {
+        AuthUI.redirectToLogin();
+        return;
+      }
+      if (!AuthUI.hasCapability(user, 'can_manage_inventory')) {
+        document.querySelector('#accessDenied').hidden = false;
+        return;
+      }
+      document.querySelector('#inventoryContent').hidden = false;
+      await loadInventory();
+    }
+
+    document.querySelector('#refreshBtn').addEventListener('click', loadInventory);
+    document.querySelector('#applyFilterBtn').addEventListener('click', loadInventory);
+    document.querySelector('#adjustBtn').addEventListener('click', () => {
+      adjustSelected().catch((error) => { document.querySelector('#selectedInfo').textContent = error.message; });
+    });
+    document.querySelector('#moveBtn').addEventListener('click', () => {
+      moveSelected().catch((error) => { document.querySelector('#selectedInfo').textContent = error.message; });
+    });
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await AuthUI.logout();
+      window.location.href = '/login';
+    });
+
+    I18n.init().then(bootInventory);
+    window.addEventListener('i18n:change', () => {
+      if (latestPayload) {
+        renderSummary(latestPayload.summary || {});
+        renderLocations(latestPayload.locations || []);
+      }
+    });
+  </script>
+</body>
+</html>
