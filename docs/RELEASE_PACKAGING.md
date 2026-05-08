@@ -109,3 +109,5 @@ desktop/src-tauri/target/release/bundle/nsis/
 ```
 
 M3 is Windows-only and unsigned. macOS and Linux desktop bundles are intentionally out of scope for this beta.
+
+The launcher Rust code has a macOS sidecar path scaffold (`dist-macos/tagledger-server/tagledger_server`) so the next milestone can add a signed/notarized macOS package without changing the process manager contract. Do not enable `.app` or `.dmg` targets until the macOS sidecar build and signing/notarization plan are ready.

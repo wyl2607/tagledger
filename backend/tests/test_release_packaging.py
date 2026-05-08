@@ -141,9 +141,12 @@ def test_desktop_launcher_layout_present() -> None:
     assert "tauri-plugin-single-instance" in cargo
 
     # Build script must hard-fail if the M2 sidecar bundle is missing,
-    # so contributors don't ship a launcher with no backend.
+    # so contributors don't ship a Windows launcher with no backend. macOS is
+    # scaffold-only until the signed sidecar bundle lands.
     build_rs = Path("desktop/src-tauri/build.rs").read_text(encoding="utf-8")
     assert "tagledger_server.exe" in build_rs
+    assert "dist-macos" in build_rs
+    assert "cargo:warning=macOS sidecar bundle missing" in build_rs
     assert "panic!" in build_rs or "compile_error" in build_rs
 
     gitignore = Path("desktop/.gitignore").read_text(encoding="utf-8")

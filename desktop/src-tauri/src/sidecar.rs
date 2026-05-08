@@ -349,12 +349,24 @@ fn http_request(
 }
 
 fn sidecar_exe(app: &AppHandle) -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    let exe_name = "tagledger_server.exe";
+    #[cfg(not(windows))]
+    let exe_name = "tagledger_server";
+
+    #[cfg(windows)]
+    let dev_dist = "dist";
+    #[cfg(target_os = "macos")]
+    let dev_dist = "dist-macos";
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    let dev_dist = "dist";
+
     let resource = app
         .path()
         .resource_dir()
         .map_err(|error| format!("Could not resolve resource dir: {error}"))?
         .join("tagledger-server")
-        .join("tagledger_server.exe");
+        .join(exe_name);
     if resource.exists() {
         return Ok(resource);
     }
@@ -364,15 +376,15 @@ fn sidecar_exe(app: &AppHandle) -> Result<PathBuf, String> {
         .parent()
         .and_then(Path::parent)
         .ok_or_else(|| "Could not resolve repository root".to_string())?
-        .join("dist")
+        .join(dev_dist)
         .join("tagledger-server")
-        .join("tagledger_server.exe");
+        .join(exe_name);
     if dev.exists() {
         return Ok(dev);
     }
 
     Err(format!(
-        "Missing sidecar executable. Run M2 first; checked {} and {}",
+        "Missing sidecar executable. Run M2 (Windows) or M4-A.2 (macOS) first; checked {} and {}",
         resource.display(),
         dev.display()
     ))
