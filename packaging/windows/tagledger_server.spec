@@ -7,8 +7,10 @@ from pathlib import Path
 
 import PyInstaller.config
 
-REPO_ROOT = Path(SPECPATH).resolve().parents[1].parent  # packaging/windows -> repo root
-PyInstaller.config.CONF['workpath'] = str(REPO_ROOT / 'build' / 'pyinstaller')
+REPO_ROOT = Path(SPECPATH).resolve().parents[1]  # SPECPATH=.../packaging/windows -> repo root
+_workpath = REPO_ROOT / 'build' / 'pyinstaller'
+_workpath.mkdir(parents=True, exist_ok=True)
+PyInstaller.config.CONF['workpath'] = str(_workpath)
 
 # --- Bundled data ---
 datas = [
@@ -66,6 +68,16 @@ hiddenimports += [
     f'backend.app.services.{m.name}' for m in pkgutil.iter_modules(services_pkg.__path__)
 ]
 
+# pyzbar's Windows wheel ships zbar/iconv DLLs beside the package. PyInstaller
+# does not collect them automatically, and pyzbar looks for them under a
+# `pyzbar/` directory at runtime.
+import pyzbar
+pyzbar_dir = Path(pyzbar.__file__).resolve().parent
+binaries = [
+    (str(pyzbar_dir / 'libzbar-64.dll'), 'pyzbar'),
+    (str(pyzbar_dir / 'libiconv.dll'), 'pyzbar'),
+]
+
 # --- Excludes (keep bundle small) ---
 excludes = [
     'tkinter',
@@ -82,7 +94,7 @@ excludes = [
 a = Analysis(
     [str(REPO_ROOT / 'backend' / 'app' / 'cli.py')],
     pathex=[str(REPO_ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

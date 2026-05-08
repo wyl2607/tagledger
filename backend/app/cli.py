@@ -95,4 +95,10 @@ def main():
 
     import uvicorn
 
-    uvicorn.run("backend.app.main:app", host=args.host, port=port, log_level="info")
+    from backend.app.main import app
+
+    uvicorn.run(app, host=args.host, port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

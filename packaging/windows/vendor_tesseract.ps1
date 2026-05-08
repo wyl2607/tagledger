@@ -1,5 +1,4 @@
 #Requires -Version 5.1
-$ErrorActionPreference = 'Stop'
 
 # Vendor a portable Tesseract install + chi_sim/eng tessdata into packaging/windows/vendor/.
 # Output layout (consumed by tagledger_server.spec):
@@ -17,10 +16,12 @@ $ErrorActionPreference = 'Stop'
 
 param(
     [string]$RepoRoot = (Resolve-Path "$PSScriptRoot/../..").Path,
-    [string]$TessdataFastRef = '4767ea922bcc460e70b87b1d303ebdfedec19eed',  # tessdata_fast pinned commit
-    [string]$ChiSimSha256    = 'a1b2c3...REPLACE_AT_FIRST_RUN',              # filled in after first verified pull
+    [string]$TessdataFastRef = '4.1.0',  # tessdata_fast release tag
+    [string]$ChiSimSha256    = 'a5fcb6f0db1e1d6d8522f39db4e848f05984669172e584e8d76b6b3141e1f730',  # chi_sim @ tag 4.1.0, verified 2026-05-08
     [switch]$UseExisting
 )
+
+$ErrorActionPreference = 'Stop'
 
 $vendor = Join-Path $RepoRoot 'packaging/windows/vendor/tesseract'
 $tessdata = Join-Path $vendor 'tessdata'

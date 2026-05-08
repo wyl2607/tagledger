@@ -1,5 +1,4 @@
 #Requires -Version 5.1
-$ErrorActionPreference = 'Stop'
 
 # End-to-end M2 build: vendor Tesseract, install runtime deps, run PyInstaller, smoke test.
 # Usage:
@@ -12,6 +11,8 @@ param(
     [switch]$SkipSmoke,
     [string]$Python = 'python'
 )
+
+$ErrorActionPreference = 'Stop'
 
 $RepoRoot = (Resolve-Path "$PSScriptRoot/../..").Path
 Set-Location $RepoRoot
@@ -76,22 +77,45 @@ try {
     if (-not (Test-Path $portFile)) { throw 'Sidecar did not write runtime/port within 20s.' }
 
     $port = (Get-Content $portFile -Raw).Trim()
-    Write-Host "Sidecar listening on 127.0.0.1:$port"
+    Write-Host "Sidecar will listen on 127.0.0.1:$port (waiting for uvicorn bind)"
 
-    $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -UseBasicParsing -TimeoutSec 5
-    if ($resp.StatusCode -ne 200) { throw "Health check returned $($resp.StatusCode)." }
+    # The port file is written before uvicorn finishes binding, so poll /health
+    # with backoff instead of single-shotting it.
+    $healthOk = $false
+    $deadline = (Get-Date).AddSeconds(20)
+    while (-not $healthOk -and (Get-Date) -lt $deadline) {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" `
+                -UseBasicParsing -TimeoutSec 3
+            if ($resp.StatusCode -eq 200) { $healthOk = $true; break }
+        } catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    if (-not $healthOk) { throw "Health check did not return 200 within 20s." }
     Write-Host '/health OK'
 
-    # Host header attack should be 421.
+    # Host header attack should be 421. Use HttpWebRequest instead of
+    # Invoke-WebRequest here because Windows PowerShell 5 and PowerShell 7 wrap
+    # non-2xx responses differently.
+    $badHostCode = $null
+    $request = [System.Net.HttpWebRequest]::Create("http://127.0.0.1:$port/health")
+    $request.Host = 'evil.com'
+    $request.Timeout = 5000
     try {
-        Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" `
-            -Headers @{ 'Host' = 'evil.com' } -UseBasicParsing -TimeoutSec 5 | Out-Null
+        $badHostResponse = $request.GetResponse()
+        $badHostCode = [int]$badHostResponse.StatusCode
+        $badHostResponse.Close()
         throw 'Host-header attack was not rejected.'
     } catch [System.Net.WebException] {
-        $code = [int]$_.Exception.Response.StatusCode
-        if ($code -ne 421) { throw "Expected 421 for bad Host, got $code" }
-        Write-Host 'Bad Host -> 421 OK'
+        $resp = $_.Exception.Response
+        if ($null -ne $resp) {
+            $badHostCode = [int]$resp.StatusCode
+            $resp.Close()
+        }
     }
+    if ($badHostCode -ne 421) { throw "Expected 421 for bad Host, got $badHostCode" }
+    Write-Host 'Bad Host -> 421 OK'
 } finally {
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
