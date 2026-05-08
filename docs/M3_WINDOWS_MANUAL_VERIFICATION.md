@@ -1,9 +1,9 @@
 # M3 Windows Manual Verification Checklist
 
-Status: partial — item 1 confirmed via Codex RDP/screenshot loop on 2026-05-08; items 2–4 in progress
+Status: partial — item 1 confirmed; item 4 has Android LAN/browser evidence but still needs QR and final UI-upload confirmation; items 2–3 still pending
 Branch: `codex/desktop-beta-m1-lan-guard`
-Commits: 2f62c4c, 8cafecd, 97b6d14 (mobile capture layout tweak)
-Verification mode: lightweight screen-share — Codex pulls Windows screenshots + sends remote clicks; user's phone needed only for item 4 QR scan.
+Commits: 2f62c4c, 8cafecd, 97b6d14, 9167fc8, d35a6c6
+Verification mode: lightweight screen-share — Codex pulls Windows screenshots + sends remote clicks; Android checks use ADB + scrcpy + Chrome DevTools.
 
 This checklist tracks the four items that could not be verified via SSH during the M3 smoke run. All four must be confirmed on a physical Windows machine before pushing the branch to remote, opening a PR, or shipping the beta installer.
 
@@ -46,6 +46,20 @@ Failure mode signal: missing `Drop` impl on the sidecar handle, or sidecar recei
 - [ ] Uploaded photo appears in the launcher's data dir
 
 Failure mode signal: `TAGLEDGER_ALLOWED_HOSTS` rejecting the LAN IP, mobile browser blocking insecure context for camera (HTTP without localhost), or pairing token mismatch.
+
+Evidence gathered on 2026-05-08:
+
+- Windows launcher showed a private LAN URL and the sidecar accepted LAN mobile traffic.
+- Android Chrome on the OnePlus device opened the LAN URL after pairing regeneration and reached `/mobile#capture`.
+- Pairing, auth setup/session cookie, CSRF headers, `/upload`, `/jobs/{id}`, and Tesseract OCR were exercised from the Android Chrome session; the backend returned `ocr_done` for a mobile-origin upload.
+- The phone browser could invoke the Android camera and system gallery from the mobile capture page.
+- `9167fc8` improved the mobile capture layout and `d35a6c6` records the Pixel/OPPO viewport baseline in `docs/UI_REVAMP_NOTES.md`.
+
+Remaining item 4 work:
+
+- Re-test from the launcher QR itself, not an ADB-opened URL.
+- Use a clean single browser tab; old local dev TagLedger tabs caused Android to return selected images to the wrong tab during earlier tests.
+- Confirm the final visible UI path: select/capture photo -> sticky "上传并识别" appears -> tap upload -> edit/review screen appears -> uploaded file is present under `%APPDATA%\TagLedger\uploads`.
 
 ## After all four pass
 
