@@ -127,7 +127,7 @@ def main() -> None:
             ),
         )
         login(page, "browser-manager", "browser-manager-pass")
-        expect(page.get_by_text("全局录入和调拨状态，一屏看清")).to_be_visible()
+        expect(page.get_by_text("全厂进度，一屏看清")).to_be_visible()
         expect(page.get_by_text("账号与权限")).to_be_visible()
 
         page.goto(f"{BASE_URL}/outbound", wait_until="networkidle")
@@ -157,7 +157,7 @@ def main() -> None:
         page.locator("#logoutBtn").click()
         page.wait_for_url("**/login", timeout=10_000)
         login(page, "shipper-one", "shipper-one-pass")
-        expect(page.get_by_text("只看你的发货单，先把当前单做完")).to_be_visible()
+        expect(page.get_by_text("先做当前单，扫完再走")).to_be_visible()
         expect(page.get_by_text(f"分配单号 {assigned_order_text}")).to_be_visible()
         expect(page.get_by_text("账号与权限")).not_to_be_visible()
         expect(page.get_by_text("跨场子调拨")).not_to_be_visible()
