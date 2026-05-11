@@ -10,6 +10,7 @@ from backend.app.services.inventory_service import (
     list_inventory_locations,
     move_inventory_quantity,
 )
+from backend.app.services.location_map import build_inventory_location_map
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
@@ -40,6 +41,23 @@ def get_inventory_locations(
             session=session,
             factory_id=factory_id,
             part_key=part_key,
+            include_hidden=include_hidden,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/location-map")
+def get_inventory_location_map(
+    factory_id: str | None = None,
+    include_hidden: bool = Query(default=False),
+    _: User = Depends(require_supervisor),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    try:
+        return build_inventory_location_map(
+            session=session,
+            factory_id=factory_id,
             include_hidden=include_hidden,
         )
     except RuntimeError as exc:

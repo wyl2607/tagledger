@@ -32,12 +32,14 @@ def _seed_location(
     part_key: str,
     location_code: str,
     quantity: int,
+    part_name: str | None = None,
     location_kind: str = "permanent",
     factory_id: str = "factory_a",
 ) -> InventoryLocation:
     row = InventoryLocation(
         factory_id=factory_id,
         part_key=part_key,
+        part_name=part_name,
         location_code=location_code,
         quantity=quantity,
         status="active" if quantity > 0 else "zero_stock",
@@ -96,6 +98,37 @@ def test_inventory_locations_include_location_profile(
     assert location["location_profile"]["level"] == 1
     assert location["location_profile"]["depth"] == 1
     assert location["location_profile"]["centerline_rank"] == 1
+
+
+def test_inventory_location_map_requires_supervisor_login(client: TestClient) -> None:
+    response = client.get("/api/inventory/location-map")
+
+    assert response.status_code == 401
+
+
+def test_inventory_location_map_endpoint_returns_aggregated_cells(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122103",
+        part_name="Mapped Part",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    response = client.get("/api/inventory/location-map")
+
+    assert response.status_code == 200
+    payload = response.json()
+    cell = payload["zones"]["A"]["columns"]["A"]["racks"]["1"]["levels"]["1"]["depths"]["1"]
+    assert cell["location_code"] == "A-A01-011"
+    assert cell["location_profile"]["parse_status"] == "standard"
+    assert cell["materials"] == [
+        {"part_key": "CPXS000122103", "part_name": "Mapped Part", "quantity": 4}
+    ]
 
 
 def test_inventory_adjust_preserves_pending_status(
