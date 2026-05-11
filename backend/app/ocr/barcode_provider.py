@@ -35,7 +35,7 @@ class BarcodeProvider:
                 "Barcode/QR detection requires pyzbar or OpenCV. "
                 'Install with `pip install -e ".[barcode,ocr]"`.'
             ) from _PYZBAR_IMPORT_ERROR
-        if Image is None:
+        if decode is not None and Image is None:
             raise RuntimeError(
                 "Pillow is required for barcode detection. Install with "
                 '`pip install -e ".[barcode]"`.'
@@ -75,10 +75,7 @@ class BarcodeProvider:
                     continue
                 bbox = None
                 if points_multi is not None and index < len(points_multi):
-                    pts = points_multi[index]
-                    xs = [int(p[0]) for p in pts]
-                    ys = [int(p[1]) for p in pts]
-                    bbox = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+                    bbox = BarcodeProvider._bbox_from_points(points_multi[index])
                 results.append(BarcodeResult(type="QRCODE", data=text, bbox=bbox))
         if results:
             return results
@@ -88,8 +85,27 @@ class BarcodeProvider:
             return []
         bbox_single = None
         if points_single is not None:
-            pts = points_single
-            xs = [int(p[0]) for p in pts]
-            ys = [int(p[1]) for p in pts]
-            bbox_single = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+            bbox_single = BarcodeProvider._bbox_from_points(points_single)
         return [BarcodeResult(type="QRCODE", data=text_single, bbox=bbox_single)]
+
+    @staticmethod
+    def _bbox_from_points(points: Any) -> tuple[int, int, int, int] | None:
+        if hasattr(points, "reshape"):
+            points = points.reshape(-1, 2)
+
+        def iter_pairs(value: Any):
+            try:
+                if len(value) >= 2 and all(isinstance(item, int | float) for item in value[:2]):
+                    yield (int(value[0]), int(value[1]))
+                    return
+            except TypeError:
+                return
+            for item in value:
+                yield from iter_pairs(item)
+
+        pairs = list(iter_pairs(points))
+        if not pairs:
+            return None
+        xs = [point[0] for point in pairs]
+        ys = [point[1] for point in pairs]
+        return (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))

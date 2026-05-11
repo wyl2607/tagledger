@@ -9,8 +9,10 @@ from backend.app.models import AuditLog, InventoryLocation, InventoryMovement, U
 from backend.app.services.material_mapping import normalize_material_code
 from backend.app.services.transfer_service import FACTORIES
 
+LOCATION_KIND_ALIASES = {"long_term": "permanent"}
 LOCATION_KINDS = {"permanent", "temporary"}
 HIDDEN_LOCATION_STATUSES = {"retired", "disabled"}
+PENDING_LOCATION_STATUSES = {"pending_restock", "pending_replacement"}
 
 
 def normalize_factory_id(value: str) -> str:
@@ -36,6 +38,7 @@ def normalize_location_code(value: str) -> str:
 
 def normalize_location_kind(value: str | None) -> str:
     kind = (value or "permanent").strip().lower()
+    kind = LOCATION_KIND_ALIASES.get(kind, kind)
     if kind not in LOCATION_KINDS:
         raise RuntimeError(f"unsupported location_kind: {value}")
     return kind
@@ -54,6 +57,8 @@ def apply_location_visibility_rules(location: InventoryLocation) -> None:
     location.location_kind = kind
     location.zero_stock = quantity <= 0
     if location.status == "disabled":
+        return
+    if location.status in PENDING_LOCATION_STATUSES:
         return
     if quantity <= 0 and kind == "temporary":
         location.status = "retired"

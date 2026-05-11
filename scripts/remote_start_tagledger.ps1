@@ -10,9 +10,6 @@ Set-Location $AppDir
 $OutLog = Join-Path $AppDir 'uvicorn.out.log'
 $ErrLog = Join-Path $AppDir 'uvicorn.err.log'
 
-if (Test-Path $OutLog) { Remove-Item $OutLog -Force }
-if (Test-Path $ErrLog) { Remove-Item $ErrLog -Force }
-
 $Py = Join-Path $AppDir '.venv\Scripts\python.exe'
 if (-not (Test-Path $Py)) {
     throw "Python not found: $Py"
@@ -24,6 +21,15 @@ $Running = Get-CimInstance Win32_Process | Where-Object {
 }
 foreach ($Proc in $Running) {
     try { Stop-Process -Id $Proc.ProcessId -Force -ErrorAction Stop } catch {}
+}
+
+Start-Sleep -Seconds 1
+
+if (Test-Path $OutLog) {
+    try { Remove-Item $OutLog -Force -ErrorAction Stop } catch {}
+}
+if (Test-Path $ErrLog) {
+    try { Remove-Item $ErrLog -Force -ErrorAction Stop } catch {}
 }
 
 $Proc = Start-Process -FilePath $Py `

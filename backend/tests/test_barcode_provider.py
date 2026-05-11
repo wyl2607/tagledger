@@ -46,3 +46,11 @@ def test_detect_reads_multiple_codes_from_one_image(tmp_path: Path) -> None:
 
     assert expected_ean in data
     assert expected_qr in data
+
+
+def test_bbox_from_opencv_single_qr_points_shape() -> None:
+    from backend.app.ocr.barcode_provider import BarcodeProvider
+
+    points = [[[10.8, 20.2], [50.6, 20.1], [50.4, 60.9], [10.1, 60.7]]]
+
+    assert BarcodeProvider._bbox_from_points(points) == (10, 20, 40, 40)

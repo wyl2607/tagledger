@@ -49,6 +49,55 @@ def _seed_location(
     return row
 
 
+def test_inventory_accepts_legacy_long_term_locations(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    row = _seed_location(
+        session,
+        part_key="CPXS000122100",
+        location_code="LT-01",
+        quantity=4,
+        location_kind="long_term",
+    )
+
+    response = client.get("/api/inventory/locations")
+
+    assert response.status_code == 200
+    location = response.json()["locations"][0]
+    assert location["id"] == row.id
+    assert location["location_kind"] == "permanent"
+
+
+def test_inventory_adjust_preserves_pending_status(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    row = _seed_location(
+        session,
+        part_key="CPXS000122101",
+        location_code="PEND-01",
+        quantity=4,
+        location_kind="permanent",
+    )
+    row.status = "pending_replacement"
+    session.add(row)
+    session.commit()
+
+    response = client.patch(
+        f"/api/inventory/locations/{row.id}",
+        json={"quantity": 6, "reason": "count correction"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["location"]["status"] == "pending_replacement"
+    stored = session.get(InventoryLocation, row.id)
+    assert stored is not None
+    assert stored.status == "pending_replacement"
+
+
 def test_inventory_list_hides_retired_temporary_locations(
     client: TestClient,
     session: Session,
