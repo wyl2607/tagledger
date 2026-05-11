@@ -31,7 +31,7 @@
   "home.card.outbound.title": "Ausgang prufen",
   "home.card.outbound.desc": "Auftrage auswahlen und Treffer, Restmengen und Abschlussstatus prufen.",
   "home.card.inbound.title": "Wareneingang",
-  "home.card.inbound.desc": "Nachster Schritt: Eingang nach Teil, Lagerort und Menge als eigene Seite trennen.",
+  "home.card.inbound.desc": "Bestand nach Teil, Lagerort und Menge einbuchen.",
   "home.card.inventory.title": "Bestand und Lagerorte",
   "home.card.inventory.desc": "Alle Lagerorte eines Teils finden, spater mit Leer-, Nachfull- und Deaktivstatus.",
   "home.card.history.title": "Ausgangsjournal",

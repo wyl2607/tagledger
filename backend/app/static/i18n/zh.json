@@ -31,7 +31,7 @@
   "home.card.outbound.title": "出库核对",
   "home.card.outbound.desc": "选择出库单，核对料号命中、剩余数量和完成状态。",
   "home.card.inbound.title": "入库登记",
-  "home.card.inbound.desc": "下一步拆出入库页面，按料号和库位增加库存。",
+  "home.card.inbound.desc": "登记来料入库，按料号、库位和数量增加库存。",
   "home.card.inventory.title": "库存与库位",
   "home.card.inventory.desc": "按料号查看所有库位数量，后续支持空库、补货和停用状态。",
   "home.card.history.title": "出库流水",

@@ -249,6 +249,65 @@ def test_inventory_move_rejects_same_location(
     assert response.json()["detail"] == "target location must differ from source location"
 
 
+def test_outbound_inbound_returns_quantity_on_hand_and_records_movement(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+
+    response = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122006",
+            "location_code": "QA-IN-06",
+            "quantity": 7,
+            "operator_id": "spoofed-operator",
+            "reason": "purchase_inbound_test",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["updated"] is True
+    assert payload["location"]["quantity"] == 7
+    assert payload["location"]["quantity_on_hand"] == 7
+    assert payload["movement"]["movement_type"] == "inbound"
+    assert payload["movement"]["before_qty"] == 0
+    assert payload["movement"]["after_qty"] == 7
+    assert payload["movement"]["operator_id"] == "inventory-supervisor"
+    movement = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122006")
+    ).one()
+    assert movement.operator_id == "inventory-supervisor"
+    assert movement.reason == "purchase_inbound_test"
+
+
+def test_outbound_inbound_rejects_non_positive_quantity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+
+    for quantity in (0, -3):
+        response = client.post(
+            "/api/outbound/inventory/inbound",
+            json={
+                "part_key": "CPXS000122007",
+                "location_code": "QA-IN-07",
+                "quantity": quantity,
+            },
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "quantity must be > 0"
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122007")
+        ).first()
+        is None
+    )
+
+
 def test_inventory_api_requires_supervisor(client: TestClient, session: Session) -> None:
     operator = create_user(
         session,

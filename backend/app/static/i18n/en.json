@@ -31,7 +31,7 @@
   "home.card.outbound.title": "Outbound check",
   "home.card.outbound.desc": "Select orders and check part hits, remaining quantities and completion status.",
   "home.card.inbound.title": "Inbound receiving",
-  "home.card.inbound.desc": "Next step: split out inbound receiving by part, location and quantity.",
+  "home.card.inbound.desc": "Receive inbound stock by part, location and quantity.",
   "home.card.inventory.title": "Inventory and locations",
   "home.card.inventory.desc": "Find all locations for a part, then support empty, replenish and disabled states.",
   "home.card.history.title": "Outbound ledger",

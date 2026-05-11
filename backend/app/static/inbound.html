@@ -73,7 +73,7 @@
         </label>
         <label>
           <span>操作人</span>
-          <input id="operatorId" autocomplete="off" placeholder="默认使用当前账号">
+          <input id="operatorId" autocomplete="off" readonly placeholder="自动使用当前账号">
         </label>
         <label>
           <span>原因</span>
@@ -119,10 +119,11 @@
     function renderResult(payload) {
       const location = payload.location || {};
       const movement = payload.movement || {};
+      const quantityOnHand = location.quantity_on_hand ?? location.quantity ?? '-';
       document.querySelector('#inboundResult').innerHTML = `
         <div class="result-tile"><span>状态</span><strong>已入库</strong></div>
         <div class="result-tile"><span>物料</span><strong>${esc(location.part_key)}</strong></div>
-        <div class="result-tile"><span>库位库存</span><strong>${esc(location.location_code)} · ${esc(location.quantity_on_hand)}</strong></div>
+        <div class="result-tile"><span>库位库存</span><strong>${esc(location.location_code)} · ${esc(quantityOnHand)}</strong></div>
         <div class="result-tile"><span>流水</span><strong>${esc(movement.movement_type)} ${esc(movement.quantity_delta)}</strong></div>
       `;
     }
@@ -145,7 +146,6 @@
             part_key: document.querySelector('#partKey').value.trim(),
             location_code: document.querySelector('#locationCode').value.trim(),
             quantity: Number(document.querySelector('#quantity').value),
-            operator_id: document.querySelector('#operatorId').value.trim() || currentUser?.username || 'self',
             reason: document.querySelector('#reason').value.trim() || 'purchase_inbound',
           }),
         });

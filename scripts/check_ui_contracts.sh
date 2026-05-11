@@ -27,5 +27,6 @@ check_contains "backend/app/static/home.html" "payload.global_stats"
 check_contains "backend/app/static/i18n/zh.json" '"workbench.brand": "现场调度台"'
 check_contains "backend/app/static/inbound.html" "/api/outbound/inventory/inbound"
 check_contains "backend/app/static/inbound.html" "采购入库"
+check_contains "backend/app/static/inbound.html" "quantity_on_hand ?? location.quantity"
 
 echo "ui contracts: OK"

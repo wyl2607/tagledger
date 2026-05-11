@@ -975,12 +975,14 @@ def _select_location_for_outbound(
 
 
 def _inventory_location_payload(location: InventoryLocation) -> dict[str, object]:
+    quantity = int(location.quantity)
     return {
         "id": location.id,
         "part_key": location.part_key,
         "part_name": location.part_name,
         "location_code": location.location_code,
-        "quantity": int(location.quantity),
+        "quantity": quantity,
+        "quantity_on_hand": quantity,
         "status": location.status,
         "zero_stock": bool(location.zero_stock),
         "location_kind": _normalize_location_kind(location.location_kind),
