@@ -267,6 +267,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'data-state="planned"' in portal
     assert "renderModules(payload.modules || [])" in workbench
     assert "payload.global_stats" in workbench
+    assert 'href="/" data-i18n="nav.portal"' in workbench
     assert 'href="/admin"' not in mobile
     assert 'href="/transfers"' not in mobile
     assert 'href="/dashboard"' not in mobile
@@ -276,10 +277,14 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'id="assignedOrder"' in admin
     assert "outbound_last_order_no" in admin
     assert "can_manage_inventory" in inventory
+    assert 'href="/" data-i18n="nav.portal"' in inventory
     assert "can_manage_users" in admin
+    assert 'href="/" data-i18n="nav.portal"' in admin
     assert 'id="createTransferCard" hidden' in transfers
     assert "can_manage_transfers" in transfers
+    assert 'href="/" data-i18n="nav.portal"' in transfers
     assert "can_manage_signoff" in signoff
+    assert 'href="/" data-i18n="nav.portal"' in signoff
     assert "/api/signoff/candidates" in signoff
     assert "copyPreview" in signoff
     assert "'Content-Type': 'application/json'" in signoff
@@ -341,6 +346,31 @@ def test_write_endpoints_require_login_even_with_valid_csrf(
     assert confirm.status_code == 401
     assert retry_one.status_code == 401
     assert retry_all.status_code == 401
+
+
+def test_read_record_endpoints_require_login(
+    client: TestClient, session: Session, tmp_path
+) -> None:
+    image_path = tmp_path / "label.jpg"
+    image_path.write_bytes(b"fake image")
+    record = Record(
+        image_path=str(image_path),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    jobs = client.get("/jobs")
+    job = client.get(f"/jobs/{record.id}")
+    image = client.get(f"/records/{record.id}/image")
+    workbench = client.get("/api/workbench")
+
+    assert jobs.status_code == 401
+    assert job.status_code == 401
+    assert image.status_code == 401
+    assert workbench.status_code == 401
 
 
 def test_outbound_query_accepts_multiple_selected_orders(

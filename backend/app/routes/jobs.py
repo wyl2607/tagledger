@@ -76,6 +76,7 @@ def list_jobs(
     operator_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> list[RecordListItem]:
     statement = select(Record).order_by(Record.id.desc())
@@ -89,7 +90,11 @@ def list_jobs(
 
 
 @router.get("/jobs/{record_id}", response_model=RecordRead)
-def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRead:
+def get_job(
+    record_id: int,
+    _: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> RecordRead:
     record = session.get(Record, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
@@ -120,7 +125,11 @@ def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRe
 
 
 @router.get("/records/{record_id}/image", include_in_schema=False)
-def get_record_image(record_id: int, session: Session = Depends(get_session)) -> FileResponse:
+def get_record_image(
+    record_id: int,
+    _: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> FileResponse:
     record = session.get(Record, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
