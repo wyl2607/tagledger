@@ -198,6 +198,10 @@
 
     async function loadDashboard() {
       const user = await AuthUI.currentUser();
+      if (!user) {
+        AuthUI.redirectToLogin('/dashboard');
+        return;
+      }
       if (!AuthUI.hasCapability(user, 'can_view_global_stats')) {
         document.querySelector('#updatedAt').textContent = '无权查看全局统计';
         return;

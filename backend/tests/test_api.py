@@ -297,6 +297,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert "AuthUI.fetchJson" in history
     dashboard = _static_text("backend/app/static/dashboard.html")
     assert "AuthUI.currentUser()" in dashboard
+    assert "AuthUI.redirectToLogin('/dashboard')" in dashboard
 
 
 def test_static_i18n_keys_exist_for_three_languages() -> None:
