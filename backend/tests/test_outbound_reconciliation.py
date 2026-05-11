@@ -55,6 +55,59 @@ def test_load_workbook_business_sheets(tmp_path) -> None:
     assert cutting_items[0].part_code == "C.P.XS.000122001"
 
 
+def test_load_ordered_picking_sheet_preserves_orders_and_locations(tmp_path) -> None:
+    path = tmp_path / "outbound.xlsx"
+    workbook = Workbook()
+    shipping = workbook.active
+    shipping.title = "shipping"
+    shipping.append(["出库单号", "数量", "备件编码", "备件名称"])
+    shipping.append(["SO202605990001", 1, "C.P.XS.000999001", "Other"])
+    cutting = workbook.create_sheet("96单小单")
+    cutting.append(["出库单号", "数量", "备件编码", "备件名称", "库位", "", ""])
+    cutting.append(["SO202605060078", 1, "W.E.CH.000028000", "YUKA 彩盒", "A-A06-013", "", ""])
+    cutting.append(["SO202605030090", 1, "C.P.SH.000256000", "HM434 安全钥匙", "#VALUE!", "", ""])
+    workbook.save(path)
+
+    cutting_items = _load_cutting_sheet(path, "96单小单")
+
+    assert cutting_items[0].order_no == "SO202605060078"
+    assert cutting_items[0].locations == ("A-A06-013",)
+    assert cutting_items[1].order_no == "SO202605030090"
+    assert cutting_items[1].locations == ()
+
+
+def test_ordered_picking_sheet_becomes_order_source_when_shipping_sheet_mismatches(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "outbound.xlsx"
+    workbook = Workbook()
+    shipping = workbook.active
+    shipping.title = "shipping"
+    shipping.append(["出库单号", "数量", "备件编码", "备件名称"])
+    shipping.append(["SO202605990001", 1, "C.P.XS.000999001", "Other"])
+    cutting = workbook.create_sheet("96单小单")
+    cutting.append(["出库单号", "数量", "备件编码", "备件名称", "库位"])
+    cutting.append(["SO202605060078", 1, "W.E.CH.000028000", "YUKA 彩盒", "A-A06-013"])
+    workbook.save(path)
+
+    from backend.app.services import outbound_reconciliation
+
+    class FakeSettings:
+        outbound_workbook_file = path
+        outbound_shipping_sheet = "shipping"
+        outbound_cutting_sheet = "96单小单"
+        outbound_cutting_text_file = tmp_path / "missing-cut.txt"
+        outbound_shipping_text_file = tmp_path / "missing-ship.txt"
+
+    monkeypatch.setattr(outbound_reconciliation, "get_settings", lambda: FakeSettings())
+
+    _, shipping_items = load_outbound_items()
+    summary = outbound_summary()
+
+    assert [item.order_no for item in shipping_items] == ["SO202605060078"]
+    assert summary["order_numbers"]["shipping"] == ["SO202605060078"]
+
+
 def test_outbound_summary_uses_part_totals(tmp_path, monkeypatch) -> None:
     path = tmp_path / "outbound.xlsx"
     workbook = Workbook()
