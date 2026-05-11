@@ -3,36 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>物流工作台 · TagLedger</title>
+  <title>现场调度台 · TagLedger</title>
   <link rel="stylesheet" href="/static/ui.css">
   <style>
-    body { background: #f5f7fa; }
-    .workbench { display: grid; gap: 20px; padding-bottom: 48px; }
+    body { background: #f3f4f6; }
+    .workbench { display: grid; gap: 18px; padding-bottom: 48px; }
     .hero-panel {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-      gap: 20px;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 410px);
+      gap: 16px;
       align-items: stretch;
     }
     .hero-copy {
-      min-height: 220px;
+      min-height: 230px;
       display: grid;
-      align-content: center;
+      align-content: space-between;
       gap: 14px;
       padding: 28px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
-      background: #fff;
+      background:
+        linear-gradient(90deg, rgba(17,24,39,.08), rgba(255,255,255,0) 46%),
+        #fff;
       box-shadow: var(--shadow);
     }
-    .hero-copy h1 { font-size: 34px; letter-spacing: 0; }
+    .hero-copy h1 { font-size: 40px; letter-spacing: 0; }
     .role-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .scope-note { max-width: 760px; color: var(--muted); line-height: 1.45; font-weight: 800; }
+    .scope-note { max-width: 760px; color: #374151; line-height: 1.35; font-weight: 900; }
+    .shift-board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .shift-chip {
+      min-height: 60px;
+      padding: 10px 12px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background: #fff;
+      font-weight: 950;
+    }
+    .shift-chip span { display: block; color: #475569; font-size: 14px; }
+    .shift-chip strong { display: block; margin-top: 4px; font-size: 19px; }
     .stats-panel {
       display: grid;
       gap: 12px;
       padding: 18px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
@@ -44,7 +61,7 @@
       align-content: center;
       gap: 6px;
       padding: 14px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #f9fafb;
     }
@@ -61,7 +78,7 @@
     .quick-path-item {
       min-height: 92px;
       padding: 14px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
@@ -76,7 +93,7 @@
       align-content: space-between;
       gap: 12px;
       padding: 18px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
@@ -87,8 +104,17 @@
       outline: 0;
     }
     .module-card strong { display: block; font-size: 22px; line-height: 1.18; overflow-wrap: anywhere; }
-    .module-card span { display: block; margin-top: 8px; color: var(--muted); line-height: 1.42; overflow-wrap: anywhere; }
-    .module-card small { color: var(--success); font-size: 15px; font-weight: 950; }
+    .module-card span { display: block; margin-top: 8px; color: #475569; line-height: 1.32; font-weight: 850; overflow-wrap: anywhere; }
+    .module-card small {
+      width: max-content;
+      max-width: 100%;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #ecfdf5;
+      color: var(--success);
+      font-size: 14px;
+      font-weight: 950;
+    }
     .topbar-user { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
     .daily-list { display: grid; gap: 8px; }
     .daily-item {
@@ -101,9 +127,9 @@
     }
     .daily-item:last-child { border-bottom: 0; }
     @media (max-width: 920px) {
-      .hero-panel, .quick-path, .module-grid, .stat-row { grid-template-columns: 1fr; }
+      .hero-panel, .quick-path, .module-grid, .stat-row, .shift-board { grid-template-columns: 1fr; }
       .hero-copy { min-height: 0; padding: 22px; }
-      .hero-copy h1 { font-size: 30px; }
+      .hero-copy h1 { font-size: 34px; }
       .topbar-user { justify-content: stretch; }
       .topbar-user .nav-button { flex: 1; }
     }
@@ -138,6 +164,11 @@
         </div>
         <h1 id="heroTitle" data-i18n="workbench.hero.loading">今天先处理最该处理的单</h1>
         <p id="scopeNote" class="scope-note" data-i18n="workbench.scope.loadingDetail">正在读取账号权限和今日作业范围。</p>
+        <div class="shift-board" aria-label="班组工作顺序">
+          <div class="shift-chip"><span>第一步</span><strong>手机捡货</strong></div>
+          <div class="shift-chip"><span>第二步</span><strong>出库核对</strong></div>
+          <div class="shift-chip"><span>第三步</span><strong>异常处理</strong></div>
+        </div>
       </div>
       <aside class="stats-panel" aria-label="Stats">
         <h2 data-i18n="workbench.myStats.title">我的近 7 天</h2>
@@ -153,9 +184,9 @@
     </section>
 
     <section class="quick-path" aria-label="推荐工作路径">
-      <div class="quick-path-item"><strong>发货员</strong><span>手机扫码 → 我的发货单 → 我的近 7 天。</span></div>
-      <div class="quick-path-item"><strong>主管</strong><span>出库核对 → 调拨 → 全局看板。</span></div>
-      <div class="quick-path-item"><strong>管理者</strong><span>账号权限 → 分配单号 → 审计和统计。</span></div>
+      <div class="quick-path-item"><strong>发货员</strong><span>扫码 → 看本单 → 继续下一件。</span></div>
+      <div class="quick-path-item"><strong>主管</strong><span>看进度 → 查差异 → 放行出库。</span></div>
+      <div class="quick-path-item"><strong>管理者</strong><span>分账号 → 分单号 → 看全局。</span></div>
     </section>
 
     <section>

@@ -6,18 +6,77 @@
   <title>中心入口 · TagLedger</title>
   <link rel="stylesheet" href="/static/ui.css">
   <style>
-    body { background: #f5f7fa; }
-    .portal-shell { max-width: 1180px; margin: 0 auto; padding: 22px 24px 48px; }
+    body { background: #f3f4f6; }
+    .portal-shell { max-width: 1180px; margin: 0 auto; padding: 18px 24px 48px; }
     .portal-head {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: end;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+      align-items: stretch;
       gap: 16px;
       margin-bottom: 18px;
     }
-    .portal-head h1 { margin: 0; font-size: 32px; letter-spacing: 0; }
-    .portal-head p { margin: 8px 0 0; color: var(--muted); font-weight: 850; line-height: 1.45; }
-    .portal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+    .portal-command {
+      min-height: 246px;
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+      padding: 26px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(255,107,53,.11), rgba(255,255,255,0) 42%),
+        #fff;
+      box-shadow: var(--shadow);
+    }
+    .portal-kicker { color: #475569; font-size: 15px; font-weight: 950; letter-spacing: .02em; }
+    .portal-head h1 { margin: 0; font-size: 42px; letter-spacing: 0; }
+    .portal-head p { max-width: 720px; margin: 10px 0 0; color: #374151; font-weight: 900; line-height: 1.35; }
+    .crew-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .crew-chip {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px 6px 6px;
+      border: 1px solid #d6d9de;
+      border-radius: 999px;
+      background: #fff;
+      color: #111827;
+      font-weight: 950;
+    }
+    .crew-avatar {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: #111827;
+      color: #fff;
+      font-size: 16px;
+    }
+    .portal-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background: #111827;
+      box-shadow: var(--shadow);
+    }
+    .portal-actions .nav-button {
+      min-height: 66px;
+      justify-content: flex-start;
+      border-color: rgba(255,255,255,.14);
+      background: #fff;
+      color: #111827;
+      border-radius: 8px;
+      font-size: 22px;
+    }
+    .portal-actions .nav-button.primary-entry {
+      background: var(--orange);
+      border-color: var(--orange);
+    }
     .status-strip {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -27,13 +86,13 @@
     .status-tile {
       min-height: 82px;
       padding: 14px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
     }
-    .status-tile span { display: block; color: var(--muted); font-size: 15px; font-weight: 900; }
-    .status-tile strong { display: block; margin-top: 6px; font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; }
+    .status-tile span { display: block; color: #475569; font-size: 15px; font-weight: 900; }
+    .status-tile strong { display: block; margin-top: 6px; font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }
     .tool-section { margin-top: 22px; }
     .tool-section h2 { margin: 0 0 12px; font-size: 24px; }
     .tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -43,18 +102,18 @@
       align-content: space-between;
       gap: 14px;
       padding: 18px;
-      border: 1px solid var(--line);
+      border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
     }
     .tool-card[href]:hover, .tool-card[href]:focus-visible {
       border-color: var(--orange);
-      background: #fffaf7;
+      background: #fff8f3;
       outline: 0;
     }
-    .tool-card strong { display: block; font-size: 23px; line-height: 1.18; overflow-wrap: anywhere; }
-    .tool-card span { display: block; margin-top: 8px; color: var(--muted); line-height: 1.4; font-weight: 800; overflow-wrap: anywhere; }
+    .tool-card strong { display: block; font-size: 24px; line-height: 1.14; overflow-wrap: anywhere; }
+    .tool-card span { display: block; margin-top: 8px; color: #475569; line-height: 1.3; font-weight: 850; overflow-wrap: anywhere; }
     .tool-card small {
       width: max-content;
       max-width: 100%;
@@ -75,9 +134,8 @@
     .tool-card[data-state="planned"] small { background: #f3f4f6; color: #6b7280; }
     @media (max-width: 920px) {
       .portal-head, .status-strip, .tool-grid { grid-template-columns: 1fr; }
-      .portal-actions { justify-content: flex-start; }
-      .portal-actions a, .portal-actions button { flex: 1; }
-      .portal-head h1 { font-size: 28px; }
+      .portal-head h1 { font-size: 34px; }
+      .portal-command { min-height: 0; padding: 22px; }
     }
   </style>
 </head>
@@ -86,7 +144,7 @@
     <div class="topbar-inner">
       <a class="brand" href="/">
         <span class="logo">TL</span>
-        <span><strong>TagLedger</strong><span>中心入口</span></span>
+        <span><strong>TagLedger</strong><span>现场总入口</span></span>
       </a>
       <div class="nav-actions">
         <span id="userBadge" class="pill">读取账号中</span>
@@ -98,12 +156,20 @@
 
   <main class="portal-shell">
     <section class="portal-head">
-      <div>
-        <h1>所有工具入口</h1>
-        <p>同事先从这里进，再按当天岗位选择捡货、出库、库存、调拨、签核或账号管理。</p>
+      <div class="portal-command">
+        <div>
+          <div class="portal-kicker">今日现场调度</div>
+          <h1>先选岗位，再开工</h1>
+          <p>捡货、出库、库存、调拨、签核和账号管理都从这里进。现场同事不用找菜单，看到自己的任务就点进去。</p>
+        </div>
+        <div class="crew-row" aria-label="岗位">
+          <span class="crew-chip"><span class="crew-avatar">拣</span>发货员</span>
+          <span class="crew-chip"><span class="crew-avatar">核</span>主管核对</span>
+          <span class="crew-chip"><span class="crew-avatar">管</span>账号管理</span>
+        </div>
       </div>
       <div class="portal-actions">
-        <a class="nav-button" href="/mobile">手机捡货</a>
+        <a class="nav-button primary-entry" href="/mobile">手机捡货</a>
         <a class="nav-button" href="/outbound">出库核对</a>
         <a class="nav-button" href="/workbench">角色工作台</a>
       </div>
@@ -112,8 +178,8 @@
     <section class="status-strip" aria-label="系统状态">
       <div class="status-tile"><span>服务</span><strong id="serviceStatus">运行中</strong></div>
       <div class="status-tile"><span>当前账号</span><strong id="accountStatus">未登录</strong></div>
-      <div class="status-tile"><span>今日入口</span><strong>捡货 / 出库</strong></div>
-      <div class="status-tile"><span>开发节奏</span><strong>模块逐个上线</strong></div>
+      <div class="status-tile"><span>今日主线</span><strong>96 单捡货</strong></div>
+      <div class="status-tile"><span>模块状态</span><strong>边用边上线</strong></div>
     </section>
 
     <section class="tool-section">
@@ -121,15 +187,15 @@
       <div class="tool-grid">
         <a class="tool-card" data-state="ready" href="/mobile">
           <small>可用</small>
-          <div><strong>手机捡货</strong><span>现场扫码、拍照、录入当前发货单。</span></div>
+          <div><strong>手机捡货</strong><span>扫码、拍照、录入当前单。</span></div>
         </a>
         <a class="tool-card" data-state="ready" href="/outbound">
           <small>可用</small>
-          <div><strong>出库核对</strong><span>查看 96 单进度、差异和剩余数量。</span></div>
+          <div><strong>出库核对</strong><span>看进度、差异、剩余。</span></div>
         </a>
         <a class="tool-card" data-state="ready" href="/workbench">
           <small>可用</small>
-          <div><strong>角色工作台</strong><span>按账号权限显示当前可操作页面。</span></div>
+          <div><strong>角色工作台</strong><span>按权限显示可用页面。</span></div>
         </a>
       </div>
     </section>
@@ -139,27 +205,27 @@
       <div class="tool-grid">
         <a class="tool-card" data-state="beta" href="/inventory">
           <small>开发中</small>
-          <div><strong>库存与库位</strong><span>查看库存、库位、临时库位和补货提示。</span></div>
+          <div><strong>库存与库位</strong><span>看库存、库位与补货。</span></div>
         </a>
         <a class="tool-card" data-state="beta" href="/transfers">
           <small>开发中</small>
-          <div><strong>跨场子调拨</strong><span>记录三个场子之间的调拨流水。</span></div>
+          <div><strong>跨场子调拨</strong><span>看/记三场调拨。</span></div>
         </a>
         <a class="tool-card" data-state="beta" href="/signoff">
           <small>开发中</small>
-          <div><strong>退货签核</strong><span>处理候选单、配对链接和人工确认。</span></div>
+          <div><strong>退货签核</strong><span>处理候选单和配对。</span></div>
         </a>
         <a class="tool-card" data-state="ready" href="/admin">
           <small>可用</small>
-          <div><strong>账号与权限</strong><span>创建账号、分配角色、重置密码。</span></div>
+          <div><strong>账号与权限</strong><span>账号：创建/分配/重置。</span></div>
         </a>
         <a class="tool-card" data-state="beta" href="/dashboard">
           <small>开发中</small>
-          <div><strong>全局统计</strong><span>查看录入、OCR、出库和团队作业指标。</span></div>
+          <div><strong>全局统计</strong><span>查看录入/OCR/出库指标。</span></div>
         </a>
         <a class="tool-card" data-state="ready" href="/history">
           <small>可用</small>
-          <div><strong>历史记录</strong><span>查看已确认记录和最近录入结果。</span></div>
+          <div><strong>历史记录</strong><span>查看已确认和最近结果。</span></div>
         </a>
       </div>
     </section>
@@ -169,19 +235,19 @@
       <div class="tool-grid">
         <div class="tool-card" data-state="planned">
           <small>占位</small>
-          <div><strong>采购入库</strong><span>待开发：来料登记、到货核对和入库确认。</span></div>
+          <div><strong>采购入库</strong><span>待开发：来料、核对、入库。</span></div>
         </div>
         <div class="tool-card" data-state="planned">
           <small>占位</small>
-          <div><strong>质检处理</strong><span>待开发：异常品、返工、抽检记录。</span></div>
+          <div><strong>质检处理</strong><span>待开发：异常、返工、抽检。</span></div>
         </div>
         <div class="tool-card" data-state="planned">
           <small>占位</small>
-          <div><strong>报表中心</strong><span>待开发：日结、周报和导出汇总。</span></div>
+          <div><strong>报表中心</strong><span>待开发：日结、周报、导出。</span></div>
         </div>
         <a class="tool-card" data-state="beta" href="/capture">
           <small>旧模块</small>
-          <div><strong>桌面 OCR 录入</strong><span>保留原来的标签拍照和 OCR demo。</span></div>
+          <div><strong>桌面 OCR 录入</strong><span>旧标签拍照/OCR demo。</span></div>
         </a>
       </div>
     </section>

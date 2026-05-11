@@ -42,13 +42,13 @@ def test_root_routes_to_setup_or_portal(
 
     initialized_visit = client.get("/", follow_redirects=False)
     assert initialized_visit.status_code == 200
-    assert "所有工具入口" in initialized_visit.text
+    assert "先选岗位，再开工" in initialized_visit.text
     assert "/workbench" in initialized_visit.text
 
     _login_as(client, session, manager)
     authenticated_visit = client.get("/", follow_redirects=False)
     assert authenticated_visit.status_code == 200
-    assert "中心入口" in authenticated_visit.text
+    assert "现场总入口" in authenticated_visit.text
     assert "/mobile" in authenticated_visit.text
 
 
@@ -68,7 +68,7 @@ def test_root_serves_portal_with_invalid_session_cookie(
     response = client.get("/", follow_redirects=False)
 
     assert response.status_code == 200
-    assert "所有工具入口" in response.text
+    assert "先选岗位，再开工" in response.text
     assert "/login" in response.text
 
 
