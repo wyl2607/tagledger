@@ -6,7 +6,7 @@ import pytest
 def _optional_module(name: str):
     try:
         return pytest.importorskip(name)
-    except pytest.skip.Exception:
+    except (pytest.skip.Exception, Exception):
         return None
 
 
