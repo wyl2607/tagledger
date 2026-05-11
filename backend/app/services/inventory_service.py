@@ -346,3 +346,120 @@ def movement_payload(movement: InventoryMovement) -> dict[str, object]:
         "reason": movement.reason,
         "created_at": movement.created_at.isoformat() if movement.created_at else None,
     }
+
+
+def preview_inventory_reconcile(
+    *,
+    session: Session,
+    rows: list[dict[str, object]],
+) -> dict[str, object]:
+    def _normalized_row(raw: dict[str, object]) -> dict[str, object]:
+        factory_value = raw.get("factory_id")
+        factory_id = normalize_factory_id(str(factory_value)) if factory_value else "factory_a"
+        part_key = normalize_part_key(str(raw.get("part_key") or ""))
+        location_code = normalize_location_code(str(raw.get("location_code") or ""))
+        quantity = int(raw.get("quantity") or 0)
+        if quantity < 0:
+            raise RuntimeError("quantity must be >= 0")
+        return {
+            "factory_id": factory_id,
+            "part_key": part_key,
+            "location_code": location_code,
+            "quantity": quantity,
+        }
+
+    excel_rows = [_normalized_row(item) for item in rows]
+    excel_map: dict[tuple[str, str, str], dict[str, object]] = {}
+    for row in excel_rows:
+        key = (row["factory_id"], row["part_key"], row["location_code"])
+        current = excel_map.get(key)
+        if current is None:
+            excel_map[key] = {
+                "factory_id": row["factory_id"],
+                "part_key": row["part_key"],
+                "location_code": row["location_code"],
+                "excel_quantity": int(row["quantity"]),
+            }
+        else:
+            current["excel_quantity"] = int(current["excel_quantity"]) + int(row["quantity"])
+
+    system_map: dict[tuple[str, str, str], dict[str, object]] = {}
+    for location in session.exec(select(InventoryLocation)).all():
+        key = (
+            str(location.factory_id or "factory_a").strip().lower() or "factory_a",
+            normalize_part_key(str(location.part_key or "")),
+            normalize_location_code(str(location.location_code or "")),
+        )
+        current = system_map.get(key)
+        if current is None:
+            system_map[key] = {
+                "factory_id": key[0],
+                "part_key": key[1],
+                "location_code": key[2],
+                "system_quantity": int(location.quantity or 0),
+            }
+        else:
+            current["system_quantity"] = int(current["system_quantity"]) + int(
+                location.quantity or 0
+            )
+
+    matched: list[dict[str, object]] = []
+    quantity_mismatch: list[dict[str, object]] = []
+    excel_missing: list[dict[str, object]] = []
+    excel_new: list[dict[str, object]] = []
+
+    all_keys = sorted(set(system_map) | set(excel_map))
+    for key in all_keys:
+        system_item = system_map.get(key)
+        excel_item = excel_map.get(key)
+        if system_item and excel_item:
+            system_quantity = int(system_item["system_quantity"])
+            excel_quantity = int(excel_item["excel_quantity"])
+            base = {
+                "factory_id": key[0],
+                "part_key": key[1],
+                "location_code": key[2],
+                "system_quantity": system_quantity,
+                "excel_quantity": excel_quantity,
+            }
+            if system_quantity == excel_quantity:
+                matched.append(base)
+            else:
+                quantity_mismatch.append(
+                    {
+                        **base,
+                        "delta": excel_quantity - system_quantity,
+                    }
+                )
+            continue
+        if system_item:
+            excel_missing.append(
+                {
+                    "factory_id": key[0],
+                    "part_key": key[1],
+                    "location_code": key[2],
+                    "system_quantity": int(system_item["system_quantity"]),
+                }
+            )
+            continue
+        excel_new.append(
+            {
+                "factory_id": key[0],
+                "part_key": key[1],
+                "location_code": key[2],
+                "excel_quantity": int(excel_item["excel_quantity"]),
+            }
+        )
+
+    return {
+        "matched": matched,
+        "quantity_mismatch": quantity_mismatch,
+        "excel_missing": excel_missing,
+        "excel_new": excel_new,
+        "summary": {
+            "matched_count": len(matched),
+            "quantity_mismatch_count": len(quantity_mismatch),
+            "excel_missing_count": len(excel_missing),
+            "excel_new_count": len(excel_new),
+        },
+    }

@@ -217,6 +217,17 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "unresolved" in response.text
 
 
+def test_inventory_reconcile_preview_api_requires_login(client: TestClient) -> None:
+    client.cookies.set(CSRF_COOKIE, "anonymous-csrf-token")
+    client.headers.update({CSRF_HEADER: "anonymous-csrf-token"})
+    response = client.post(
+        "/api/inventory/reconcile/preview",
+        json={"rows": [{"part_key": "CPXS000122999", "location_code": "A-A01-001", "quantity": 1}]},
+    )
+
+    assert response.status_code == 401
+
+
 def test_inbound_page_serves_html(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/inbound")
 

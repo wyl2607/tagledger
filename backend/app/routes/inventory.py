@@ -9,6 +9,7 @@ from backend.app.services.inventory_service import (
     adjust_inventory_location,
     list_inventory_locations,
     move_inventory_quantity,
+    preview_inventory_reconcile,
 )
 from backend.app.services.location_map import build_inventory_location_map
 
@@ -26,6 +27,17 @@ class InventoryMoveRequest(BaseModel):
     quantity: int = Field(gt=0)
     target_location_kind: str = Field(default="temporary", max_length=40)
     reason: str = Field(min_length=1, max_length=200)
+
+
+class InventoryReconcilePreviewRow(BaseModel):
+    factory_id: str | None = Field(default=None, max_length=40)
+    part_key: str = Field(min_length=1, max_length=80)
+    location_code: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(ge=0)
+
+
+class InventoryReconcilePreviewRequest(BaseModel):
+    rows: list[InventoryReconcilePreviewRow] = Field(default_factory=list)
 
 
 @router.get("/locations")
@@ -103,3 +115,18 @@ def post_inventory_move(
     except RuntimeError as exc:
         status_code = 404 if "not found" in str(exc) else 409
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@router.post("/reconcile/preview")
+def post_inventory_reconcile_preview(
+    payload: InventoryReconcilePreviewRequest,
+    _: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    try:
+        return preview_inventory_reconcile(
+            session=session,
+            rows=[row.model_dump() for row in payload.rows],
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

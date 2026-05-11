@@ -122,6 +122,17 @@ def test_inventory_location_map_requires_login(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_inventory_reconcile_preview_requires_login(client: TestClient) -> None:
+    client.cookies.set(CSRF_COOKIE, "anonymous-csrf-token")
+    client.headers.update({CSRF_HEADER: "anonymous-csrf-token"})
+    response = client.post(
+        "/api/inventory/reconcile/preview",
+        json={"rows": [{"part_key": "CPXS000122901", "location_code": "A-A01-001", "quantity": 1}]},
+    )
+
+    assert response.status_code == 401
+
+
 def test_inventory_location_map_allows_operator_login(
     client: TestClient,
     session: Session,
@@ -183,6 +194,86 @@ def test_inventory_location_map_endpoint_returns_aggregated_cells(
     assert cell["materials"] == [
         {"part_key": "CPXS000122103", "part_name": "Mapped Part", "quantity": 4}
     ]
+
+
+def test_inventory_reconcile_preview_classifies_rows_and_is_read_only(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-preview-operator")
+    _seed_location(
+        session,
+        part_key="CPXS000122201",
+        location_code="A-A01-011",
+        quantity=10,
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122202",
+        location_code="A-A01-012",
+        quantity=5,
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122203",
+        location_code="A-A01-013",
+        quantity=2,
+    )
+
+    location_count_before = session.exec(select(InventoryLocation)).all()
+    movement_count_before = session.exec(select(InventoryMovement)).all()
+    audit_count_before = session.exec(select(AuditLog)).all()
+
+    response = client.post(
+        "/api/inventory/reconcile/preview",
+        json={
+            "rows": [
+                {
+                    "factory_id": "factory_a",
+                    "part_key": "CPXS000122201",
+                    "location_code": "A-A01-011",
+                    "quantity": 10,
+                },
+                {
+                    "factory_id": "factory_a",
+                    "part_key": "CPXS000122202",
+                    "location_code": "A-A01-012",
+                    "quantity": 7,
+                },
+                {
+                    "factory_id": "factory_a",
+                    "part_key": "CPXS000122204",
+                    "location_code": "A-A01-014",
+                    "quantity": 3,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "matched_count": 1,
+        "quantity_mismatch_count": 1,
+        "excel_missing_count": 1,
+        "excel_new_count": 1,
+    }
+    assert payload["matched"][0]["part_key"] == "CPXS000122201"
+    mismatch = payload["quantity_mismatch"][0]
+    assert mismatch["part_key"] == "CPXS000122202"
+    assert mismatch["system_quantity"] == 5
+    assert mismatch["excel_quantity"] == 7
+    assert mismatch["delta"] == 2
+    assert payload["excel_missing"][0]["part_key"] == "CPXS000122203"
+    assert payload["excel_new"][0]["part_key"] == "CPXS000122204"
+
+    assert len(session.exec(select(InventoryLocation)).all()) == len(location_count_before)
+    assert len(session.exec(select(InventoryMovement)).all()) == len(movement_count_before)
+    assert len(session.exec(select(AuditLog)).all()) == len(audit_count_before)
+    stored = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122202")
+    ).one()
+    assert stored.quantity == 5
 
 
 def test_operator_can_move_inventory_and_is_recorded_as_operator(
