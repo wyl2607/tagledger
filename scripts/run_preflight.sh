@@ -23,18 +23,23 @@ else
     echo "ruff not installed, skipping (pip install ruff)"
 fi
 
-# 2. pytest
+# 2. UI contract smoke
 echo ""
-echo "[2/3] pytest ..."
+echo "[2/4] ui contracts ..."
+bash "$PROJECT_DIR/scripts/check_ui_contracts.sh"
+
+# 3. pytest
+echo ""
+echo "[3/4] pytest ..."
 if [ -d "$PROJECT_DIR/.venv" ]; then
     "$PROJECT_DIR/.venv/bin/python" -m pytest "$PROJECT_DIR/backend/tests" -v
 else
     python3 -m pytest "$PROJECT_DIR/backend/tests" -v
 fi
 
-# 3. basic import check
+# 4. basic import check
 echo ""
-echo "[3/3] import check ..."
+echo "[4/4] import check ..."
 if [ -d "$PROJECT_DIR/.venv" ]; then
     PYTHON="$PROJECT_DIR/.venv/bin/python"
 else
