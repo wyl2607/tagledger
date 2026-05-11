@@ -138,6 +138,50 @@ Common options:
 
 `-AddFirewallRule` may require an Administrator PowerShell window. Without it, add the Windows Defender Firewall inbound rule manually for the printed TCP port.
 
+## Windows Fleet Deployment (Multi-PC)
+
+Use this when one macOS/Linux operator needs to update multiple Windows hosts over SSH.
+
+1. Copy the safe template and keep device inventory local-only:
+
+```bash
+cp scripts/windows_fleet_devices.txt.example scripts/windows_fleet_devices.txt
+```
+
+2. Edit `scripts/windows_fleet_devices.txt` with one device per line:
+
+```text
+target[|app_dir][|port]
+```
+
+- `target` is required and must be `user@host`.
+- `app_dir` is optional. If omitted, deploy script resolves remote `%USERPROFILE%\tagledger`.
+- `port` is optional. If omitted, default is `8000` or `--service-port`.
+
+3. Run deploy from repo root (local operation only; no git push/PR/deploy pipeline action):
+
+```bash
+./scripts/windows_fleet_deploy.sh --identity ~/.ssh/win_key
+```
+
+Useful flags:
+
+```bash
+./scripts/windows_fleet_deploy.sh --devices scripts/windows_fleet_devices.txt --service-port 8010
+./scripts/windows_fleet_deploy.sh --skip-install
+./scripts/windows_fleet_deploy.sh --open-admin
+./scripts/windows_fleet_deploy.sh --keep-archive
+```
+
+Safety boundaries:
+
+- `windows_fleet_devices.txt` is local inventory and should never be committed.
+- Template file must stay generic; do not store real private IPs or personal paths in tracked docs/examples.
+- Script only performs local packaging + SSH/scp calls to listed hosts; it does not push code to GitHub or run release/publish actions.
+- Fleet deploy starts TagLedger with `scripts/remote_start_tagledger.ps1 -DetachedTask` so the server survives the SSH session used to launch it.
+- Add `--open-admin` to open the Windows default browser to `/admin` after the service passes health checks.
+- Use `scripts/remote_start_tagledger.ps1 -Port <n>` (or `Start TagLedger Service.cmd` + `TAGLEDGER_PORT`) for non-default local starts.
+
 ## First Login
 
 Protected operations such as outbound reconciliation, transfer creation, and admin management require a local TagLedger account.

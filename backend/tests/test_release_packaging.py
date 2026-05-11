@@ -163,3 +163,77 @@ def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
     assert "192." + "168." not in public_text
     assert "sk-" not in public_text
     assert "OPENAI_API_KEY" not in public_text
+
+
+def test_windows_fleet_files_and_safety_guards_present() -> None:
+    deploy_script = Path("scripts/windows_fleet_deploy.sh").read_text(encoding="utf-8")
+    devices_example = Path("scripts/windows_fleet_devices.txt.example").read_text(encoding="utf-8")
+    gitignore = Path(".gitignore").read_text(encoding="utf-8")
+
+    assert "scripts/windows_fleet_devices.txt" in gitignore
+    assert "scripts/ai_trigger_fleet_deploy.sh" in gitignore
+
+    assert "windows_fleet_devices.txt.example" not in gitignore
+    assert "operator@win-floor-01" in devices_example
+    assert "192." + "168." not in devices_example
+
+    assert "mktemp -d" in deploy_script
+    assert "/private/tmp" not in deploy_script
+    assert "--service-port <int>" in deploy_script
+    assert "target[|app_dir][|port]" in deploy_script
+    assert "$env:USERPROFILE" in deploy_script
+    assert "C:/Users/$user/tagledger" in deploy_script
+    assert 'remote_profile="${remote_profile//\\\\//}"' in deploy_script
+    assert "findstr 200" not in deploy_script
+    assert "$StatusCode" not in deploy_script
+    assert "-DetachedTask" in deploy_script
+    assert "--open-admin" in deploy_script
+    assert "-OpenPath '/admin'" in deploy_script
+    assert (
+        "Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:$device_port/health'"
+        in deploy_script
+    )
+
+
+def test_windows_remote_start_scripts_support_port_and_fail_fast() -> None:
+    remote_start = Path("scripts/remote_start_tagledger.ps1").read_text(encoding="utf-8")
+    start_cmd = Path("Start TagLedger Service.cmd").read_text(encoding="utf-8")
+    remote_diag = Path("scripts/remote_diag_start.ps1").read_text(encoding="utf-8")
+
+    assert "[ValidateRange(1, 65535)]" in remote_start
+    assert "[int]$Port = 8000" in remote_start
+    assert "TagLedger health check timeout" in remote_start
+    assert "TagLedger exited during startup on port" in remote_start
+    assert "Invoke-WebRequest -UseBasicParsing -Uri $HealthUri" in remote_start
+    assert 'Write-Output "PORT=$Port"' in remote_start
+    assert "[switch]$DetachedTask" in remote_start
+    assert "[string]$OpenPath = ''" in remote_start
+    assert "schtasks.exe /Create" in remote_start
+    assert 'Write-Output "TASK=$TaskName"' in remote_start
+    assert "Start-Process $OpenUri" in remote_start
+    assert 'Write-Output "OPENED=$OpenUri"' in remote_start
+
+    assert "TAGLEDGER_PORT" in start_cmd
+    assert "-Port %PORT%" in start_cmd
+    assert "uvicorn.err.log" in start_cmd
+
+    assert "param(" in remote_diag
+    assert "[int]$Port = 8000" in remote_diag
+    assert "--port $Port" in remote_diag
+
+
+def test_windows_fleet_assets_do_not_embed_private_local_paths() -> None:
+    fleet_blob = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in (
+            "scripts/windows_fleet_deploy.sh",
+            "scripts/windows_fleet_devices.txt.example",
+            "scripts/remote_start_tagledger.ps1",
+            "scripts/remote_diag_start.ps1",
+            "docs/WINDOWS_DEPLOY.md",
+        )
+    )
+
+    assert "/Users/" + "yumei" not in fleet_blob
+    assert "192." + "168." not in fleet_blob
+    assert "C:\\Users\\vitec" not in fleet_blob
