@@ -1,14 +1,19 @@
+param(
+    [int]$Port = 8000
+)
+
 $ErrorActionPreference = 'Stop'
 
-Set-Location 'C:\Users\vitec\tagledger'
+$AppDir = Split-Path -Parent $PSScriptRoot
+Set-Location $AppDir
 
-$OutLog = 'C:\Users\vitec\tagledger\uvicorn.out.log'
-$ErrLog = 'C:\Users\vitec\tagledger\uvicorn.err.log'
+$OutLog = Join-Path $AppDir 'uvicorn.out.log'
+$ErrLog = Join-Path $AppDir 'uvicorn.err.log'
 
 if (Test-Path $OutLog) { Remove-Item $OutLog -Force }
 if (Test-Path $ErrLog) { Remove-Item $ErrLog -Force }
 
-$Py = 'C:\Users\vitec\tagledger\.venv\Scripts\python.exe'
+$Py = Join-Path $AppDir '.venv\Scripts\python.exe'
 if (-not (Test-Path $Py)) {
     throw "Python not found: $Py"
 }
@@ -22,8 +27,8 @@ foreach ($Proc in $Running) {
 }
 
 $Proc = Start-Process -FilePath $Py `
-    -ArgumentList @('-m', 'uvicorn', 'backend.app.main:app', '--host', '0.0.0.0', '--port', '8000') `
-    -WorkingDirectory 'C:\Users\vitec\tagledger' `
+    -ArgumentList @('-m', 'uvicorn', 'backend.app.main:app', '--host', '0.0.0.0', '--port', "$Port") `
+    -WorkingDirectory $AppDir `
     -RedirectStandardOutput $OutLog `
     -RedirectStandardError $ErrLog `
     -PassThru
@@ -31,5 +36,6 @@ $Proc = Start-Process -FilePath $Py `
 Start-Sleep -Seconds 3
 
 Write-Output "PID=$($Proc.Id)"
+Write-Output "PORT=$Port"
 if (Test-Path $OutLog) { Write-Output 'OUT_LOG_READY' }
 if (Test-Path $ErrLog) { Write-Output 'ERR_LOG_READY' }

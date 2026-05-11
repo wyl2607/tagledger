@@ -1,6 +1,10 @@
 @echo off
 setlocal
-set "APP_DIR=C:\Users\vitec\tagledger"
+set "APP_DIR=%~dp0"
+for %%I in ("%APP_DIR%.") do set "APP_DIR=%%~fI"
+if not exist "%APP_DIR%\scripts\remote_start_tagledger.ps1" (
+  set "APP_DIR=%USERPROFILE%\tagledger-git"
+)
 if not exist "%APP_DIR%\scripts\remote_start_tagledger.ps1" (
   echo TagLedger startup script not found:
   echo %APP_DIR%\scripts\remote_start_tagledger.ps1
