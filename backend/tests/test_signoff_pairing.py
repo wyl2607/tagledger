@@ -124,6 +124,79 @@ def test_pairing_preview_rate_limits_same_key(
     assert second.json()["detail"] == "pairing key preview rate limit exceeded"
 
 
+def test_pairing_preview_is_exempt_from_device_pairing(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    import backend.app.middleware.lan_guard as lan_guard
+    from backend.app.config import get_settings
+
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    client.cookies.clear()
+    client.headers.clear()
+
+    monkeypatch.setattr(get_settings(), "pairing_enabled", True)
+    monkeypatch.setattr(lan_guard, "_get_remote_ip", lambda _request: "10.9.8.7")
+
+    response = client.get(f"/api/signoff/assist/{token}/preview", headers={"Host": "localhost"})
+
+    assert response.status_code == 200
+    assert response.json()["payload"]["candidate"]["serial_number"] == "SN-PAIRING-001"
+
+
+def test_pairing_preview_reuses_open_assist_session(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+
+    pairing_key = session.exec(select(SignoffPairingKey)).one()
+    pairing_key.last_previewed_at = None
+    session.add(pairing_key)
+    session.commit()
+
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+    assert len(session.exec(select(SignoffAssistSession)).all()) == 1
+    assert session.exec(select(SignoffPairingKey)).one().preview_count == 2
+
+
+def test_repeated_pairing_preview_cannot_be_signed_off_twice(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    candidate_id = _signoff_candidate(client, session)
+    token = client.post(f"/api/signoff/candidates/{candidate_id}/pairing-keys").json()["token"]
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+
+    pairing_key = session.exec(select(SignoffPairingKey)).one()
+    pairing_key.last_previewed_at = None
+    session.add(pairing_key)
+    session.commit()
+
+    assert client.get(f"/api/signoff/assist/{token}/preview").status_code == 200
+    first = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "accepted"},
+    )
+    second = client.post(
+        f"/api/signoff/candidates/{candidate_id}/decisions",
+        json={"decision": "manually_completed"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    stored_sessions = session.exec(select(SignoffAssistSession)).all()
+    assert len(stored_sessions) == 1
+    assert stored_sessions[0].operator_decision == "accepted"
+
+
 def test_pairing_key_can_be_revoked_by_supervisor(
     client: TestClient,
     session: Session,

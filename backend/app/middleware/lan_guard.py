@@ -161,6 +161,10 @@ def _is_private_or_loopback(ip_str: str) -> bool:
     return False
 
 
+def _is_signoff_assist_preview(path: str, method: str) -> bool:
+    return method == "GET" and path.startswith("/api/signoff/assist/") and path.endswith("/preview")
+
+
 class LanGuardMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -204,6 +208,8 @@ class PairingMiddleware(BaseHTTPMiddleware):
         for prefix in PAIRING_EXEMPT_PREFIXES:
             if path.startswith(prefix):
                 return await call_next(request)
+        if _is_signoff_assist_preview(path, request.method):
+            return await call_next(request)
 
         cookie_value = request.cookies.get("tl_pair")
         if not is_paired(cookie_value):
