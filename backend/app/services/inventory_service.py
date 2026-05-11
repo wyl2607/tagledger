@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from sqlmodel import Session, select
 
 from backend.app.models import AuditLog, InventoryLocation, InventoryMovement, User
+from backend.app.services.location_profile import location_profile_payload
 from backend.app.services.material_mapping import normalize_material_code
 from backend.app.services.transfer_service import FACTORIES
 
@@ -78,6 +79,7 @@ def location_payload(location: InventoryLocation) -> dict[str, object]:
         "part_key": location.part_key,
         "part_name": location.part_name,
         "location_code": location.location_code,
+        "location_profile": location_profile_payload(location.location_code, kind),
         "quantity": quantity,
         "status": location.status,
         "zero_stock": bool(location.zero_stock),

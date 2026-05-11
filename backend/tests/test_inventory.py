@@ -71,6 +71,33 @@ def test_inventory_accepts_legacy_long_term_locations(
     assert location["location_kind"] == "permanent"
 
 
+def test_inventory_locations_include_location_profile(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122102",
+        location_code="A-A01-011",
+        quantity=4,
+        location_kind="permanent",
+    )
+
+    response = client.get("/api/inventory/locations")
+
+    assert response.status_code == 200
+    location = response.json()["locations"][0]
+    assert location["location_code"] == "A-A01-011"
+    assert location["location_profile"]["parse_status"] == "standard"
+    assert location["location_profile"]["zone"] == "A"
+    assert location["location_profile"]["aisle_or_column"] == "A"
+    assert location["location_profile"]["rack_index"] == 1
+    assert location["location_profile"]["level"] == 1
+    assert location["location_profile"]["depth"] == 1
+    assert location["location_profile"]["centerline_rank"] == 1
+
+
 def test_inventory_adjust_preserves_pending_status(
     client: TestClient,
     session: Session,
