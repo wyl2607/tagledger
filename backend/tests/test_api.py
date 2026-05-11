@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from backend.app.models import Category, Record, RecordStatus
 from backend.app.services.auth_service import CSRF_COOKIE, CSRF_HEADER, create_session, create_user
@@ -215,6 +215,27 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "temporary" in response.text
     assert "upstairs" in response.text
     assert "unresolved" in response.text
+    assert 'id="reconcileRowsInput"' in response.text
+    assert 'id="reconcilePreviewBtn"' in response.text
+    assert "/api/inventory/reconcile/preview" in response.text
+    assert "renderReconcilePreview" in response.text
+    assert "matched" in response.text
+    assert "quantity_mismatch" in response.text
+    assert "excel_missing" in response.text
+    assert "excel_new" in response.text
+    assert "system_quantity" in response.text
+    assert "excel_quantity" in response.text
+    assert "delta" in response.text
+    assert 'id="pickPartInput"' in response.text
+    assert 'id="pickQuantityInput"' in response.text
+    assert 'id="pickRecommendationBtn"' in response.text
+    assert "/api/inventory/pick-recommendations" in response.text
+    assert "renderPickRecommendations" in response.text
+    assert "pick_quantity" in response.text
+    assert "available_quantity" in response.text
+    assert "location_kind" in response.text
+    assert "insufficient" in response.text
+    assert "shortage_quantity" in response.text
 
 
 def test_inventory_reconcile_preview_api_requires_login(client: TestClient) -> None:
@@ -226,6 +247,146 @@ def test_inventory_reconcile_preview_api_requires_login(client: TestClient) -> N
     )
 
     assert response.status_code == 401
+
+
+def test_inventory_reconcile_preview_file_requires_login(client: TestClient) -> None:
+    client.cookies.set(CSRF_COOKIE, "anonymous-csrf-token")
+    client.headers.update({CSRF_HEADER: "anonymous-csrf-token"})
+    response = client.post(
+        "/api/inventory/reconcile/preview-file",
+        files={"file": ("inventory.csv", b"part_key,location_code,quantity\nP1,A-01,1\n")},
+    )
+
+    assert response.status_code == 401
+
+
+def test_inventory_reconcile_preview_file_reuses_preview_and_is_read_only(
+    authenticated_client: TestClient,
+    session: Session,
+) -> None:
+    from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
+
+    location = InventoryLocation(
+        factory_id="factory_a",
+        part_key="CPXS000122304",
+        part_name="Preview File Part",
+        location_code="A-A01-011",
+        quantity=4,
+        status="active",
+        zero_stock=False,
+        location_kind="permanent",
+    )
+    session.add(location)
+    session.commit()
+    location_count_before = len(session.exec(select(InventoryLocation)).all())
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    response = authenticated_client.post(
+        "/api/inventory/reconcile/preview-file",
+        files={
+            "file": (
+                "inventory.csv",
+                b"factory_id,part_key,location_code,quantity\n"
+                b"factory_a,C.P.XS.000122304,A-A01-011,6\n"
+                b"factory_a,CPXS000122305,TMP-02,3\n",
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parsed_row_count"] == 2
+    mismatch = payload["quantity_mismatch"][0]
+    assert mismatch["part_key"] == "CPXS000122304"
+    assert mismatch["system_quantity"] == 4
+    assert mismatch["excel_quantity"] == 6
+    assert payload["excel_new"][0]["part_key"] == "CPXS000122305"
+    assert len(session.exec(select(InventoryLocation)).all()) == location_count_before
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
+    stored = session.get(InventoryLocation, location.id)
+    assert stored is not None
+    assert stored.quantity == 4
+
+
+def test_inventory_pick_recommendations_require_login(client: TestClient) -> None:
+    response = client.get(
+        "/api/inventory/pick-recommendations",
+        params={"part_key": "CPXS000122399", "quantity": 1},
+    )
+
+    assert response.status_code == 401
+
+
+def test_inventory_pick_recommendations_api_returns_ordered_read_only_plan(
+    authenticated_client: TestClient,
+    session: Session,
+) -> None:
+    from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
+
+    locations = [
+        InventoryLocation(
+            factory_id="factory_a",
+            part_key="CPXS000122303",
+            part_name="Pick Part",
+            location_code="A-A01-012",
+            quantity=5,
+            status="active",
+            zero_stock=False,
+            location_kind="permanent",
+        ),
+        InventoryLocation(
+            factory_id="factory_a",
+            part_key="CPXS000122303",
+            part_name="Pick Part",
+            location_code="TMP-10",
+            quantity=2,
+            status="active",
+            zero_stock=False,
+            location_kind="temporary",
+        ),
+        InventoryLocation(
+            factory_id="factory_b",
+            part_key="CPXS000122303",
+            part_name="Other Factory Pick Part",
+            location_code="TMP-01",
+            quantity=1,
+            status="active",
+            zero_stock=False,
+            location_kind="temporary",
+        ),
+    ]
+    session.add_all(locations)
+    session.commit()
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    response = authenticated_client.get(
+        "/api/inventory/pick-recommendations",
+        params={
+            "factory_id": "factory_a",
+            "part_key": "C.P.XS.000122303",
+            "quantity": 4,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["factory_id"] == "factory_a"
+    assert payload["part_key"] == "CPXS000122303"
+    assert payload["requested_quantity"] == 4
+    assert payload["insufficient"] is False
+    assert [(row["location_code"], row["pick_quantity"]) for row in payload["recommendations"]] == [
+        ("TMP-10", 2),
+        ("A-A01-012", 2),
+    ]
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
+    stored = session.get(InventoryLocation, locations[0].id)
+    assert stored is not None
+    assert stored.quantity == 5
 
 
 def test_inbound_page_serves_html(authenticated_client: TestClient) -> None:

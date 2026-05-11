@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -10,6 +11,8 @@ from backend.app.services.auth_service import (
     create_session,
     create_user,
 )
+from backend.app.services.inventory_excel import parse_inventory_file_rows
+from backend.app.services.inventory_service import recommend_inventory_picks
 
 
 def _login_supervisor(client: TestClient, session: Session) -> None:
@@ -274,6 +277,165 @@ def test_inventory_reconcile_preview_classifies_rows_and_is_read_only(
         select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122202")
     ).one()
     assert stored.quantity == 5
+
+
+def test_inventory_csv_file_rows_parse_required_columns() -> None:
+    rows = parse_inventory_file_rows(
+        filename="inventory.csv",
+        content=(
+            b"\xef\xbb\xbffactory_id,part_key,location_code,quantity\n"
+            b"factory_a,C.P.XS.000122301,A-A01-011,10\n"
+            b",CPXS000122302,TMP-01,2\n"
+        ),
+    )
+
+    assert rows == [
+        {
+            "factory_id": "factory_a",
+            "part_key": "C.P.XS.000122301",
+            "location_code": "A-A01-011",
+            "quantity": 10,
+        },
+        {
+            "part_key": "CPXS000122302",
+            "location_code": "TMP-01",
+            "quantity": 2,
+        },
+    ]
+
+
+def test_inventory_xlsx_file_rows_parse_when_openpyxl_available() -> None:
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["part_key", "location_code", "quantity", "factory_id"])
+    sheet.append(["CPXS000122303", "A-A01-012", 5, "factory_b"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    rows = parse_inventory_file_rows(filename="inventory.xlsx", content=buffer.getvalue())
+
+    assert rows == [
+        {
+            "factory_id": "factory_b",
+            "part_key": "CPXS000122303",
+            "location_code": "A-A01-012",
+            "quantity": 5,
+        }
+    ]
+
+
+def test_inventory_file_rows_reject_fractional_quantity() -> None:
+    with pytest.raises(RuntimeError, match="quantity must be an integer"):
+        parse_inventory_file_rows(
+            filename="inventory.csv",
+            content=b"part_key,location_code,quantity\nCPXS000122304,A-A01-011,1.5\n",
+        )
+
+
+def test_inventory_file_rows_accept_zero_quantity() -> None:
+    rows = parse_inventory_file_rows(
+        filename="inventory.csv",
+        content=b"part_key,location_code,quantity\nCPXS000122305,A-A01-011,0\n",
+    )
+
+    assert rows == [
+        {
+            "part_key": "CPXS000122305",
+            "location_code": "A-A01-011",
+            "quantity": 0,
+        }
+    ]
+
+
+def test_pick_recommendations_prioritize_temporary_then_smallest_quantity_then_sort_key(
+    session: Session,
+) -> None:
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="A-A01-013",
+        quantity=8,
+        location_kind="permanent",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="TMP-02",
+        quantity=4,
+        location_kind="temporary",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="TMP-01",
+        quantity=2,
+        location_kind="temporary",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="A-A01-011",
+        quantity=2,
+        location_kind="permanent",
+    )
+
+    payload = recommend_inventory_picks(
+        session=session,
+        part_key="C.P.XS.000122301",
+        quantity=7,
+        factory_id="factory_a",
+    )
+
+    assert payload["insufficient"] is False
+    assert payload["total_available"] == 16
+    assert [
+        (
+            row["location_code"],
+            row["location_kind"],
+            row["available_quantity"],
+            row["pick_quantity"],
+        )
+        for row in payload["recommendations"]
+    ] == [
+        ("TMP-01", "temporary", 2, 2),
+        ("TMP-02", "temporary", 4, 4),
+        ("A-A01-011", "permanent", 2, 1),
+    ]
+
+
+def test_pick_recommendations_are_read_only_and_report_shortage(
+    session: Session,
+) -> None:
+    location = _seed_location(
+        session,
+        part_key="CPXS000122302",
+        location_code="TMP-03",
+        quantity=3,
+        location_kind="temporary",
+    )
+    location_count_before = len(session.exec(select(InventoryLocation)).all())
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    payload = recommend_inventory_picks(
+        session=session,
+        part_key="CPXS000122302",
+        quantity=5,
+    )
+
+    assert payload["insufficient"] is True
+    assert payload["shortage_quantity"] == 2
+    assert payload["recommendations"][0]["pick_quantity"] == 3
+    stored = session.get(InventoryLocation, location.id)
+    assert stored is not None
+    assert stored.quantity == 3
+    assert len(session.exec(select(InventoryLocation)).all()) == location_count_before
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
 
 
 def test_operator_can_move_inventory_and_is_recorded_as_operator(

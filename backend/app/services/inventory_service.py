@@ -133,6 +133,70 @@ def list_inventory_locations(
     }
 
 
+def recommend_inventory_picks(
+    *,
+    session: Session,
+    part_key: str,
+    quantity: int,
+    factory_id: str | None = None,
+) -> dict[str, object]:
+    normalized_part = normalize_part_key(part_key)
+    normalized_factory = normalize_factory_id(factory_id) if factory_id else None
+    requested_quantity = int(quantity)
+    if requested_quantity <= 0:
+        raise RuntimeError("quantity must be > 0")
+
+    statement = select(InventoryLocation).where(InventoryLocation.part_key == normalized_part)
+    if normalized_factory:
+        statement = statement.where(InventoryLocation.factory_id == normalized_factory)
+    rows = [
+        row
+        for row in session.exec(statement).all()
+        if row.status not in HIDDEN_LOCATION_STATUSES and int(row.quantity or 0) > 0
+    ]
+
+    def recommendation_sort_key(location: InventoryLocation) -> tuple[object, ...]:
+        kind = normalize_location_kind(location.location_kind)
+        profile = location_profile_payload(location.location_code, kind)
+        return (
+            0 if kind == "temporary" else 1,
+            int(location.quantity or 0),
+            tuple(profile["sort_key"]),
+            location.factory_id,
+            location.location_code,
+            location.id or 0,
+        )
+
+    ordered_rows = sorted(rows, key=recommendation_sort_key)
+    total_available = sum(int(row.quantity or 0) for row in ordered_rows)
+    remaining = requested_quantity
+    recommendations: list[dict[str, object]] = []
+    for row in ordered_rows:
+        if remaining <= 0:
+            break
+        available = int(row.quantity or 0)
+        pick_quantity = min(available, remaining)
+        remaining -= pick_quantity
+        payload = location_payload(row)
+        recommendations.append(
+            {
+                **payload,
+                "available_quantity": available,
+                "pick_quantity": pick_quantity,
+            }
+        )
+
+    return {
+        "factory_id": normalized_factory,
+        "part_key": normalized_part,
+        "requested_quantity": requested_quantity,
+        "total_available": total_available,
+        "shortage_quantity": max(remaining, 0),
+        "insufficient": remaining > 0,
+        "recommendations": recommendations,
+    }
+
+
 def adjust_inventory_location(
     *,
     session: Session,

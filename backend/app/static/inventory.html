@@ -54,8 +54,37 @@
     .temporary { color: #1d4ed8; }
     .form-grid { display: grid; gap: 12px; }
     .form-grid button { width: 100%; }
+    .reconcile-panel, .pick-panel { display: grid; gap: 14px; }
+    .reconcile-input { width: 100%; min-height: 136px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .reconcile-actions, .pick-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .reconcile-actions button, .pick-actions button { width: fit-content; }
+    .reconcile-error, .pick-error { color: #991b1b; font-weight: 900; }
+    .reconcile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .reconcile-summary-item { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .reconcile-summary-item span { display: block; color: var(--muted); font-weight: 900; }
+    .reconcile-summary-item strong { font-size: 24px; }
+    .pick-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(120px, .45fr) minmax(160px, .65fr); gap: 10px; align-items: end; }
+    .pick-form label { display: grid; gap: 5px; color: var(--muted); font-weight: 900; }
+    .pick-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-weight: 900; }
+    .pick-summary strong { color: var(--ink); }
+    .pick-shortage { width: fit-content; padding: 6px 9px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-weight: 950; }
+    .pick-list { display: grid; gap: 8px; }
+    .pick-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .pick-order { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: #111827; color: #fff; font-weight: 950; }
+    .pick-row strong, .pick-row span { overflow-wrap: anywhere; }
+    .pick-quantity { font-size: 22px; font-weight: 950; }
+    .reconcile-result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .reconcile-bucket { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .reconcile-bucket h3 { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .reconcile-row { display: grid; gap: 4px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .reconcile-row strong, .reconcile-row span { overflow-wrap: anywhere; }
+    .reconcile-meta { color: var(--muted); font-weight: 850; }
+    .reconcile-tag { width: fit-content; padding: 3px 7px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 950; }
+    .reconcile-tag.missing { background: #fef3c7; color: #92400e; }
+    .reconcile-tag.new { background: #dcfce7; color: #166534; }
+    .reconcile-tag.mismatch { background: #fef2f2; color: #991b1b; }
     @media (max-width: 920px) {
-      .inventory-head, .filters, .kpi-grid, .work-grid, .bucket-grid { grid-template-columns: 1fr; }
+      .inventory-head, .filters, .kpi-grid, .work-grid, .bucket-grid, .reconcile-summary, .reconcile-result-grid, .pick-form, .pick-row { grid-template-columns: 1fr; }
       .inventory-head h1 { font-size: 30px; }
       .depth-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
     }
@@ -121,6 +150,59 @@
       <div class="kpi"><span data-i18n="inventory.kpi.restock">需补货</span><strong id="restockCount">0</strong></div>
       <div class="kpi"><span data-i18n="inventory.kpi.mixed">混放库位</span><strong id="mixedCount">0</strong></div>
       <div class="kpi"><span data-i18n="inventory.kpi.quantity">可见库存数</span><strong id="totalQty">0</strong></div>
+    </section>
+
+    <section class="panel pick-panel">
+      <div>
+        <h2 data-i18n="inventory.pick.title">物料拣货推荐</h2>
+        <p class="muted" data-i18n="inventory.pick.subtitle">输入物料号和需求数量，按临时库位优先、数量和库位顺序生成拣货建议。</p>
+      </div>
+      <div class="pick-form">
+        <label>
+          <span data-i18n="inventory.pick.part">物料号</span>
+          <input id="pickPartInput" data-i18n-placeholder="inventory.pick.partPlaceholder" placeholder="CPXS000122303">
+        </label>
+        <label>
+          <span data-i18n="inventory.pick.quantity">需求数量</span>
+          <input id="pickQuantityInput" type="text" inputmode="numeric" pattern="[0-9]*" data-i18n-placeholder="inventory.pick.quantityPlaceholder" placeholder="4">
+        </label>
+        <label>
+          <span data-i18n="inventory.pick.factory">工厂</span>
+          <select id="pickFactoryInput">
+            <option value="" data-i18n="common.all">全部</option>
+            <option value="factory_a">factory_a</option>
+            <option value="factory_b">factory_b</option>
+            <option value="factory_c">factory_c</option>
+          </select>
+        </label>
+      </div>
+      <div class="pick-actions">
+        <button type="button" id="pickRecommendationBtn" data-i18n="inventory.pick.action">生成拣货推荐</button>
+        <span id="pickError" class="pick-error" role="alert"></span>
+      </div>
+      <div id="pickRecommendationResult" hidden>
+        <div id="pickSummary" class="pick-summary"></div>
+        <div id="pickRecommendationList" class="pick-list"></div>
+      </div>
+    </section>
+
+    <section class="panel reconcile-panel">
+      <div>
+        <h2 data-i18n="inventory.reconcile.title">Excel 对账预览</h2>
+        <p class="muted" data-i18n="inventory.reconcile.subtitle">粘贴已解析的 Excel rows JSON，系统只生成预览分类，不写入库存。</p>
+      </div>
+      <label>
+        <span data-i18n="inventory.reconcile.rows">已解析库存行 JSON</span>
+        <textarea id="reconcileRowsInput" class="reconcile-input" spellcheck="false" data-i18n-placeholder="inventory.reconcile.rowsPlaceholder" placeholder='[{"factory_id":"factory_a","part_key":"CPXS000122201","location_code":"A-A01-011","quantity":10}]'></textarea>
+      </label>
+      <div class="reconcile-actions">
+        <button type="button" id="reconcilePreviewBtn" data-i18n="inventory.reconcile.action.preview">生成对账预览</button>
+        <span id="reconcileError" class="reconcile-error" role="alert"></span>
+      </div>
+      <div id="reconcilePreviewResult" hidden>
+        <div id="reconcileSummary" class="reconcile-summary"></div>
+        <div id="reconcileBuckets" class="reconcile-result-grid"></div>
+      </div>
     </section>
 
     <section class="work-grid">
@@ -190,6 +272,8 @@
     let selectedCell = null;
     let selectedMaterialKey = null;
     let userCanManageInventory = false;
+    let latestReconcilePreview = null;
+    let latestPickRecommendations = null;
 
     function zoneName(locationCode) {
       return String(locationCode || 'LOC').split(/[-_]/)[0] || 'LOC';
@@ -204,6 +288,153 @@
       document.querySelector('#restockCount').textContent = summary.restock_required_count || 0;
       document.querySelector('#mixedCount').textContent = summary.mixed_location_count || 0;
       document.querySelector('#totalQty').textContent = summary.total_quantity || 0;
+    }
+
+    function reconcileRowTitle(row) {
+      return [row.part_key, row.location_code].filter(Boolean).join(' · ') || tr('inventory.reconcile.row');
+    }
+
+    function reconcileRowMeta(row) {
+      const parts = [];
+      if (row.factory_id) parts.push(row.factory_id);
+      if (row.quantity !== undefined) parts.push(`${tr('inventory.reconcile.quantity')}: ${row.quantity}`);
+      if (row.system_quantity !== undefined) parts.push(`system_quantity: ${row.system_quantity}`);
+      if (row.excel_quantity !== undefined) parts.push(`excel_quantity: ${row.excel_quantity}`);
+      if (row.delta !== undefined) parts.push(`delta: ${row.delta}`);
+      return parts.join(' · ');
+    }
+
+    function renderReconcileRow(row, bucketKey) {
+      const tags = {
+        matched: '',
+        quantity_mismatch: `<span class="reconcile-tag mismatch">${esc(tr('inventory.reconcile.bucket.quantityMismatch'))}</span>`,
+        excel_missing: `<span class="reconcile-tag missing">${esc(tr('inventory.reconcile.tag.excelMissing'))}</span>`,
+        excel_new: `<span class="reconcile-tag new">${esc(tr('inventory.reconcile.tag.excelNew'))}</span>`,
+      };
+      return `
+        <div class="reconcile-row">
+          ${tags[bucketKey] || ''}
+          <strong>${esc(reconcileRowTitle(row))}</strong>
+          <span class="reconcile-meta">${esc(reconcileRowMeta(row))}</span>
+        </div>
+      `;
+    }
+
+    function renderReconcilePreview(payload) {
+      latestReconcilePreview = payload || null;
+      const result = document.querySelector('#reconcilePreviewResult');
+      if (!payload) {
+        result.hidden = true;
+        document.querySelector('#reconcileSummary').innerHTML = '';
+        document.querySelector('#reconcileBuckets').innerHTML = '';
+        return;
+      }
+      const summaryLabels = {
+        matched_count: tr('inventory.reconcile.summary.matched'),
+        quantity_mismatch_count: tr('inventory.reconcile.summary.quantityMismatch'),
+        excel_missing_count: tr('inventory.reconcile.summary.excelMissing'),
+        excel_new_count: tr('inventory.reconcile.summary.excelNew'),
+      };
+      document.querySelector('#reconcileSummary').innerHTML = Object.entries(summaryLabels).map(([key, label]) => `
+        <div class="reconcile-summary-item">
+          <span>${esc(label)}</span>
+          <strong>${esc(payload.summary?.[key] ?? 0)}</strong>
+        </div>
+      `).join('');
+      const bucketLabels = {
+        matched: tr('inventory.reconcile.bucket.matched'),
+        quantity_mismatch: tr('inventory.reconcile.bucket.quantityMismatch'),
+        excel_missing: tr('inventory.reconcile.bucket.excelMissing'),
+        excel_new: tr('inventory.reconcile.bucket.excelNew'),
+      };
+      document.querySelector('#reconcileBuckets').innerHTML = Object.entries(bucketLabels).map(([bucketKey, label]) => {
+        const rows = payload[bucketKey] || [];
+        return `
+          <section class="reconcile-bucket" data-bucket="${esc(bucketKey)}">
+            <h3><span>${esc(label)}</span><span class="reconcile-tag">${esc(rows.length)}</span></h3>
+            ${rows.length ? rows.map((row) => renderReconcileRow(row, bucketKey)).join('') : `<p class="muted">${esc(tr('inventory.reconcile.empty'))}</p>`}
+          </section>
+        `;
+      }).join('');
+      result.hidden = false;
+    }
+
+    async function generateReconcilePreview() {
+      const error = document.querySelector('#reconcileError');
+      error.textContent = '';
+      let rows;
+      try {
+        const parsed = JSON.parse(document.querySelector('#reconcileRowsInput').value || '[]');
+        rows = Array.isArray(parsed) ? parsed : parsed.rows;
+        if (!Array.isArray(rows)) throw new Error(tr('inventory.reconcile.error.rowsArray'));
+      } catch (_error) {
+        error.textContent = tr('inventory.reconcile.error.invalidJson');
+        renderReconcilePreview(null);
+        return;
+      }
+      try {
+        const payload = await AuthUI.fetchJson('/api/inventory/reconcile/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows }),
+        });
+        renderReconcilePreview(payload);
+      } catch (requestError) {
+        error.textContent = requestError.message || tr('inventory.reconcile.error.failed');
+        renderReconcilePreview(null);
+      }
+    }
+
+    function renderPickRecommendations(payload) {
+      latestPickRecommendations = payload || null;
+      const result = document.querySelector('#pickRecommendationResult');
+      if (!payload) {
+        result.hidden = true;
+        document.querySelector('#pickSummary').innerHTML = '';
+        document.querySelector('#pickRecommendationList').innerHTML = '';
+        return;
+      }
+      const shortage = Number(payload.shortage_quantity || 0);
+      document.querySelector('#pickSummary').innerHTML = `
+        <span>${esc(tr('inventory.pick.summary.part'))}: <strong>${esc(payload.part_key || '')}</strong></span>
+        <span>${esc(tr('inventory.pick.summary.requested'))}: <strong>${esc(payload.requested_quantity || 0)}</strong></span>
+        <span>${esc(tr('inventory.pick.summary.available'))}: <strong>${esc(payload.total_available || 0)}</strong></span>
+        ${payload.insufficient ? `<span class="pick-shortage">${esc(tr('inventory.pick.shortage', { quantity: shortage }))}</span>` : ''}
+      `;
+      const rows = payload.recommendations || [];
+      document.querySelector('#pickRecommendationList').innerHTML = rows.length ? rows.map((row, index) => `
+        <div class="pick-row">
+          <span class="pick-order">${esc(index + 1)}</span>
+          <span>
+            <strong>${esc(row.location_code)}</strong>
+            <span class="reconcile-meta">${esc(row.factory_id || '')} · ${esc(row.location_kind === 'temporary' ? tr('inventory.kind.temporary') : tr('inventory.kind.permanent'))} · ${esc(tr('inventory.pick.available'))}: ${esc(row.available_quantity)}</span>
+          </span>
+          <span class="pick-quantity">${esc(row.pick_quantity)}</span>
+        </div>
+      `).join('') : `<p class="muted">${esc(tr('inventory.pick.empty'))}</p>`;
+      result.hidden = false;
+    }
+
+    async function loadPickRecommendations() {
+      const error = document.querySelector('#pickError');
+      error.textContent = '';
+      const partKey = document.querySelector('#pickPartInput').value.trim();
+      const quantity = Number(document.querySelector('#pickQuantityInput').value);
+      if (!partKey || !Number.isInteger(quantity) || quantity <= 0) {
+        error.textContent = tr('inventory.pick.error.input');
+        renderPickRecommendations(null);
+        return;
+      }
+      const params = new URLSearchParams({ part_key: partKey, quantity: String(quantity) });
+      const factory = document.querySelector('#pickFactoryInput').value;
+      if (factory) params.set('factory_id', factory);
+      try {
+        const payload = await AuthUI.fetchJson(`/api/inventory/pick-recommendations?${params.toString()}`);
+        renderPickRecommendations(payload);
+      } catch (requestError) {
+        error.textContent = requestError.message || tr('inventory.pick.error.failed');
+        renderPickRecommendations(null);
+      }
     }
 
     function warningBadges(cell, extra = '') {
@@ -484,6 +715,8 @@
     document.querySelector('#moveBtn').addEventListener('click', () => {
       moveSelected().catch((error) => { document.querySelector('#selectedInfo').textContent = error.message; });
     });
+    document.querySelector('#pickRecommendationBtn').addEventListener('click', loadPickRecommendations);
+    document.querySelector('#reconcilePreviewBtn').addEventListener('click', generateReconcilePreview);
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/login';
@@ -497,6 +730,8 @@
         renderBuckets(latestMapPayload.buckets || {});
         renderLocations(latestLocationsPayload.locations || []);
         renderSelectedDetails();
+        renderPickRecommendations(latestPickRecommendations);
+        renderReconcilePreview(latestReconcilePreview);
       }
     });
   </script>
