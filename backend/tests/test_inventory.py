@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from backend.app.models import InventoryLocation, InventoryMovement
+from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
 from backend.app.services import outbound_reconciliation
 from backend.app.services.auth_service import (
     CSRF_COOKIE,
@@ -339,6 +339,133 @@ def test_outbound_inbound_rolls_back_location_when_movement_fails(
         is None
     )
     assert session.exec(select(InventoryMovement)).all() == []
+
+
+def test_outbound_inbound_idempotency_key_prevents_duplicate_stock_moves(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    payload = {
+        "part_key": "CPXS000122009",
+        "location_code": "QA-IN-09",
+        "quantity": 6,
+        "reason": "purchase_inbound_test",
+        "idempotency_key": "inbound-click-001",
+    }
+
+    first = client.post("/api/outbound/inventory/inbound", json=payload)
+    second = client.post("/api/outbound/inventory/inbound", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["created"] is True
+    assert second.json()["created"] is False
+    assert first.json()["movement"]["id"] == second.json()["movement"]["id"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122009")
+    ).one()
+    assert location.quantity == 6
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122009")
+    ).all()
+    assert len(movements) == 1
+    audits = session.exec(select(AuditLog).where(AuditLog.action == "inventory.inbound")).all()
+    assert len(audits) == 1
+
+
+def test_outbound_inbound_idempotency_key_rejects_changed_payload(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    first = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122010",
+            "location_code": "QA-IN-10",
+            "quantity": 3,
+            "reason": "purchase_inbound_test",
+            "idempotency_key": "inbound-click-002",
+        },
+    )
+    changed = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122010",
+            "location_code": "QA-IN-10",
+            "quantity": 4,
+            "reason": "purchase_inbound_test",
+            "idempotency_key": "inbound-click-002",
+        },
+    )
+
+    assert first.status_code == 200
+    assert changed.status_code == 409
+    assert "idempotency_key reused with different inbound payload" in changed.json()["detail"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122010")
+    ).one()
+    assert location.quantity == 3
+
+
+def test_outbound_inbound_blank_idempotency_key_is_treated_as_missing(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    payload = {
+        "part_key": "CPXS000122011",
+        "location_code": "QA-IN-11",
+        "quantity": 5,
+        "reason": "purchase_inbound_test",
+        "idempotency_key": "   ",
+    }
+
+    first = client.post("/api/outbound/inventory/inbound", json=payload)
+    second = client.post("/api/outbound/inventory/inbound", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["movement"]["id"] != second.json()["movement"]["id"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122011")
+    ).one()
+    assert location.quantity == 10
+
+
+def test_outbound_inbound_idempotency_key_is_scoped_by_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    payload = {
+        "part_key": "CPXS000122012",
+        "location_code": "QA-IN-12",
+        "quantity": 5,
+        "reason": "purchase_inbound_test",
+        "idempotency_key": "shared-inbound-click",
+    }
+    first = client.post("/api/outbound/inventory/inbound", json=payload)
+    second_user = create_user(
+        session,
+        username="inventory-supervisor-two",
+        display_name="Inventory Supervisor Two",
+        password="inventory-supervisor-two-pass",
+        role="supervisor",
+    )
+    token, _ = create_session(session, second_user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set(SESSION_COOKIE, token)
+
+    second = client.post("/api/outbound/inventory/inbound", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["movement"]["id"] != second.json()["movement"]["id"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122012")
+    ).one()
+    assert location.quantity == 10
 
 
 def test_inventory_api_requires_supervisor(client: TestClient, session: Session) -> None:

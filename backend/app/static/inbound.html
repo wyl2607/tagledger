@@ -115,6 +115,7 @@
     }[char]));
 
     let currentUser = null;
+    let inboundSubmitSeq = 0;
 
     function renderResult(payload) {
       const location = payload.location || {};
@@ -139,6 +140,8 @@
       const status = document.querySelector('#inboundStatus');
       status.textContent = '入库中...';
       try {
+        const randomId = window.crypto?.randomUUID?.() || `${Date.now()}-${inboundSubmitSeq += 1}`;
+        const idempotencyKey = `inbound-${randomId}`;
         const payload = await AuthUI.fetchJson('/api/outbound/inventory/inbound', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -147,6 +150,7 @@
             location_code: document.querySelector('#locationCode').value.trim(),
             quantity: Number(document.querySelector('#quantity').value),
             reason: document.querySelector('#reason').value.trim() || 'purchase_inbound',
+            idempotency_key: idempotencyKey,
           }),
         });
         renderResult(payload);

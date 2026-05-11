@@ -295,6 +295,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert "can_manage_inventory" in inbound
     assert "/api/outbound/inventory/inbound" in inbound
     assert "quantity_on_hand ?? location.quantity" in inbound
+    assert "idempotency_key" in inbound
     assert 'href="/" data-i18n="nav.portal"' in inventory
     assert "can_manage_users" in admin
     assert 'href="/" data-i18n="nav.portal"' in admin

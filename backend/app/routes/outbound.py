@@ -59,6 +59,7 @@ class InboundInventoryRequest(BaseModel):
     location_code: str
     quantity: int
     reason: str = "inbound"
+    idempotency_key: str | None = None
 
 
 class InventoryLocationStatusRequest(BaseModel):
@@ -242,6 +243,7 @@ def post_inbound_inventory(
             quantity=payload.quantity,
             operator_id=user.username,
             reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
             session=session,
         )
     except RuntimeError as exc:

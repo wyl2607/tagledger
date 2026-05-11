@@ -213,6 +213,7 @@ class InventoryMovement(SQLModel, table=True):
     before_qty: int
     after_qty: int
     operator_id: str = Field(default="self", index=True)
+    idempotency_key: str | None = Field(default=None, index=True)
     reason: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 

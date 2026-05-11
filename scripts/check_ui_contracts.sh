@@ -28,5 +28,6 @@ check_contains "backend/app/static/i18n/zh.json" '"workbench.brand": "现场调�
 check_contains "backend/app/static/inbound.html" "/api/outbound/inventory/inbound"
 check_contains "backend/app/static/inbound.html" "采购入库"
 check_contains "backend/app/static/inbound.html" "quantity_on_hand ?? location.quantity"
+check_contains "backend/app/static/inbound.html" "idempotency_key"
 
 echo "ui contracts: OK"

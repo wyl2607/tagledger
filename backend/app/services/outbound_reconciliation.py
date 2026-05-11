@@ -1006,6 +1006,7 @@ def _movement_payload(movement: InventoryMovement) -> dict[str, object]:
         "before_qty": movement.before_qty,
         "after_qty": movement.after_qty,
         "operator_id": movement.operator_id,
+        "idempotency_key": movement.idempotency_key,
         "reason": movement.reason,
         "created_at": movement.created_at.isoformat() if movement.created_at else None,
     }
@@ -1024,6 +1025,7 @@ def _record_inventory_movement(
     after_qty: int,
     operator_id: str,
     reason: str | None,
+    idempotency_key: str | None = None,
     commit: bool = True,
 ) -> InventoryMovement:
     row = InventoryMovement(
@@ -1036,6 +1038,7 @@ def _record_inventory_movement(
         before_qty=before_qty,
         after_qty=after_qty,
         operator_id=(operator_id.strip() or "self")[:80],
+        idempotency_key=_normalize_idempotency_key(idempotency_key),
         reason=reason,
     )
     session.add(row)
@@ -1058,6 +1061,8 @@ def _apply_inventory_delta(
     order_no: str | None = None,
     scan_id: int | None = None,
     allow_new_location: bool = False,
+    commit: bool = True,
+    idempotency_key: str | None = None,
 ) -> tuple[InventoryLocation, InventoryMovement]:
     normalized_part = compact_part_code(part_key)
     normalized_location = _normalize_location_code(location_code)
@@ -1112,15 +1117,93 @@ def _apply_inventory_delta(
             after_qty=after_qty,
             operator_id=operator_id,
             reason=reason,
+            idempotency_key=idempotency_key,
             commit=False,
         )
-        session.commit()
-        session.refresh(location)
-        session.refresh(movement)
+        if commit:
+            session.commit()
+            session.refresh(location)
+            session.refresh(movement)
     except Exception:
         session.rollback()
         raise
     return location, movement
+
+
+def _normalize_idempotency_key(value: str | None) -> str | None:
+    key = (value or "").strip()
+    return key[:120] if key else None
+
+
+def _inbound_request_signature(
+    *,
+    part_key: str,
+    location_code: str,
+    quantity: int,
+    reason: str,
+) -> str:
+    return json.dumps(
+        {
+            "part_key": part_key,
+            "location_code": location_code,
+            "quantity": quantity,
+            "reason": reason,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _find_existing_inbound_movement(
+    session: Session,
+    *,
+    operator_id: str,
+    idempotency_key: str,
+    part_key: str,
+    location_code: str,
+    quantity: int,
+    reason: str,
+) -> InventoryMovement | None:
+    movement = session.exec(
+        select(InventoryMovement)
+        .where(
+            InventoryMovement.movement_type == "inbound",
+            InventoryMovement.operator_id == (operator_id.strip() or "self")[:80],
+            InventoryMovement.idempotency_key == idempotency_key,
+        )
+        .order_by(InventoryMovement.id.desc())
+    ).first()
+    if movement is None:
+        return None
+    if (
+        movement.part_key != part_key
+        or movement.location_code != location_code
+        or int(movement.quantity_delta) != quantity
+        or (movement.reason or "") != reason
+    ):
+        raise RuntimeError("idempotency_key reused with different inbound payload")
+    return movement
+
+
+def _inbound_payload_from_existing(
+    *,
+    session: Session,
+    movement: InventoryMovement,
+) -> dict[str, object] | None:
+    location = _find_inventory_location(
+        session,
+        part_key=movement.part_key,
+        location_code=movement.location_code,
+    )
+    if location is None:
+        return None
+    return {
+        "updated": True,
+        "created": False,
+        "location": _inventory_location_payload(location),
+        "movement": _movement_payload(movement),
+    }
 
 
 def inbound_inventory(
@@ -1130,23 +1213,106 @@ def inbound_inventory(
     quantity: int,
     operator_id: str,
     reason: str,
+    idempotency_key: str | None = None,
     session: Session,
 ) -> dict[str, object]:
     qty = int(quantity)
     if qty <= 0:
         raise RuntimeError("quantity must be > 0")
-    location, movement = _apply_inventory_delta(
-        session,
-        movement_type="inbound",
-        part_key=part_key,
-        location_code=location_code,
-        quantity_delta=qty,
-        operator_id=operator_id,
-        reason=reason[:200] or "inbound",
-        allow_new_location=True,
+    normalized_part = compact_part_code(part_key)
+    normalized_location = _normalize_location_code(location_code)
+    normalized_reason = reason[:200] or "inbound"
+    normalized_idempotency_key = _normalize_idempotency_key(idempotency_key)
+    request_signature = _inbound_request_signature(
+        part_key=normalized_part,
+        location_code=normalized_location,
+        quantity=qty,
+        reason=normalized_reason,
     )
+    if normalized_idempotency_key:
+        existing_movement = _find_existing_inbound_movement(
+            session,
+            operator_id=operator_id,
+            idempotency_key=normalized_idempotency_key,
+            part_key=normalized_part,
+            location_code=normalized_location,
+            quantity=qty,
+            reason=normalized_reason,
+        )
+        if existing_movement is not None:
+            existing_payload = _inbound_payload_from_existing(
+                session=session,
+                movement=existing_movement,
+            )
+            if existing_payload is not None:
+                return existing_payload
+            raise RuntimeError("idempotency_key previous inbound result is unavailable")
+    try:
+        location, movement = _apply_inventory_delta(
+            session,
+            movement_type="inbound",
+            part_key=normalized_part,
+            location_code=normalized_location,
+            quantity_delta=qty,
+            operator_id=operator_id,
+            reason=normalized_reason,
+            allow_new_location=True,
+            commit=False,
+            idempotency_key=normalized_idempotency_key,
+        )
+        audit = AuditLog(
+            event_type="inventory_inbound",
+            actor_username=(operator_id.strip() or "self")[:80],
+            target_type="inventory_movement",
+            target_id=str(movement.id),
+            action="inventory.inbound",
+            reason=normalized_reason,
+            success=True,
+            detail_json=json.dumps(
+                {
+                    "movement_id": movement.id,
+                    "location_id": location.id,
+                    "part_key": normalized_part,
+                    "location_code": normalized_location,
+                    "quantity": qty,
+                    "idempotency_key": normalized_idempotency_key,
+                    "request_signature": request_signature,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        session.add(audit)
+        session.commit()
+        session.refresh(location)
+        session.refresh(movement)
+    except IntegrityError:
+        session.rollback()
+        if not normalized_idempotency_key:
+            raise
+        existing_movement = _find_existing_inbound_movement(
+            session,
+            operator_id=operator_id,
+            idempotency_key=normalized_idempotency_key,
+            part_key=normalized_part,
+            location_code=normalized_location,
+            quantity=qty,
+            reason=normalized_reason,
+        )
+        if existing_movement is None:
+            raise
+        existing_payload = _inbound_payload_from_existing(
+            session=session,
+            movement=existing_movement,
+        )
+        if existing_payload is None:
+            raise RuntimeError("idempotency_key previous inbound result is unavailable") from None
+        return existing_payload
+    except Exception:
+        session.rollback()
+        raise
     return {
         "updated": True,
+        "created": True,
         "location": _inventory_location_payload(location),
         "movement": _movement_payload(movement),
     }
