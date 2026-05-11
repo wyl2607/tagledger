@@ -26,6 +26,22 @@ def _login_supervisor(client: TestClient, session: Session) -> None:
     client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
 
 
+def _login_operator(
+    client: TestClient, session: Session, username: str = "inventory-operator"
+) -> None:
+    user = create_user(
+        session,
+        username=username,
+        display_name="Inventory Operator",
+        password=f"{username}-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, "pytest-csrf-token")
+    client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
+
+
 def _seed_location(
     session: Session,
     *,
@@ -100,10 +116,48 @@ def test_inventory_locations_include_location_profile(
     assert location["location_profile"]["centerline_rank"] == 1
 
 
-def test_inventory_location_map_requires_supervisor_login(client: TestClient) -> None:
+def test_inventory_location_map_requires_login(client: TestClient) -> None:
     response = client.get("/api/inventory/location-map")
 
     assert response.status_code == 401
+
+
+def test_inventory_location_map_allows_operator_login(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122104",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    response = client.get("/api/inventory/location-map")
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["standard_location_count"] == 1
+
+
+def test_inventory_locations_require_login_and_allow_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _seed_location(
+        session,
+        part_key="CPXS000122105",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    assert client.get("/api/inventory/locations").status_code == 401
+
+    _login_operator(client, session)
+    response = client.get("/api/inventory/locations")
+
+    assert response.status_code == 200
+    assert response.json()["locations"][0]["part_key"] == "CPXS000122105"
 
 
 def test_inventory_location_map_endpoint_returns_aggregated_cells(
@@ -129,6 +183,62 @@ def test_inventory_location_map_endpoint_returns_aggregated_cells(
     assert cell["materials"] == [
         {"part_key": "CPXS000122103", "part_name": "Mapped Part", "quantity": 4}
     ]
+
+
+def test_operator_can_move_inventory_and_is_recorded_as_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-mover")
+    source = _seed_location(
+        session,
+        part_key="CPXS000122106",
+        location_code="A-A01-011",
+        quantity=8,
+        location_kind="permanent",
+    )
+
+    response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": source.id,
+            "target_location_code": "A-A01-012",
+            "quantity": 3,
+            "target_location_kind": "permanent",
+            "reason": "operator shelf transfer",
+        },
+    )
+
+    assert response.status_code == 200
+    movement_ids = [row["operator_id"] for row in response.json()["movements"]]
+    assert movement_ids == ["inventory-mover", "inventory-mover"]
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122106")
+    ).all()
+    assert {row.operator_id for row in movements} == {"inventory-mover"}
+
+
+def test_operator_cannot_manually_adjust_inventory_quantity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session)
+    row = _seed_location(
+        session,
+        part_key="CPXS000122107",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    response = client.patch(
+        f"/api/inventory/locations/{row.id}",
+        json={"quantity": 6, "reason": "operator correction attempt"},
+    )
+
+    assert response.status_code == 403
+    stored = session.get(InventoryLocation, row.id)
+    assert stored is not None
+    assert stored.quantity == 4
 
 
 def test_inventory_adjust_preserves_pending_status(
@@ -528,17 +638,19 @@ def test_outbound_inbound_idempotency_key_is_scoped_by_operator(
     assert location.quantity == 10
 
 
-def test_inventory_api_requires_supervisor(client: TestClient, session: Session) -> None:
-    operator = create_user(
+def test_inventory_manual_adjust_requires_supervisor(client: TestClient, session: Session) -> None:
+    _login_operator(client, session)
+    row = _seed_location(
         session,
-        username="inventory-operator",
-        display_name="Inventory Operator",
-        password="inventory-operator-pass",
-        role="operator",
+        part_key="CPXS000122013",
+        location_code="QA-IN-13",
+        quantity=5,
     )
-    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
-    client.cookies.set(SESSION_COOKIE, token)
-    client.cookies.set(CSRF_COOKIE, "pytest-csrf-token")
-    client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
 
-    assert client.get("/api/inventory/locations").status_code == 403
+    assert (
+        client.patch(
+            f"/api/inventory/locations/{row.id}",
+            json={"quantity": 6, "reason": "operator adjustment blocked"},
+        ).status_code
+        == 403
+    )

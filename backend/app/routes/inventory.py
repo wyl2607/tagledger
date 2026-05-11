@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from backend.app.auth import require_supervisor
+from backend.app.auth import require_login, require_supervisor
 from backend.app.database import get_session
 from backend.app.models import User
 from backend.app.services.inventory_service import (
@@ -33,7 +33,7 @@ def get_inventory_locations(
     factory_id: str | None = None,
     part_key: str | None = None,
     include_hidden: bool = Query(default=False),
-    _: User = Depends(require_supervisor),
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
@@ -51,7 +51,7 @@ def get_inventory_locations(
 def get_inventory_location_map(
     factory_id: str | None = None,
     include_hidden: bool = Query(default=False),
-    _: User = Depends(require_supervisor),
+    _: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
@@ -87,7 +87,7 @@ def patch_inventory_location(
 @router.post("/move")
 def post_inventory_move(
     payload: InventoryMoveRequest,
-    user: User = Depends(require_supervisor),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
