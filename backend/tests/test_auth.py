@@ -341,10 +341,21 @@ def test_operator_workbench_and_outbound_scope_are_order_limited(
     assert {module["id"] for module in workbench_payload["modules"]} == {
         "mobile",
         "outbound",
+        "inventory",
         "my_stats",
     }
+    inventory_module = next(
+        module for module in workbench_payload["modules"] if module["id"] == "inventory"
+    )
+    assert inventory_module["href"] == "/inventory"
+    assert workbench_payload["user"]["capabilities"]["can_manage_inventory"] is False
     assert workbench_payload["my_stats"]["scan_quantity"] == 2
     assert workbench_payload["global_stats"] is None
+
+    inventory_page = client.get("/inventory")
+    assert inventory_page.status_code == 200
+    assert 'id="adjustmentPanel" hidden' in inventory_page.text
+    assert "AuthUI.hasCapability(user, 'can_manage_inventory')" in inventory_page.text
 
     choices = client.get("/api/outbound/orders")
     assert choices.status_code == 200
