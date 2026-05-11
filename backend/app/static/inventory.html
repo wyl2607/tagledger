@@ -183,6 +183,14 @@
         if (!zones.has(zone)) zones.set(zone, []);
         zones.get(zone).push(location);
       });
+      const metaLine = (location) => {
+        const parts = [esc(location.part_key)];
+        if (location.factory_id && location.factory_id !== 'factory_a') parts.push(esc(location.factory_id));
+        if (location.location_kind === 'temporary') {
+          parts.push(`<span class="temporary">${esc(tr('inventory.kind.temporary'))}</span>`);
+        }
+        return parts.join(' · ');
+      };
       document.querySelector('#locationGrid').innerHTML = [...zones.entries()].map(([zone, rows]) => `
         <section class="zone">
           <h3>${esc(zone)}</h3>
@@ -190,7 +198,7 @@
             <button type="button" class="location-card" data-location-id="${esc(location.id)}" aria-selected="${selectedLocation?.id === location.id ? 'true' : 'false'}">
               <span>
                 <strong>${esc(location.location_code)}</strong>
-                <span class="meta">${esc(location.part_key)} · ${esc(location.factory_id)} · <span class="${location.location_kind === 'temporary' ? 'temporary' : ''}">${esc(tr(`inventory.kind.${location.location_kind}`))}</span></span>
+                <span class="meta">${metaLine(location)}</span>
                 ${location.restock_required ? `<span class="meta restock">${esc(tr('inventory.restockRequired'))}</span>` : ''}
               </span>
               <span class="qty">${esc(location.quantity)}</span>
