@@ -11,6 +11,7 @@ from backend.app.models import (
     Record,
     RecordStatus,
 )
+from backend.app.services.auth_service import create_session, create_user
 
 
 def add_record(
@@ -267,3 +268,27 @@ def test_metrics_require_login(client: TestClient) -> None:
     ):
         response = client.get(path)
         assert response.status_code == 401
+
+
+def test_metrics_require_supervisor(client: TestClient, session: Session) -> None:
+    operator = create_user(
+        session,
+        username="metrics-operator",
+        display_name="Metrics Operator",
+        password="metrics-operator-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
+    client.cookies.set("mlocr_session", token)
+
+    for path in (
+        "/api/metrics/summary",
+        "/api/metrics/throughput",
+        "/api/metrics/processing-time",
+        "/api/metrics/ocr-quality",
+        "/api/metrics/savings",
+        "/api/metrics/logistics",
+        "/api/metrics/all",
+    ):
+        response = client.get(path)
+        assert response.status_code == 403

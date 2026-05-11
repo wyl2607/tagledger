@@ -15,6 +15,8 @@ STATIC_UI_PAGES = [
     Path("backend/app/static/login.html"),
     Path("backend/app/static/setup.html"),
     Path("backend/app/static/admin.html"),
+    Path("backend/app/static/dashboard.html"),
+    Path("backend/app/static/history.html"),
     Path("backend/app/static/mobile.html"),
     Path("backend/app/static/inventory.html"),
     Path("backend/app/static/outbound.html"),
@@ -289,6 +291,12 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert "copyPreview" in signoff
     assert "'Content-Type': 'application/json'" in signoff
     assert "/api/signoff/pairing-keys/${pairingKeyId}/revoke" in signoff
+    history = _static_text("backend/app/static/history.html")
+    assert 'href="/" data-i18n="nav.portal"' in history
+    assert 'href="/workbench" data-i18n="workbench.brand"' in history
+    assert "AuthUI.fetchJson" in history
+    dashboard = _static_text("backend/app/static/dashboard.html")
+    assert "AuthUI.currentUser()" in dashboard
 
 
 def test_static_i18n_keys_exist_for_three_languages() -> None:
@@ -341,11 +349,13 @@ def test_write_endpoints_require_login_even_with_valid_csrf(
     )
     retry_one = client.post(f"/jobs/retry/{record.id}")
     retry_all = client.post("/jobs/retry")
+    export = client.get("/export.csv")
 
     assert upload.status_code == 401
     assert confirm.status_code == 401
     assert retry_one.status_code == 401
     assert retry_all.status_code == 401
+    assert export.status_code == 401
 
 
 def test_read_record_endpoints_require_login(
@@ -371,6 +381,67 @@ def test_read_record_endpoints_require_login(
     assert job.status_code == 401
     assert image.status_code == 401
     assert workbench.status_code == 401
+
+
+def test_operator_record_reads_are_scoped_to_own_records(
+    client: TestClient,
+    session: Session,
+    tmp_path,
+) -> None:
+    operator = create_user(
+        session,
+        username="history-operator",
+        display_name="History Operator",
+        password="history-operator-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
+    client.cookies.set("mlocr_session", token)
+    own_image = tmp_path / "own.jpg"
+    own_image.write_bytes(b"own image")
+    other_image = tmp_path / "other.jpg"
+    other_image.write_bytes(b"other image")
+    own = Record(
+        image_path=str(own_image),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+        operator_id="history-operator",
+        vin_or_bin="VIN-OWN",
+        raw_ocr_text="own raw text",
+    )
+    other = Record(
+        image_path=str(other_image),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+        operator_id="other-operator",
+        vin_or_bin="VIN-OTHER",
+        raw_ocr_text="other raw text",
+    )
+    session.add(own)
+    session.add(other)
+    session.commit()
+    session.refresh(own)
+    session.refresh(other)
+
+    jobs = client.get("/jobs")
+    other_jobs = client.get("/jobs", params={"operator_id": "other-operator"})
+    own_job = client.get(f"/jobs/{own.id}")
+    other_job = client.get(f"/jobs/{other.id}")
+    own_image_response = client.get(f"/records/{own.id}/image")
+    other_image_response = client.get(f"/records/{other.id}/image")
+    export = client.get("/export.csv")
+
+    assert jobs.status_code == 200
+    assert [row["id"] for row in jobs.json()] == [own.id]
+    assert other_jobs.status_code == 403
+    assert own_job.status_code == 200
+    assert own_job.json()["raw_ocr_text"] == "own raw text"
+    assert other_job.status_code == 403
+    assert own_image_response.status_code == 200
+    assert other_image_response.status_code == 403
+    assert export.status_code == 200
+    assert "VIN-OWN" in export.text
+    assert "VIN-OTHER" not in export.text
 
 
 def test_outbound_query_accepts_multiple_selected_orders(
