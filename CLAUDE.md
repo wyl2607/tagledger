@@ -32,8 +32,8 @@ pytest
 
 ## 架构边界
 
-- `/` 是智能入口：未初始化跳 `/setup`，未登录跳 `/login`，已登录跳 `/workbench`。
-- 主工作台页面是 `/workbench`；移动现场入口是 `/mobile`；旧 OCR demo 保留在 `/capture`。
+- `/` 是中心入口：未初始化跳 `/setup`；初始化后显示所有工具入口和未完成模块占位。
+- 角色工作台页面是 `/workbench`；移动现场入口是 `/mobile`；旧 OCR demo 保留在 `/capture`。
 - Windows 交付优先 LAN 一键启动；exe、Windows 服务或 Tauri 启动器属于第二阶段包装，不改变 FastAPI + Web UI 核心。
 - `backend/app/ocr/base.py` 是 OCR Provider 抽象入口。
 - `backend/app/ocr/tesseract_provider.py` + `barcode_provider.py` 已可用，通过 `config/settings.yaml` 切换。

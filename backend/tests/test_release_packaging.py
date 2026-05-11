@@ -46,8 +46,8 @@ def test_docs_describe_smart_entry_and_legacy_capture_boundary() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
     windows_deploy = Path("docs/WINDOWS_DEPLOY.md").read_text(encoding="utf-8")
 
-    assert "首页 `/` 智能入口" in readme
-    assert "未初始化跳 `/setup`，未登录跳 `/login`，已登录跳 `/workbench`" in readme
+    assert "首页 `/` 中心入口" in readme
+    assert "初始化后显示所有工具和后续模块占位" in readme
     assert "旧桌面 OCR demo 保留为 `/capture`" in readme
     assert "手机同一 Wi-Fi 下扫码打开 `/mobile`" in readme
     assert "`/setup`" in windows_deploy
