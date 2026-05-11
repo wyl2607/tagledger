@@ -233,7 +233,7 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     response = authenticated_client.get("/workbench")
 
     assert portal.status_code == 200
-    assert "所有工具入口" in portal.text
+    assert "先选岗位，再开工" in portal.text
     assert "/mobile" in portal.text
     assert "/outbound" in portal.text
     assert "采购入库" in portal.text
@@ -262,7 +262,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     transfers = _static_text("backend/app/static/transfers.html")
     signoff = _static_text("backend/app/static/signoff.html")
 
-    assert "所有工具入口" in portal
+    assert "先选岗位，再开工" in portal
     assert 'href="/workbench"' in portal
     assert 'href="/mobile"' in portal
     assert 'href="/outbound"' in portal
