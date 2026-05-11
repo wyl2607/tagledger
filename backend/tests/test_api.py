@@ -227,8 +227,14 @@ def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
 
 
 def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClient) -> None:
+    portal = authenticated_client.get("/")
     response = authenticated_client.get("/workbench")
 
+    assert portal.status_code == 200
+    assert "所有工具入口" in portal.text
+    assert "/mobile" in portal.text
+    assert "/outbound" in portal.text
+    assert "采购入库" in portal.text
     assert response.status_code == 200
     assert "/api/workbench" in response.text
     assert "/static/i18n.js" in response.text
@@ -247,12 +253,18 @@ def test_signoff_page_serves_management_console(authenticated_client: TestClient
 
 def test_static_role_ui_contracts_are_explicit() -> None:
     workbench = _static_text("backend/app/static/home.html")
+    portal = _static_text("backend/app/static/portal.html")
     mobile = _static_text("backend/app/static/mobile.html")
     admin = _static_text("backend/app/static/admin.html")
     inventory = _static_text("backend/app/static/inventory.html")
     transfers = _static_text("backend/app/static/transfers.html")
     signoff = _static_text("backend/app/static/signoff.html")
 
+    assert "所有工具入口" in portal
+    assert 'href="/workbench"' in portal
+    assert 'href="/mobile"' in portal
+    assert 'href="/outbound"' in portal
+    assert 'data-state="planned"' in portal
     assert "renderModules(payload.modules || [])" in workbench
     assert "payload.global_stats" in workbench
     assert 'href="/admin"' not in mobile
