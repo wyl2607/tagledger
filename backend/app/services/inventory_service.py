@@ -230,8 +230,6 @@ def move_inventory_quantity(
         raise RuntimeError("quantity must be > 0")
     if source.status in HIDDEN_LOCATION_STATUSES:
         raise RuntimeError(f"source location is not movable: {source.status}")
-    if int(source.quantity or 0) < move_qty:
-        raise RuntimeError("insufficient inventory")
     target_code = normalize_location_code(target_location_code)
     if target_code == normalize_location_code(source.location_code):
         raise RuntimeError("target location must differ from source location")
@@ -245,6 +243,27 @@ def move_inventory_quantity(
         target_location_kind=target_location_kind,
     )
     source_before = int(source.quantity or 0)
+    variance_adjustment: InventoryMovement | None = None
+    if source_before < move_qty:
+        # Field count is ahead of system count; reconcile source first, then apply move.
+        source.quantity = move_qty
+        apply_location_visibility_rules(source)
+        source.updated_at = now
+        variance_adjustment = InventoryMovement(
+            factory_id=source.factory_id,
+            movement_type="manual_adjust",
+            part_key=source.part_key,
+            location_code=source.location_code,
+            quantity_delta=move_qty - source_before,
+            before_qty=source_before,
+            after_qty=move_qty,
+            operator_id=operator.username,
+            reason=f"盘点发现差异; {normalized_reason}"[:200],
+            created_at=now,
+        )
+        session.add(source)
+        session.add(variance_adjustment)
+        source_before = move_qty
     target_before = int(target.quantity or 0)
     source.quantity = source_before - move_qty
     target.quantity = target_before + move_qty
@@ -291,17 +310,25 @@ def move_inventory_quantity(
     )
     session.add(source)
     session.add(target)
+    if variance_adjustment is not None:
+        session.add(variance_adjustment)
     session.add(out_movement)
     session.add(in_movement)
     session.add(audit)
     session.commit()
-    for row in (source, target, out_movement, in_movement):
+    refresh_rows: list[object] = [source, target, out_movement, in_movement]
+    if variance_adjustment is not None:
+        refresh_rows.insert(0, variance_adjustment)
+    for row in refresh_rows:
         session.refresh(row)
+    movements = [out_movement, in_movement]
+    if variance_adjustment is not None:
+        movements.insert(0, variance_adjustment)
     return {
         "move_id": move_id,
         "source_location": location_payload(source),
         "target_location": location_payload(target),
-        "movements": [movement_payload(out_movement), movement_payload(in_movement)],
+        "movements": [movement_payload(row) for row in movements],
     }
 
 

@@ -392,6 +392,60 @@ def test_inventory_move_updates_both_locations_and_preserves_movements(
     assert sorted(row.movement_type for row in movements) == ["manual_move_in", "manual_move_out"]
 
 
+def test_inventory_move_allows_variance_and_records_adjustment(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-variance-operator")
+    source = _seed_location(
+        session,
+        part_key="CPXS000122040",
+        location_code="A-40",
+        quantity=10,
+        location_kind="permanent",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122040",
+        location_code="B-40",
+        quantity=2,
+        location_kind="permanent",
+    )
+
+    response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": source.id,
+            "target_location_code": "B-40",
+            "quantity": 12,
+            "target_location_kind": "permanent",
+            "reason": "现场调拨补录",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source_location"]["quantity"] == 0
+    assert payload["target_location"]["quantity"] == 14
+
+    movements = session.exec(
+        select(InventoryMovement)
+        .where(InventoryMovement.part_key == "CPXS000122040")
+        .order_by(InventoryMovement.id.asc())
+    ).all()
+    assert [row.movement_type for row in movements] == [
+        "manual_adjust",
+        "manual_move_out",
+        "manual_move_in",
+    ]
+    adjust = movements[0]
+    assert adjust.before_qty == 10
+    assert adjust.after_qty == 12
+    assert adjust.quantity_delta == 2
+    assert "盘点发现差异" in (adjust.reason or "")
+    assert adjust.operator_id == "inventory-variance-operator"
+
+
 def test_inventory_move_rejects_same_location(
     client: TestClient,
     session: Session,
