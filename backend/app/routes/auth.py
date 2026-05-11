@@ -232,6 +232,13 @@ def _module_payload(user: User) -> list[dict[str, object]]:
                     "group": "inventory",
                 },
                 {
+                    "id": "materials",
+                    "title": "料号对照",
+                    "description": "导入松灵料号表，按物料编码、SKU、BYD 料号和描述快速检索。",
+                    "href": "/materials",
+                    "group": "inventory",
+                },
+                {
                     "id": "transfers",
                     "title": "跨场子调拨",
                     "description": "发起和查看三场子调拨流水。",

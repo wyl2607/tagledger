@@ -17,6 +17,7 @@ from backend.app.routes import (
     export,
     inventory,
     jobs,
+    materials,
     metrics,
     outbound,
     pairing,
@@ -186,6 +187,14 @@ def inbound_page() -> FileResponse:
     return FileResponse(inbound_path)
 
 
+@app.get("/materials", include_in_schema=False)
+def materials_page() -> FileResponse:
+    materials_path = STATIC_DIR / "material-catalog.html"
+    if not materials_path.exists():
+        raise HTTPException(status_code=404, detail="material catalog page not found")
+    return FileResponse(materials_path)
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     login_path = STATIC_DIR / "login.html"
@@ -225,6 +234,7 @@ app.include_router(jobs.router)
 app.include_router(confirm.router)
 app.include_router(export.router)
 app.include_router(inventory.router)
+app.include_router(materials.router)
 app.include_router(metrics.router)
 app.include_router(outbound.router)
 app.include_router(transfers.router)

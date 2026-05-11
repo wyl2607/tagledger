@@ -20,6 +20,7 @@ STATIC_UI_PAGES = [
     Path("backend/app/static/mobile.html"),
     Path("backend/app/static/inventory.html"),
     Path("backend/app/static/inbound.html"),
+    Path("backend/app/static/material-catalog.html"),
     Path("backend/app/static/outbound.html"),
     Path("backend/app/static/transfers.html"),
     Path("backend/app/static/signoff.html"),
@@ -218,6 +219,17 @@ def test_inbound_page_serves_html(authenticated_client: TestClient) -> None:
     assert "can_manage_inventory" in response.text
 
 
+def test_material_catalog_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/materials")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert 'data-i18n="materials.title"' in response.text
+    assert "/api/materials/catalog" in response.text
+    assert "/api/materials/catalog/import" in response.text
+    assert "limit=30" not in response.text
+
+
 def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/outbound")
 
@@ -254,6 +266,8 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "/api/workbench" in response.text
     assert "/static/i18n.js" in response.text
     assert "workbench.modules.title" in response.text
+    workbench_payload = authenticated_client.get("/api/workbench").json()
+    assert any(module["href"] == "/materials" for module in workbench_payload["modules"])
 
 
 def test_signoff_page_serves_management_console(authenticated_client: TestClient) -> None:
@@ -273,6 +287,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     admin = _static_text("backend/app/static/admin.html")
     inventory = _static_text("backend/app/static/inventory.html")
     inbound = _static_text("backend/app/static/inbound.html")
+    materials = _static_text("backend/app/static/material-catalog.html")
     transfers = _static_text("backend/app/static/transfers.html")
     signoff = _static_text("backend/app/static/signoff.html")
 
@@ -298,6 +313,10 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert "/api/outbound/inventory/inbound" in inbound
     assert "quantity_on_hand ?? location.quantity" in inbound
     assert "idempotency_key" in inbound
+    assert 'href="/" data-i18n="nav.portal"' in materials
+    assert "/api/materials/catalog" in materials
+    assert "/api/materials/catalog/import" in materials
+    assert "limit=30" not in materials
     assert 'href="/" data-i18n="nav.portal"' in inventory
     assert "can_manage_users" in admin
     assert 'href="/" data-i18n="nav.portal"' in admin
