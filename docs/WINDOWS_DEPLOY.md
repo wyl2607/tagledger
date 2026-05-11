@@ -192,6 +192,29 @@ Protected operations such as outbound reconciliation, transfer creation, and adm
 4. Use `/admin` to create operator or supervisor accounts for the floor team.
 5. Phones should use `/mobile` from the QR code. The legacy desktop OCR demo remains available at `/capture` when needed for label intake compatibility.
 
+## Daily Picking Accounts
+
+Use `scripts/seed_user_account.py` when a local Windows or Mac install needs a repeatable operator account for the day's picking orders. The password is read from `TAGLEDGER_USER_PASSWORD` or from an interactive prompt; do not store site passwords in tracked files.
+
+```bash
+TAGLEDGER_USER_PASSWORD='change-me-locally' \
+  python scripts/seed_user_account.py \
+  --username picker96 \
+  --display-name 今日96单捡货 \
+  --role operator \
+  --orders SO202605060078 \
+  --reset-password
+```
+
+Use comma-separated orders for one person with multiple assignments:
+
+```bash
+TAGLEDGER_USER_PASSWORD='change-me-locally' \
+  python scripts/seed_user_account.py --username picker-a --orders SO202605060078,SO202605060087
+```
+
+Run the command once per person when multiple operators are picking the same order. Operator accounts only see their assigned orders; supervisors and managers keep global visibility.
+
 ## Switch To Real OCR
 
 Edit `config\settings.yaml`:

@@ -237,3 +237,13 @@ def test_windows_fleet_assets_do_not_embed_private_local_paths() -> None:
     assert "/Users/" + "yumei" not in fleet_blob
     assert "192." + "168." not in fleet_blob
     assert "C:\\Users\\vitec" not in fleet_blob
+
+
+def test_seed_user_account_does_not_embed_site_passwords() -> None:
+    script = Path("scripts/seed_user_account.py").read_text(encoding="utf-8")
+
+    assert "TAGLEDGER_USER_PASSWORD" in script
+    assert "getpass.getpass" in script
+    assert "Picker2026" not in script
+    assert "remote_seed_picker96" not in script
+    assert "SO202605060078" not in script
