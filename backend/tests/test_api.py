@@ -206,7 +206,15 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "text/html" in response.headers["content-type"]
     assert 'data-i18n="inventory.title"' in response.text
     assert "/api/inventory/locations" in response.text
+    assert "/api/inventory/location-map" in response.text
+    assert 'id="locationMap"' in response.text
     assert "/api/inventory/move" in response.text
+    assert 'id="adjustmentPanel" hidden' in response.text
+    assert "AuthUI.hasCapability(user, 'can_manage_inventory')" in response.text
+    assert "renderBuckets" in response.text
+    assert "temporary" in response.text
+    assert "upstairs" in response.text
+    assert "unresolved" in response.text
 
 
 def test_inbound_page_serves_html(authenticated_client: TestClient) -> None:

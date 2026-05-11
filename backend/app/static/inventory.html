@@ -18,7 +18,30 @@
     .kpi { min-height: 96px; display: grid; align-content: center; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
     .kpi span { color: var(--muted); font-weight: 900; }
     .kpi strong { font-size: 30px; line-height: 1; }
-    .work-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 14px; }
+    .work-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr); gap: 14px; align-items: start; }
+    .map-shell { display: grid; gap: 14px; margin-top: 14px; }
+    .map-zone { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .map-zone h3, .bucket-zone h3 { margin: 0; }
+    .map-column { display: grid; gap: 10px; }
+    .map-column-title { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-weight: 950; }
+    .rack-row { display: grid; gap: 8px; padding: 10px; border: 1px solid #d8dee8; border-radius: 8px; background: #fff; }
+    .rack-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-weight: 950; }
+    .depth-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+    .map-cell, .bucket-card { min-height: 92px; display: grid; gap: 5px; align-content: start; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer; }
+    .map-cell[aria-selected="true"], .bucket-card[aria-selected="true"] { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 107, 53, .16); }
+    .map-cell strong, .bucket-card strong { overflow-wrap: anywhere; }
+    .cell-metrics { color: var(--muted); font-weight: 900; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 5px; }
+    .badge { width: fit-content; padding: 3px 7px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 950; }
+    .badge.warn { background: #fef2f2; color: #991b1b; }
+    .badge.restock { background: #fff7ed; color: #9a3412; }
+    .badge.unresolved { background: #fef3c7; color: #92400e; }
+    .bucket-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .bucket-zone { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .material-list { display: grid; gap: 8px; margin: 12px 0; }
+    .material-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer; }
+    .material-item[aria-selected="true"] { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 107, 53, .12); }
+    .inventory-list { margin-top: 14px; }
     .location-grid { display: grid; gap: 10px; }
     .zone { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
     .zone h3 { margin: 0; font-size: 18px; }
@@ -32,8 +55,9 @@
     .form-grid { display: grid; gap: 12px; }
     .form-grid button { width: 100%; }
     @media (max-width: 920px) {
-      .inventory-head, .filters, .kpi-grid, .work-grid { grid-template-columns: 1fr; }
+      .inventory-head, .filters, .kpi-grid, .work-grid, .bucket-grid { grid-template-columns: 1fr; }
       .inventory-head h1 { font-size: 30px; }
+      .depth-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
     }
   </style>
 </head>
@@ -95,34 +119,30 @@
     <section class="kpi-grid" aria-label="Inventory summary">
       <div class="kpi"><span data-i18n="inventory.kpi.visible">可见库位</span><strong id="visibleCount">0</strong></div>
       <div class="kpi"><span data-i18n="inventory.kpi.restock">需补货</span><strong id="restockCount">0</strong></div>
-      <div class="kpi"><span data-i18n="inventory.kpi.retired">已隐藏临时库位</span><strong id="retiredCount">0</strong></div>
+      <div class="kpi"><span data-i18n="inventory.kpi.mixed">混放库位</span><strong id="mixedCount">0</strong></div>
       <div class="kpi"><span data-i18n="inventory.kpi.quantity">可见库存数</span><strong id="totalQty">0</strong></div>
     </section>
 
     <section class="work-grid">
       <div class="panel">
         <h2 data-i18n="inventory.map.title">厂区库位图</h2>
-        <p class="muted" data-i18n="inventory.map.subtitle">按库位前缀分区显示。点击库位后可在右侧调整数量或挪到新库位。</p>
-        <div id="locationGrid" class="location-grid"></div>
+        <p class="muted" data-i18n="inventory.map.subtitle">A/B 区按列、架、层、depth 展示。点击库位后查看物料明细并发起虚拟调拨。</p>
+        <div id="locationMap" class="map-shell" data-map-source="/api/inventory/location-map"></div>
+        <div id="locationBuckets" class="bucket-grid"></div>
+        <div class="inventory-list">
+          <h2 data-i18n="inventory.list.title">库存列表</h2>
+          <div id="locationGrid" class="location-grid"></div>
+        </div>
       </div>
 
       <aside class="panel">
-        <h2 data-i18n="inventory.editor.title">手动编辑</h2>
+        <h2 data-i18n="inventory.editor.title">库位操作</h2>
         <p class="muted" id="selectedInfo" data-i18n="inventory.editor.empty">先选择一个库位。</p>
+        <div id="materialDetails" class="material-list"></div>
         <div class="form-grid">
           <label>
-            <span data-i18n="inventory.editor.quantity">校正数量</span>
-            <input id="adjustQty" type="text" inputmode="numeric" pattern="[0-9]*">
-          </label>
-          <label>
-            <span data-i18n="inventory.editor.reason">原因</span>
-            <input id="adjustReason" data-i18n-placeholder="inventory.editor.reasonPlaceholder" placeholder="盘点 / 纠错 / 临时库位用完">
-          </label>
-          <button type="button" id="adjustBtn" data-i18n="inventory.action.adjust">写入数量调整</button>
-          <hr>
-          <label>
             <span data-i18n="inventory.move.target">目标库位</span>
-            <input id="moveTarget" data-i18n-placeholder="inventory.move.targetPlaceholder" placeholder="例如 B-04">
+            <input id="moveTarget" data-i18n-placeholder="inventory.move.targetPlaceholder" placeholder="例如 B-C02-032">
           </label>
           <label>
             <span data-i18n="inventory.move.quantity">挪动数量</span>
@@ -137,19 +157,24 @@
           </label>
           <label>
             <span data-i18n="inventory.move.reason">挪动原因</span>
-            <input id="moveReason" data-i18n-placeholder="inventory.move.reasonPlaceholder" placeholder="地图拖拽 / 整理库位">
+            <input id="moveReason" data-i18n-placeholder="inventory.move.reasonPlaceholder" placeholder="整理库位" value="整理库位">
           </label>
           <button type="button" id="moveBtn" data-i18n="inventory.action.move">挪动到目标库位</button>
+          <div id="adjustmentPanel" hidden>
+            <hr>
+            <h3 data-i18n="inventory.adjust.title">主管数量校正</h3>
+            <label>
+              <span data-i18n="inventory.editor.quantity">校正数量</span>
+              <input id="adjustQty" type="text" inputmode="numeric" pattern="[0-9]*">
+            </label>
+            <label>
+              <span data-i18n="inventory.editor.reason">原因</span>
+              <input id="adjustReason" data-i18n-placeholder="inventory.editor.reasonPlaceholder" placeholder="盘点 / 纠错 / 临时库位用完">
+            </label>
+            <button type="button" id="adjustBtn" data-i18n="inventory.action.adjust">写入数量调整</button>
+          </div>
         </div>
       </aside>
-    </section>
-  </main>
-
-  <main class="inventory-page" id="accessDenied" hidden>
-    <section class="panel">
-      <h2 data-i18n="error.permissionDenied">权限不足</h2>
-      <p class="muted" data-i18n="inventory.accessDenied">需要主管或管理员权限才能编辑库存与库位。</p>
-      <a class="nav-link" href="/workbench" data-i18n="admin.action.backWorkbench">返回工作台</a>
     </section>
   </main>
 
@@ -160,18 +185,111 @@
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[char]));
-    let latestPayload = null;
-    let selectedLocation = null;
+    let latestLocationsPayload = null;
+    let latestMapPayload = null;
+    let selectedCell = null;
+    let selectedMaterialKey = null;
+    let userCanManageInventory = false;
 
     function zoneName(locationCode) {
       return String(locationCode || 'LOC').split(/[-_]/)[0] || 'LOC';
     }
 
     function renderSummary(summary) {
-      document.querySelector('#visibleCount').textContent = summary.visible_location_count || 0;
+      const visibleCount = (summary.standard_location_count || 0)
+        + (summary.temporary_location_count || 0)
+        + (summary.upstairs_location_count || 0)
+        + (summary.unresolved_location_count || 0);
+      document.querySelector('#visibleCount').textContent = visibleCount;
       document.querySelector('#restockCount').textContent = summary.restock_required_count || 0;
-      document.querySelector('#retiredCount').textContent = summary.retired_location_count || 0;
+      document.querySelector('#mixedCount').textContent = summary.mixed_location_count || 0;
       document.querySelector('#totalQty').textContent = summary.total_quantity || 0;
+    }
+
+    function warningBadges(cell, extra = '') {
+      const badges = [];
+      if (cell.mixed_material_warning) badges.push(`<span class="badge warn">${esc(tr('inventory.warning.mixed'))}</span>`);
+      if (cell.restock_required) badges.push(`<span class="badge restock">${esc(tr('inventory.restockRequired'))}</span>`);
+      if (extra) badges.push(extra);
+      return badges.length ? `<span class="badge-row">${badges.join('')}</span>` : '';
+    }
+
+    function isSelectedCell(cell) {
+      return selectedCell?.location_code === cell.location_code;
+    }
+
+    function renderCellButton(cell, className = 'map-cell', extraBadge = '') {
+      return `
+        <button type="button" class="${className}" data-location-code="${esc(cell.location_code)}" aria-selected="${isSelectedCell(cell) ? 'true' : 'false'}">
+          <strong>${esc(cell.location_code)}</strong>
+          <span class="cell-metrics">${esc(cell.total_quantity)} · ${esc(cell.material_count)} ${esc(tr('inventory.cell.materials'))}</span>
+          ${warningBadges(cell, extraBadge)}
+        </button>
+      `;
+    }
+
+    function sortedEntries(object, numeric = false) {
+      return Object.entries(object || {}).sort(([left], [right]) => {
+        if (numeric) return Number(left) - Number(right);
+        return String(left).localeCompare(String(right), undefined, { numeric: true });
+      });
+    }
+
+    function renderMap(payload) {
+      const zoneLabels = { A: tr('inventory.zone.a'), B: tr('inventory.zone.b') };
+      document.querySelector('#locationMap').innerHTML = ['A', 'B'].map((zoneKey) => {
+        const zone = payload?.zones?.[zoneKey] || { columns: {} };
+        const columns = sortedEntries(zone.columns);
+        return `
+          <section class="map-zone" data-zone="${esc(zoneKey)}">
+            <h3>${esc(zoneLabels[zoneKey] || zoneKey)}</h3>
+            ${columns.length ? columns.map(([columnKey, column]) => `
+              <div class="map-column" data-column="${esc(columnKey)}">
+                <div class="map-column-title"><span>${esc(tr('inventory.column', { column: columnKey }))}</span></div>
+                ${sortedEntries(column.racks, true).map(([rackKey, rack]) => `
+                  <div class="rack-row" data-rack="${esc(rackKey)}">
+                    <div class="rack-head">
+                      <span>${esc(tr('inventory.rack', { rack: rack.rack_index ?? rackKey }))}</span>
+                      ${rack.rack_warning ? `<span class="badge warn">${esc(rack.rack_warning_message || tr('inventory.warning.rack'))}</span>` : ''}
+                    </div>
+                    ${sortedEntries(rack.levels, true).map(([levelKey, level]) => `
+                      <div class="depth-grid" data-level="${esc(levelKey)}">
+                        ${sortedEntries(level.depths, true).map(([_depthKey, cell]) => renderCellButton(cell)).join('')}
+                      </div>
+                    `).join('')}
+                  </div>
+                `).join('')}
+              </div>
+            `).join('') : `<p class="muted">${esc(tr('inventory.empty'))}</p>`}
+          </section>
+        `;
+      }).join('');
+      document.querySelectorAll('.map-cell').forEach((cell) => {
+        cell.addEventListener('click', () => selectCellByCode(cell.dataset.locationCode));
+      });
+    }
+
+    function renderBuckets(buckets) {
+      const labels = {
+        temporary: tr('inventory.bucket.temporary'),
+        upstairs: tr('inventory.bucket.upstairs'),
+        unresolved: tr('inventory.bucket.unresolved'),
+      };
+      document.querySelector('#locationBuckets').innerHTML = ['temporary', 'upstairs', 'unresolved'].map((bucketKey) => {
+        const rows = buckets?.[bucketKey] || [];
+        const unresolvedBadge = bucketKey === 'unresolved'
+          ? `<span class="badge unresolved">${esc(tr('inventory.warning.unresolved'))}</span>`
+          : '';
+        return `
+          <section class="bucket-zone" data-bucket="${esc(bucketKey)}">
+            <h3>${esc(labels[bucketKey])}</h3>
+            ${rows.length ? rows.map((cell) => renderCellButton(cell, 'bucket-card', unresolvedBadge)).join('') : `<p class="muted">${esc(tr('inventory.empty'))}</p>`}
+          </section>
+        `;
+      }).join('');
+      document.querySelectorAll('.bucket-card').forEach((cell) => {
+        cell.addEventListener('click', () => selectCellByCode(cell.dataset.locationCode));
+      });
     }
 
     function renderLocations(locations) {
@@ -197,7 +315,7 @@
         <section class="zone">
           <h3>${esc(zone)}</h3>
           ${rows.map((location) => `
-            <button type="button" class="location-card" data-location-id="${esc(location.id)}" aria-selected="${selectedLocation?.id === location.id ? 'true' : 'false'}">
+            <button type="button" class="location-card" data-location-id="${esc(location.id)}" aria-selected="${selectedCell?.location_code === location.location_code && selectedMaterialKey === location.part_key ? 'true' : 'false'}">
               <span>
                 <strong>${esc(location.location_code)}</strong>
                 <span class="meta">${metaLine(location)}</span>
@@ -214,13 +332,79 @@
     }
 
     function selectLocation(id) {
-      selectedLocation = (latestPayload?.locations || []).find((row) => Number(row.id) === id) || null;
-      document.querySelector('#selectedInfo').textContent = selectedLocation
-        ? `${selectedLocation.location_code} · ${selectedLocation.part_key} · ${selectedLocation.quantity}`
-        : tr('inventory.editor.empty');
-      document.querySelector('#adjustQty').value = selectedLocation ? selectedLocation.quantity : '';
-      document.querySelector('#moveQty').value = selectedLocation ? '1' : '';
-      renderLocations(latestPayload?.locations || []);
+      const row = (latestLocationsPayload?.locations || []).find((item) => Number(item.id) === id) || null;
+      if (!row) {
+        selectCell(null);
+        return;
+      }
+      selectCell(findCellByCode(row.location_code), row.part_key);
+    }
+
+    function allMapCells() {
+      const zones = latestMapPayload?.zones || {};
+      const standardCells = Object.values(zones).flatMap((zone) => (
+        Object.values(zone.columns || {}).flatMap((column) => (
+          Object.values(column.racks || {}).flatMap((rack) => (
+            Object.values(rack.levels || {}).flatMap((level) => Object.values(level.depths || {}))
+          ))
+        ))
+      ));
+      const bucketCells = Object.values(latestMapPayload?.buckets || {}).flat();
+      return [...standardCells, ...bucketCells];
+    }
+
+    function findCellByCode(locationCode) {
+      return allMapCells().find((cell) => cell.location_code === locationCode) || null;
+    }
+
+    function sourceRowForSelection() {
+      if (!selectedCell) return null;
+      const rows = latestLocationsPayload?.locations || [];
+      const matches = rows.filter((row) => row.location_code === selectedCell.location_code);
+      if (selectedMaterialKey) {
+        return matches.find((row) => row.part_key === selectedMaterialKey) || null;
+      }
+      if (matches.length === 1) return matches[0];
+      return null;
+    }
+
+    function renderSelectedDetails() {
+      if (!selectedCell) {
+        document.querySelector('#selectedInfo').textContent = tr('inventory.editor.empty');
+        document.querySelector('#materialDetails').innerHTML = '';
+        document.querySelector('#adjustQty').value = '';
+        document.querySelector('#moveQty').value = '';
+        return;
+      }
+      const sourceRow = sourceRowForSelection();
+      document.querySelector('#selectedInfo').textContent = `${selectedCell.location_code} · ${selectedCell.total_quantity} · ${selectedCell.material_count} ${tr('inventory.cell.materials')}`;
+      document.querySelector('#materialDetails').innerHTML = (selectedCell.materials || []).map((material) => `
+        <button type="button" class="material-item" data-part-key="${esc(material.part_key)}" aria-selected="${selectedMaterialKey === material.part_key ? 'true' : 'false'}">
+          <span>
+            <strong>${esc(material.part_key)}</strong>
+            <span class="meta">${esc(material.part_name || '')}</span>
+          </span>
+          <strong>${esc(material.quantity)}</strong>
+        </button>
+      `).join('');
+      document.querySelectorAll('.material-item').forEach((item) => {
+        item.addEventListener('click', () => selectCell(selectedCell, item.dataset.partKey));
+      });
+      document.querySelector('#adjustQty').value = sourceRow ? sourceRow.quantity : '';
+      document.querySelector('#moveQty').value = sourceRow ? '1' : '';
+    }
+
+    function selectCell(cell, partKey = null) {
+      selectedCell = cell || null;
+      selectedMaterialKey = partKey || (cell?.materials?.length === 1 ? cell.materials[0].part_key : null);
+      renderSelectedDetails();
+      renderMap(latestMapPayload || {});
+      renderBuckets(latestMapPayload?.buckets || {});
+      renderLocations(latestLocationsPayload?.locations || []);
+    }
+
+    function selectCellByCode(locationCode) {
+      selectCell(findCellByCode(locationCode));
     }
 
     async function loadInventory() {
@@ -230,18 +414,26 @@
       if (factory) params.set('factory_id', factory);
       if (part) params.set('part_key', part);
       params.set('include_hidden', document.querySelector('#hiddenFilter').value);
-      latestPayload = await AuthUI.fetchJson(`/api/inventory/locations?${params.toString()}`);
-      renderSummary(latestPayload.summary || {});
-      renderLocations(latestPayload.locations || []);
-      if (selectedLocation && !(latestPayload.locations || []).some((row) => row.id === selectedLocation.id)) {
-        selectedLocation = null;
-        selectLocation(0);
+      const mapParams = new URLSearchParams();
+      if (factory) mapParams.set('factory_id', factory);
+      mapParams.set('include_hidden', document.querySelector('#hiddenFilter').value);
+      latestLocationsPayload = await AuthUI.fetchJson(`/api/inventory/locations?${params.toString()}`);
+      latestMapPayload = await AuthUI.fetchJson(`/api/inventory/location-map?${mapParams.toString()}`);
+      renderSummary(latestMapPayload.summary || {});
+      renderMap(latestMapPayload);
+      renderBuckets(latestMapPayload.buckets || {});
+      renderLocations(latestLocationsPayload.locations || []);
+      if (selectedCell && !findCellByCode(selectedCell.location_code)) {
+        selectCell(null);
+      } else {
+        renderSelectedDetails();
       }
     }
 
     async function adjustSelected() {
-      if (!selectedLocation) return;
-      await AuthUI.fetchJson(`/api/inventory/locations/${selectedLocation.id}`, {
+      const sourceRow = sourceRowForSelection();
+      if (!sourceRow || !userCanManageInventory) return;
+      await AuthUI.fetchJson(`/api/inventory/locations/${sourceRow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -253,16 +445,20 @@
     }
 
     async function moveSelected() {
-      if (!selectedLocation) return;
+      const sourceRow = sourceRowForSelection();
+      if (!sourceRow) {
+        document.querySelector('#selectedInfo').textContent = tr('inventory.move.selectMaterial');
+        return;
+      }
       await AuthUI.fetchJson('/api/inventory/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source_location_id: selectedLocation.id,
+          source_location_id: sourceRow.id,
           target_location_code: document.querySelector('#moveTarget').value,
           quantity: Number(document.querySelector('#moveQty').value),
           target_location_kind: document.querySelector('#moveKind').value,
-          reason: document.querySelector('#moveReason').value,
+          reason: document.querySelector('#moveReason').value || '整理库位',
         }),
       });
       await loadInventory();
@@ -274,10 +470,8 @@
         AuthUI.redirectToLogin();
         return;
       }
-      if (!AuthUI.hasCapability(user, 'can_manage_inventory')) {
-        document.querySelector('#accessDenied').hidden = false;
-        return;
-      }
+      userCanManageInventory = AuthUI.hasCapability(user, 'can_manage_inventory');
+      document.querySelector('#adjustmentPanel').hidden = !userCanManageInventory;
       document.querySelector('#inventoryContent').hidden = false;
       await loadInventory();
     }
@@ -297,9 +491,12 @@
 
     I18n.init().then(bootInventory);
     window.addEventListener('i18n:change', () => {
-      if (latestPayload) {
-        renderSummary(latestPayload.summary || {});
-        renderLocations(latestPayload.locations || []);
+      if (latestMapPayload && latestLocationsPayload) {
+        renderSummary(latestMapPayload.summary || {});
+        renderMap(latestMapPayload);
+        renderBuckets(latestMapPayload.buckets || {});
+        renderLocations(latestLocationsPayload.locations || []);
+        renderSelectedDetails();
       }
     });
   </script>
