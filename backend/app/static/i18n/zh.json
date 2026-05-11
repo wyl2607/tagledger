@@ -1,5 +1,5 @@
 {
-  "app.name": "机器标签 OCR",
+  "app.name": "TagLedger",
   "app.project": "现场录入",
   "app.tagline": "给现场班组使用的本地标签采集。",
   "nav.demo": "录入",
