@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from backend.app.models import InventoryLocation, InventoryMovement
+from backend.app.services import outbound_reconciliation
 from backend.app.services.auth_service import (
     CSRF_COOKIE,
     CSRF_HEADER,
@@ -306,6 +307,38 @@ def test_outbound_inbound_rejects_non_positive_quantity(
         ).first()
         is None
     )
+
+
+def test_outbound_inbound_rolls_back_location_when_movement_fails(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    _login_supervisor(client, session)
+
+    def fail_movement(*args, **kwargs):
+        raise RuntimeError("movement write failed")
+
+    monkeypatch.setattr(outbound_reconciliation, "_record_inventory_movement", fail_movement)
+
+    response = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122008",
+            "location_code": "QA-IN-08",
+            "quantity": 4,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "movement write failed"
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122008")
+        ).first()
+        is None
+    )
+    assert session.exec(select(InventoryMovement)).all() == []
 
 
 def test_inventory_api_requires_supervisor(client: TestClient, session: Session) -> None:

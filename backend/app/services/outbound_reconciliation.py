@@ -869,6 +869,7 @@ def _get_or_create_inventory_location(
     *,
     part_key: str,
     location_code: str,
+    commit: bool = True,
 ) -> InventoryLocation:
     row = session.exec(
         select(InventoryLocation).where(
@@ -886,8 +887,10 @@ def _get_or_create_inventory_location(
         zero_stock=True,
     )
     session.add(row)
-    session.commit()
-    session.refresh(row)
+    session.flush()
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row
 
 
@@ -1021,6 +1024,7 @@ def _record_inventory_movement(
     after_qty: int,
     operator_id: str,
     reason: str | None,
+    commit: bool = True,
 ) -> InventoryMovement:
     row = InventoryMovement(
         movement_type=movement_type,
@@ -1035,8 +1039,10 @@ def _record_inventory_movement(
         reason=reason,
     )
     session.add(row)
-    session.commit()
-    session.refresh(row)
+    session.flush()
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row
 
 
@@ -1056,7 +1062,10 @@ def _apply_inventory_delta(
     normalized_part = compact_part_code(part_key)
     normalized_location = _normalize_location_code(location_code)
     location = _get_or_create_inventory_location(
-        session, part_key=normalized_part, location_code=normalized_location
+        session,
+        part_key=normalized_part,
+        location_code=normalized_location,
+        commit=False,
     )
     if (
         not allow_new_location
@@ -1088,22 +1097,29 @@ def _apply_inventory_delta(
     elif location.status == "retired":
         location.status = "active"
     location.updated_at = now
-    session.add(location)
-    session.commit()
-    session.refresh(location)
-    movement = _record_inventory_movement(
-        session,
-        movement_type=movement_type,
-        part_key=normalized_part,
-        location_code=normalized_location,
-        order_no=order_no,
-        scan_id=scan_id,
-        quantity_delta=quantity_delta,
-        before_qty=before_qty,
-        after_qty=after_qty,
-        operator_id=operator_id,
-        reason=reason,
-    )
+    try:
+        session.add(location)
+        session.flush()
+        movement = _record_inventory_movement(
+            session,
+            movement_type=movement_type,
+            part_key=normalized_part,
+            location_code=normalized_location,
+            order_no=order_no,
+            scan_id=scan_id,
+            quantity_delta=quantity_delta,
+            before_qty=before_qty,
+            after_qty=after_qty,
+            operator_id=operator_id,
+            reason=reason,
+            commit=False,
+        )
+        session.commit()
+        session.refresh(location)
+        session.refresh(movement)
+    except Exception:
+        session.rollback()
+        raise
     return location, movement
 
 
