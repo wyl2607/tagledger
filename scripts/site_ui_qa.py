@@ -190,6 +190,14 @@ def run(base_url: str, *, start: bool) -> dict[str, object]:
             if "入库完成" not in page.locator("#inboundStatus").inner_text():
                 raise AssertionError("inbound page did not complete receiving")
             page.screenshot(path=ARTIFACT_DIR / "manager-inbound.png", full_page=True)
+            page.goto(f"{base_url}/outbound", wait_until="networkidle")
+            page.locator("#clearOrdersBtn").click()
+            if not page.locator("#queryBtn").is_disabled():
+                raise AssertionError("outbound query button should be disabled without orders")
+            page.locator("#selectAllOrdersBtn").click()
+            if page.locator("#queryBtn").is_disabled():
+                raise AssertionError("outbound query button should enable after selecting orders")
+            page.screenshot(path=ARTIFACT_DIR / "manager-outbound-query-guard.png", full_page=True)
             for name, path in (
                 ("manager-workbench", "/workbench"),
                 ("manager-dashboard", "/dashboard"),

@@ -124,20 +124,36 @@
     function selectedOrders() {
       return Array.from(document.querySelectorAll('[data-order-choice]:checked')).map((node) => node.value);
     }
+    function updateQueryAvailability() {
+      const hasSelection = selectedOrders().length > 0;
+      const queryBtn = document.querySelector('#queryBtn');
+      queryBtn.disabled = !hasSelection;
+      queryBtn.title = hasSelection ? '' : tr('outbound.page.query.needSelection');
+      if (!hasSelection) {
+        document.querySelector('#queryResult').textContent = tr('outbound.page.query.needSelection');
+      } else if (document.querySelector('#queryResult').textContent === tr('outbound.page.query.needSelection')) {
+        document.querySelector('#queryResult').textContent = '';
+      }
+    }
     function renderOrderPicker(orderNumbers) {
       if (!(orderNumbers || []).length) {
         document.querySelector('#orderPicker').innerHTML = `<div class="alert alert-yellow empty-state"><strong class="alert-title">${escapeHtml(tr('outbound.page.empty.title'))}</strong>${escapeHtml(tr('outbound.page.empty.detail'))}</div>`;
         document.querySelector('#selectAllOrdersBtn').disabled = true;
         document.querySelector('#clearOrdersBtn').disabled = true;
+        updateQueryAvailability();
         return;
       }
       document.querySelector('#orderPicker').innerHTML = (orderNumbers || []).map((order) => `
         <label class="order-choice"><input type="checkbox" data-order-choice value="${escapeHtml(order)}" ${(orderNumbers || []).length === 1 ? 'checked' : ''}>${escapeHtml(order)}</label>
       `).join('');
+      document.querySelectorAll('[data-order-choice]').forEach((node) => {
+        node.addEventListener('change', updateQueryAvailability);
+      });
       if ((orderNumbers || []).length <= 1) {
         document.querySelector('#selectAllOrdersBtn').disabled = true;
         document.querySelector('#clearOrdersBtn').disabled = true;
       }
+      updateQueryAvailability();
     }
     function renderPartRows(rows) {
       document.querySelector('#partRows').innerHTML = rows.map((row) => `
@@ -179,6 +195,10 @@
     }
     document.querySelector('#queryBtn').addEventListener('click', async () => {
       const code = document.querySelector('#codeQuery').value.trim();
+      if (!selectedOrders().length) {
+        updateQueryAvailability();
+        return;
+      }
       if (!code) return;
       const params = new URLSearchParams({ code });
       for (const order of selectedOrders()) params.append('order_no', order);
@@ -189,9 +209,11 @@
     });
     document.querySelector('#selectAllOrdersBtn').addEventListener('click', () => {
       document.querySelectorAll('[data-order-choice]').forEach((node) => { node.checked = true; });
+      updateQueryAvailability();
     });
     document.querySelector('#clearOrdersBtn').addEventListener('click', () => {
       document.querySelectorAll('[data-order-choice]').forEach((node) => { node.checked = false; });
+      updateQueryAvailability();
     });
     function bootOutbound() {
       loadSummary().catch((error) => { document.querySelector('#orderSummary').textContent = error.message; });

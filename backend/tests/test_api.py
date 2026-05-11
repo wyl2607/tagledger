@@ -227,6 +227,8 @@ def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
     assert "/api/outbound/summary" in response.text
     assert "/api/outbound/query" in response.text
     assert "data-order-choice" in response.text
+    assert "updateQueryAvailability" in response.text
+    assert "queryBtn.disabled = !hasSelection" in response.text
     assert "belongs_to_selected" in response.text
     assert "displayValue(row.quantity)" in response.text
     assert "displayValue(row.cutting_qty)" in response.text
