@@ -589,6 +589,8 @@
   "workbench.module.dashboard.description": "View overall intake, OCR, and outbound processing metrics.",
   "workbench.module.admin.title": "Accounts and roles",
   "workbench.module.admin.description": "Manage account roles, disabled users, and password resets.",
+  "workbench.module.inbound.title": "Inbound receiving",
+  "workbench.module.inbound.description": "Receive parts by part, location, and quantity.",
   "workbench.daily.title": "Recent work",
   "workbench.daily.empty": "No personal scans in the last 7 days.",
   "workbench.daily.line": "{count} scans / {qty} pcs",

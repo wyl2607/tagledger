@@ -218,6 +218,13 @@ def _module_payload(user: User) -> list[dict[str, object]]:
         modules.extend(
             [
                 {
+                    "id": "inbound",
+                    "title": "采购入库",
+                    "description": "按物料、库位和数量登记来料。",
+                    "href": "/inbound",
+                    "group": "inventory",
+                },
+                {
                     "id": "inventory",
                     "title": "库存与库位",
                     "description": "按工厂、物料和库位查看库存，手工调整数量或挪动库位。",

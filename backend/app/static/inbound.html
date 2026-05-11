@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>采购入库 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f3f4f6; }
+    .inbound-page { display: grid; gap: 18px; padding-bottom: 48px; }
+    .inbound-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+    .inbound-head h1 { font-size: 36px; }
+    .inbound-head p { max-width: 760px; margin-top: 8px; font-weight: 850; }
+    .inbound-grid { display: grid; grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr); gap: 14px; }
+    .inbound-panel { padding: 18px; border: 1px solid #d6d9de; border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+    .inbound-form { display: grid; gap: 12px; }
+    .inbound-form label { display: grid; gap: 6px; margin: 0; color: #475569; font-weight: 950; }
+    .inbound-result { display: grid; gap: 10px; }
+    .result-tile { padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .result-tile span { display: block; color: #475569; font-weight: 900; }
+    .result-tile strong { display: block; margin-top: 4px; font-size: 24px; overflow-wrap: anywhere; }
+    .quick-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .quick-row button { min-height: 48px; font-size: 18px; }
+    @media (max-width: 920px) {
+      .inbound-head, .inbound-grid, .quick-row { grid-template-columns: 1fr; }
+      .inbound-head h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="nav.inbound">入库</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-button" href="/" data-i18n="nav.portal">中心入口</a>
+        <a class="nav-button" href="/workbench" data-i18n="workbench.brand">工作台</a>
+        <a class="nav-button" href="/inventory" data-i18n="nav.inventory">库存</a>
+        <button type="button" class="secondary" id="logoutBtn" data-i18n="admin.logout">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="inbound-page" id="inboundContent" hidden>
+    <section class="inbound-head">
+      <div>
+        <h1>采购入库</h1>
+        <p class="muted">来料到场后，按物料、库位和数量登记。提交后会立刻增加库存，并写入库存流水。</p>
+      </div>
+      <a class="nav-button" href="/inventory">查看库存</a>
+    </section>
+
+    <section class="inbound-grid">
+      <form class="inbound-panel inbound-form" id="inboundForm">
+        <label>
+          <span>物料 / SKU</span>
+          <input id="partKey" autocomplete="off" required placeholder="例如 CPXS000122001">
+        </label>
+        <label>
+          <span>库位</span>
+          <input id="locationCode" autocomplete="off" required placeholder="例如 QA-A-01">
+        </label>
+        <label>
+          <span>数量</span>
+          <input id="quantity" type="number" min="1" step="1" required value="1">
+        </label>
+        <label>
+          <span>操作人</span>
+          <input id="operatorId" autocomplete="off" placeholder="默认使用当前账号">
+        </label>
+        <label>
+          <span>原因</span>
+          <input id="reason" autocomplete="off" value="purchase_inbound">
+        </label>
+        <div class="quick-row" aria-label="快速数量">
+          <button type="button" class="secondary mini" data-qty="1">+1</button>
+          <button type="button" class="secondary mini" data-qty="5">+5</button>
+          <button type="button" class="secondary mini" data-qty="10">+10</button>
+        </div>
+        <button type="submit" id="submitInboundBtn">确认入库</button>
+        <div class="status" id="inboundStatus"></div>
+      </form>
+
+      <section class="inbound-panel">
+        <h2>最近提交结果</h2>
+        <div class="inbound-result" id="inboundResult">
+          <div class="result-tile"><span>状态</span><strong>等待入库</strong></div>
+          <div class="result-tile"><span>物料</span><strong>-</strong></div>
+          <div class="result-tile"><span>库位库存</span><strong>-</strong></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <main class="inbound-page" id="accessDenied" hidden>
+    <section class="inbound-panel">
+      <h1>权限不足</h1>
+      <p class="muted">采购入库需要主管或管理员权限。</p>
+      <a class="nav-link" href="/workbench">返回工作台</a>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
+  <script>
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+
+    let currentUser = null;
+
+    function renderResult(payload) {
+      const location = payload.location || {};
+      const movement = payload.movement || {};
+      document.querySelector('#inboundResult').innerHTML = `
+        <div class="result-tile"><span>状态</span><strong>已入库</strong></div>
+        <div class="result-tile"><span>物料</span><strong>${esc(location.part_key)}</strong></div>
+        <div class="result-tile"><span>库位库存</span><strong>${esc(location.location_code)} · ${esc(location.quantity_on_hand)}</strong></div>
+        <div class="result-tile"><span>流水</span><strong>${esc(movement.movement_type)} ${esc(movement.quantity_delta)}</strong></div>
+      `;
+    }
+
+    document.querySelectorAll('[data-qty]').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelector('#quantity').value = button.dataset.qty;
+      });
+    });
+
+    document.querySelector('#inboundForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = document.querySelector('#inboundStatus');
+      status.textContent = '入库中...';
+      try {
+        const payload = await AuthUI.fetchJson('/api/outbound/inventory/inbound', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            part_key: document.querySelector('#partKey').value.trim(),
+            location_code: document.querySelector('#locationCode').value.trim(),
+            quantity: Number(document.querySelector('#quantity').value),
+            operator_id: document.querySelector('#operatorId').value.trim() || currentUser?.username || 'self',
+            reason: document.querySelector('#reason').value.trim() || 'purchase_inbound',
+          }),
+        });
+        renderResult(payload);
+        status.textContent = '入库完成';
+      } catch (error) {
+        status.textContent = `入库失败：${error.message}`;
+      }
+    });
+
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await AuthUI.logout();
+      window.location.href = '/login';
+    });
+
+    async function boot() {
+      await I18n.init();
+      currentUser = await AuthUI.currentUser();
+      if (!AuthUI.hasCapability(currentUser, 'can_manage_inventory')) {
+        document.querySelector('#accessDenied').hidden = false;
+        return;
+      }
+      document.querySelector('#operatorId').value = currentUser.username || '';
+      document.querySelector('#inboundContent').hidden = false;
+    }
+
+    boot().catch((error) => {
+      document.querySelector('#accessDenied').hidden = false;
+      document.querySelector('#accessDenied .muted').textContent = error.message;
+    });
+  </script>
+</body>
+</html>

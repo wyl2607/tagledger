@@ -19,6 +19,7 @@ STATIC_UI_PAGES = [
     Path("backend/app/static/history.html"),
     Path("backend/app/static/mobile.html"),
     Path("backend/app/static/inventory.html"),
+    Path("backend/app/static/inbound.html"),
     Path("backend/app/static/outbound.html"),
     Path("backend/app/static/transfers.html"),
     Path("backend/app/static/signoff.html"),
@@ -207,6 +208,16 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "/api/inventory/move" in response.text
 
 
+def test_inbound_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/inbound")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "采购入库" in response.text
+    assert "/api/outbound/inventory/inbound" in response.text
+    assert "can_manage_inventory" in response.text
+
+
 def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/outbound")
 
@@ -259,6 +270,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     mobile = _static_text("backend/app/static/mobile.html")
     admin = _static_text("backend/app/static/admin.html")
     inventory = _static_text("backend/app/static/inventory.html")
+    inbound = _static_text("backend/app/static/inbound.html")
     transfers = _static_text("backend/app/static/transfers.html")
     signoff = _static_text("backend/app/static/signoff.html")
 
@@ -266,6 +278,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'href="/workbench"' in portal
     assert 'href="/mobile"' in portal
     assert 'href="/outbound"' in portal
+    assert 'href="/inbound"' in portal
     assert 'data-state="planned"' in portal
     assert "renderModules(payload.modules || [])" in workbench
     assert "payload.global_stats" in workbench
@@ -279,6 +292,8 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'id="assignedOrder"' in admin
     assert "outbound_last_order_no" in admin
     assert "can_manage_inventory" in inventory
+    assert "can_manage_inventory" in inbound
+    assert "/api/outbound/inventory/inbound" in inbound
     assert 'href="/" data-i18n="nav.portal"' in inventory
     assert "can_manage_users" in admin
     assert 'href="/" data-i18n="nav.portal"' in admin

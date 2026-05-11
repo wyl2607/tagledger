@@ -589,6 +589,8 @@
   "workbench.module.dashboard.description": "看录入、OCR、出库指标。",
   "workbench.module.admin.title": "账号与权限",
   "workbench.module.admin.description": "账号：权限、停用、重置。",
+  "workbench.module.inbound.title": "采购入库",
+  "workbench.module.inbound.description": "按物料、库位和数量登记来料。",
   "workbench.daily.title": "最近作业",
   "workbench.daily.empty": "近 7 天暂无本人扫码。",
   "workbench.daily.line": "{count} 次 / {qty} 件",

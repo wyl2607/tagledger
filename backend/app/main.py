@@ -178,6 +178,14 @@ def inventory_page() -> FileResponse:
     return FileResponse(inventory_path)
 
 
+@app.get("/inbound", include_in_schema=False)
+def inbound_page() -> FileResponse:
+    inbound_path = STATIC_DIR / "inbound.html"
+    if not inbound_path.exists():
+        raise HTTPException(status_code=404, detail="inbound page not found")
+    return FileResponse(inbound_path)
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     login_path = STATIC_DIR / "login.html"

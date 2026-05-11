@@ -177,6 +177,19 @@ def run(base_url: str, *, start: bool) -> dict[str, object]:
             )
             page = context.new_page()
             login(page, base_url, *MANAGER)
+            page.goto(f"{base_url}/inbound", wait_until="networkidle")
+            page.locator("#partKey").fill("QA-INBOUND-001")
+            page.locator("#locationCode").fill("QA-A-01")
+            page.locator("#quantity").fill("3")
+            page.locator("#reason").fill("site_ui_qa_inbound")
+            page.locator("#submitInboundBtn").click()
+            page.wait_for_function(
+                "document.querySelector('#inboundStatus')?.textContent.includes('入库完成')",
+                timeout=10_000,
+            )
+            if "入库完成" not in page.locator("#inboundStatus").inner_text():
+                raise AssertionError("inbound page did not complete receiving")
+            page.screenshot(path=ARTIFACT_DIR / "manager-inbound.png", full_page=True)
             for name, path in (
                 ("manager-workbench", "/workbench"),
                 ("manager-dashboard", "/dashboard"),

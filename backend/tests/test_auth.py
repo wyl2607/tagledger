@@ -525,6 +525,7 @@ def test_workbench_modules_include_signoff_for_supervisor(
     assert response.status_code == 200
     payload = response.json()
     module_ids = [m["id"] for m in payload["modules"]]
+    assert "inbound" in module_ids
     assert "signoff" in module_ids
     assert payload["user"]["capabilities"]["can_manage_signoff"] is True
 
@@ -549,6 +550,7 @@ def test_workbench_modules_include_signoff_for_manager(
     assert response.status_code == 200
     payload = response.json()
     assert payload["user"]["capabilities"]["can_manage_signoff"] is True
+    assert "inbound" in [m["id"] for m in payload["modules"]]
     assert "signoff" in [m["id"] for m in payload["modules"]]
 
 
@@ -572,5 +574,6 @@ def test_workbench_modules_hide_signoff_for_operator(
     assert response.status_code == 200
     payload = response.json()
     module_ids = [m["id"] for m in payload["modules"]]
+    assert "inbound" not in module_ids
     assert "signoff" not in module_ids
     assert payload["user"]["capabilities"]["can_manage_signoff"] is False

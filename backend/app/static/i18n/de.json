@@ -589,6 +589,8 @@
   "workbench.module.dashboard.description": "Gesamte Erfassung, OCR und Ausgangsverarbeitung ansehen.",
   "workbench.module.admin.title": "Konten und Rollen",
   "workbench.module.admin.description": "Kontorollen, deaktivierte Benutzer und Passwort-Resets verwalten.",
+  "workbench.module.inbound.title": "Wareneingang",
+  "workbench.module.inbound.description": "Teile nach Teil, Lagerort und Menge einbuchen.",
   "workbench.daily.title": "Letzte Arbeit",
   "workbench.daily.empty": "Keine eigenen Scans in den letzten 7 Tagen.",
   "workbench.daily.line": "{count} Scans / {qty} Stk.",
