@@ -90,21 +90,24 @@
 
 ### P1: Excel 文件上传对账 UI
 
-- [ ] 在 `/inventory` 增加文件上传 preview 面板，调用 `/api/inventory/reconcile/preview-file`。
-- [ ] 支持上传 CSV/XLSX 后显示解析行数、文件名、summary 和四类结果。
-- [ ] 上传 preview 只读，不写 `InventoryLocation`、`InventoryMovement`、`AuditLog`。
-- [ ] 对错误文件给明确提示：缺表头、缺列、数量不是整数、负数、文件类型不支持。
-- [ ] 文件 preview 与 JSON rows preview 共用展示组件，避免两套 UI 行为不一致。
-- [ ] 保留 JSON rows preview 作为调试/开发入口，现场默认引导使用文件上传。
+- [x] 在 `/inventory` 增加文件上传 preview 面板，调用 `/api/inventory/reconcile/preview-file`。
+- [x] 支持上传 CSV/XLSX 后显示解析行数、文件名、summary 和四类结果。
+- [x] 上传 preview 只读，不写 `InventoryLocation`、`InventoryMovement`、`AuditLog`。
+- [x] 对错误文件给明确提示：缺表头、缺列、数量不是整数、负数、文件类型不支持。
+- [x] 文件 preview 与 JSON rows preview 共用展示组件，避免两套 UI 行为不一致。
+- [x] 保留 JSON rows preview 作为调试/开发入口，现场默认引导使用文件上传。
+- [x] 2026-05-12 `/inventory` 文件上传 preview 浏览器 smoke 通过：桌面和手机均可上传并渲染 preview，未发现 console error。
 
 ### P1: 出库拣货工作流集成
 
-- [ ] 将拣货推荐接入出库单/检货单场景，而不是只在库存页手动输入。
+- [x] 将拣货推荐接入出库单/检货单场景，而不是只在库存页手动输入。
 - [ ] 电子检货单和纸质出货单字段保持一致，至少包含物料号、名称、需求数量、推荐库位、建议拣货数量。
-- [ ] 推荐顺序保持：临时库位优先，其次数量少的先清空，再按 `location_profile.sort_key` 排序。
-- [ ] 当推荐库存不足时，在 UI 上明确显示缺口数量，不自动修改库存。
+- [x] 推荐顺序保持：临时库位优先，其次数量少的先清空，再按 `location_profile.sort_key` 排序。
+- [x] 当推荐库存不足时，在 UI 上明确显示缺口数量，不自动修改库存。
 - [ ] 出库扫码成功后，应能反映对应库位库存变化；如果出库模块已有逻辑，优先复用现有出库流水。
 - [ ] 暂不做最短路径算法；等 2D 物理通道关系更明确后再加路线优化。
+- [x] 2026-05-12 `/outbound` 拣货推荐浏览器 smoke 通过：手动输入和出库表格行内“按该行推荐”均可触发 `/api/inventory/pick-recommendations`。
+- [x] 2026-05-12 `/outbound` 行内推荐真实浏览器 QA 通过：桌面 1366x900 和手机 390x844，行按钮自动填入物料 `C.P.XS.000122303`、数量 `4`，推荐顺序为 `TMP-10` 先拣 `2`，再从 `A-A01-012` 拣 `2`，未发现 console error。
 
 ### P1: 对账应用流程
 
