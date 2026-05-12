@@ -645,6 +645,84 @@ def test_inventory_move_updates_both_locations_and_preserves_movements(
     assert sorted(row.movement_type for row in movements) == ["manual_move_in", "manual_move_out"]
 
 
+def test_inventory_move_retire_empty_temporary_and_keeps_empty_permanent_visible(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-empty-visibility-operator")
+    temporary_source = _seed_location(
+        session,
+        part_key="CPXS000122014",
+        location_code="TMP-14",
+        quantity=3,
+        location_kind="temporary",
+    )
+    permanent_source = _seed_location(
+        session,
+        part_key="CPXS000122015",
+        location_code="A-A01-011",
+        quantity=2,
+        location_kind="permanent",
+    )
+
+    temporary_response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": temporary_source.id,
+            "target_location_code": "A-A01-012",
+            "quantity": 3,
+            "target_location_kind": "permanent",
+            "reason": "整理库位",
+        },
+    )
+    permanent_response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": permanent_source.id,
+            "target_location_code": "A-A01-013",
+            "quantity": 2,
+            "target_location_kind": "permanent",
+            "reason": "整理库位",
+        },
+    )
+
+    assert temporary_response.status_code == 200
+    assert permanent_response.status_code == 200
+    assert temporary_response.json()["source_location"]["status"] == "retired"
+    assert temporary_response.json()["source_location"]["visible"] is False
+    assert permanent_response.json()["source_location"]["status"] == "zero_stock"
+    assert permanent_response.json()["source_location"]["visible"] is True
+    assert permanent_response.json()["source_location"]["restock_required"] is True
+
+    list_response = client.get("/api/inventory/locations")
+    assert list_response.status_code == 200
+    visible_locations = {
+        (row["part_key"], row["location_code"]): row for row in list_response.json()["locations"]
+    }
+    assert ("CPXS000122014", "TMP-14") not in visible_locations
+    permanent_empty = visible_locations[("CPXS000122015", "A-A01-011")]
+    assert permanent_empty["restock_required"] is True
+
+    map_response = client.get("/api/inventory/location-map")
+    assert map_response.status_code == 200
+    map_payload = map_response.json()
+    assert map_payload["summary"]["temporary_location_count"] == 0
+    assert map_payload["summary"]["restock_required_count"] == 1
+    restock_cell = map_payload["zones"]["A"]["columns"]["A"]["racks"]["1"]["levels"]["1"]["depths"][
+        "1"
+    ]
+    assert restock_cell["location_code"] == "A-A01-011"
+    assert restock_cell["restock_required"] is True
+
+    hidden_response = client.get("/api/inventory/locations", params={"include_hidden": "true"})
+    assert hidden_response.status_code == 200
+    hidden_rows = {
+        (row["part_key"], row["location_code"]): row for row in hidden_response.json()["locations"]
+    }
+    assert hidden_rows[("CPXS000122014", "TMP-14")]["status"] == "retired"
+    assert hidden_rows[("CPXS000122014", "TMP-14")]["visible"] is False
+
+
 def test_inventory_move_allows_variance_and_records_adjustment(
     client: TestClient,
     session: Session,
