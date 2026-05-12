@@ -158,6 +158,13 @@ target[|app_dir][|port]
 - `app_dir` is optional. If omitted, deploy script resolves remote `%USERPROFILE%\tagledger`.
 - `port` is optional. If omitted, default is `8000` or `--service-port`.
 
+Prefer a stable hostname such as `user@factory-pc-01.local` instead of a raw
+DHCP address such as `user@192.0.2.10`. On typical Windows LAN setups,
+`hostname.local` follows the PC when its IP changes, so future fleet deploys do
+not need device-list edits. If `.local` does not resolve on a site network, use
+a router DHCP reservation or a DNS name and keep that name in the local device
+inventory.
+
 3. Run deploy from repo root (local operation only; no git push/PR/deploy pipeline action):
 
 ```bash
