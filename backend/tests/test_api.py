@@ -218,6 +218,12 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert 'id="reconcileRowsInput"' in response.text
     assert 'id="reconcilePreviewBtn"' in response.text
     assert "/api/inventory/reconcile/preview" in response.text
+    assert 'id="reconcileFileInput"' in response.text
+    assert 'id="reconcileFilePreviewBtn"' in response.text
+    assert "/api/inventory/reconcile/preview-file" in response.text
+    assert "generateReconcilePreviewFromFile" in response.text
+    assert "renderReconcileFileMeta" in response.text
+    assert "reconcileFileErrorMessage" in response.text
     assert "renderReconcilePreview" in response.text
     assert "matched" in response.text
     assert "quantity_mismatch" in response.text
@@ -418,6 +424,12 @@ def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
     assert "出库核对" in response.text
     assert "/api/outbound/summary" in response.text
     assert "/api/outbound/query" in response.text
+    assert "/api/inventory/pick-recommendations" in response.text
+    assert 'id="pickPartInput"' in response.text
+    assert 'id="pickQtyInput"' in response.text
+    assert 'id="pickRecommendBtn"' in response.text
+    assert "data-pick-row" in response.text
+    assert "loadPickRecommendations" in response.text
     assert "data-order-choice" in response.text
     assert "updateQueryAvailability" in response.text
     assert "queryBtn.disabled = !hasSelection" in response.text

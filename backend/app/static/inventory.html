@@ -59,6 +59,9 @@
     .reconcile-actions, .pick-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .reconcile-actions button, .pick-actions button { width: fit-content; }
     .reconcile-error, .pick-error { color: #991b1b; font-weight: 900; }
+    .reconcile-upload { display: grid; gap: 10px; }
+    .reconcile-upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .reconcile-upload-meta { color: var(--muted); font-weight: 850; overflow-wrap: anywhere; }
     .reconcile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .reconcile-summary-item { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
     .reconcile-summary-item span { display: block; color: var(--muted); font-weight: 900; }
@@ -189,7 +192,17 @@
     <section class="panel reconcile-panel">
       <div>
         <h2 data-i18n="inventory.reconcile.title">Excel 对账预览</h2>
-        <p class="muted" data-i18n="inventory.reconcile.subtitle">粘贴已解析的 Excel rows JSON，系统只生成预览分类，不写入库存。</p>
+        <p class="muted" data-i18n="inventory.reconcile.subtitle">上传 CSV/XLSX 或粘贴已解析 JSON，系统只生成预览分类，不写入库存。</p>
+      </div>
+      <div class="reconcile-upload">
+        <label>
+          <span data-i18n="inventory.reconcile.file">库存文件（CSV / XLSX）</span>
+          <input id="reconcileFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        </label>
+        <div class="reconcile-upload-row">
+          <button type="button" id="reconcileFilePreviewBtn" data-i18n="inventory.reconcile.action.previewFile">上传并预览文件</button>
+          <span id="reconcileFileMeta" class="reconcile-upload-meta"></span>
+        </div>
       </div>
       <label>
         <span data-i18n="inventory.reconcile.rows">已解析库存行 JSON</span>
@@ -273,6 +286,7 @@
     let selectedMaterialKey = null;
     let userCanManageInventory = false;
     let latestReconcilePreview = null;
+    let latestReconcileFileMeta = null;
     let latestPickRecommendations = null;
 
     function zoneName(locationCode) {
@@ -359,9 +373,51 @@
       result.hidden = false;
     }
 
+    function renderReconcileFileMeta(meta) {
+      latestReconcileFileMeta = meta || null;
+      const target = document.querySelector('#reconcileFileMeta');
+      if (!meta) {
+        target.textContent = '';
+        return;
+      }
+      target.textContent = tr('inventory.reconcile.fileMeta', {
+        filename: meta.filename || '-',
+        count: meta.parsed_row_count ?? 0,
+      });
+    }
+
+    function parseMissingColumns(detail) {
+      const prefix = 'missing required columns:';
+      const text = String(detail || '');
+      if (!text.startsWith(prefix)) return '';
+      return text.slice(prefix.length).trim();
+    }
+
+    function reconcileFileErrorMessage(detail) {
+      const text = String(detail || '').trim();
+      const missingColumns = parseMissingColumns(text);
+      if (missingColumns) {
+        return tr('inventory.reconcile.error.missingColumns', { columns: missingColumns });
+      }
+      if (text === 'quantity must be an integer') {
+        return tr('inventory.reconcile.error.quantityInteger');
+      }
+      if (text === 'quantity must be >= 0') {
+        return tr('inventory.reconcile.error.quantityNonNegative');
+      }
+      if (text === 'unsupported inventory file type') {
+        return tr('inventory.reconcile.error.unsupportedFileType');
+      }
+      if (!text) {
+        return tr('inventory.reconcile.error.failed');
+      }
+      return text;
+    }
+
     async function generateReconcilePreview() {
       const error = document.querySelector('#reconcileError');
       error.textContent = '';
+      renderReconcileFileMeta(null);
       let rows;
       try {
         const parsed = JSON.parse(document.querySelector('#reconcileRowsInput').value || '[]');
@@ -382,6 +438,36 @@
       } catch (requestError) {
         error.textContent = requestError.message || tr('inventory.reconcile.error.failed');
         renderReconcilePreview(null);
+      }
+    }
+
+    async function generateReconcilePreviewFromFile() {
+      const error = document.querySelector('#reconcileError');
+      error.textContent = '';
+      const input = document.querySelector('#reconcileFileInput');
+      const file = input.files?.[0];
+      if (!file) {
+        error.textContent = tr('inventory.reconcile.error.selectFile');
+        renderReconcilePreview(null);
+        renderReconcileFileMeta(null);
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const payload = await AuthUI.fetchJson('/api/inventory/reconcile/preview-file', {
+          method: 'POST',
+          body: formData,
+        });
+        renderReconcileFileMeta({
+          filename: payload.filename || file.name,
+          parsed_row_count: payload.parsed_row_count ?? 0,
+        });
+        renderReconcilePreview(payload);
+      } catch (requestError) {
+        error.textContent = reconcileFileErrorMessage(requestError?.message || '');
+        renderReconcilePreview(null);
+        renderReconcileFileMeta(null);
       }
     }
 
@@ -717,6 +803,7 @@
     });
     document.querySelector('#pickRecommendationBtn').addEventListener('click', loadPickRecommendations);
     document.querySelector('#reconcilePreviewBtn').addEventListener('click', generateReconcilePreview);
+    document.querySelector('#reconcileFilePreviewBtn').addEventListener('click', generateReconcilePreviewFromFile);
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/login';
@@ -732,6 +819,7 @@
         renderSelectedDetails();
         renderPickRecommendations(latestPickRecommendations);
         renderReconcilePreview(latestReconcilePreview);
+        renderReconcileFileMeta(latestReconcileFileMeta);
       }
     });
   </script>
