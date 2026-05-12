@@ -43,6 +43,64 @@ class TestLanGuardLocalhost:
         assert resp.json()["status"] == "ok"
 
 
+class TestLanGuardHostnameAliases:
+    @pytest.fixture(autouse=True)
+    def reset_allowed_hosts(self):
+        import backend.app.middleware.lan_guard as lg
+
+        lg._allowed_hosts = None
+        yield
+        lg._allowed_hosts = None
+
+    @pytest.fixture
+    def fixed_hostname_detection(self, monkeypatch):
+        import backend.app.middleware.lan_guard as lg
+
+        monkeypatch.setattr(lg.socket, "gethostname", lambda: "shop-floor-01")
+        monkeypatch.setattr(lg.socket, "getfqdn", lambda: "shop-floor-01.example.lan")
+        monkeypatch.setattr(lg.socket, "getaddrinfo", lambda *_args, **_kwargs: [])
+        monkeypatch.setattr(lg, "_probe_outbound_ipv4", lambda: None)
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "127.0.0.1")
+        return lg
+
+    def test_detected_hosts_include_mdns_alias(self, monkeypatch):
+        import backend.app.middleware.lan_guard as lg
+
+        monkeypatch.setattr(lg.socket, "gethostname", lambda: "shop-floor-01")
+        monkeypatch.setattr(lg.socket, "getfqdn", lambda: "shop-floor-01.example.lan")
+        monkeypatch.setattr(lg.socket, "getaddrinfo", lambda *_args, **_kwargs: [])
+        monkeypatch.setattr(lg, "_probe_outbound_ipv4", lambda: None)
+
+        allowed = lg._detect_allowed_hosts()
+
+        assert "shop-floor-01" in allowed
+        assert "shop-floor-01.local" in allowed
+        assert "shop-floor-01.example.lan" in allowed
+
+    @pytest.mark.parametrize(
+        "host",
+        [
+            "127.0.0.1",
+            "localhost",
+            "shop-floor-01",
+            "shop-floor-01.local",
+            "shop-floor-01.example.lan",
+            "SHOP-FLOOR-01.LOCAL.",
+        ],
+    )
+    def test_expected_hostname_aliases_pass_end_to_end(self, fixed_hostname_detection, host):
+        with TestClient(app) as c:
+            resp = c.get("/health", headers=_set_host(None, host))
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "ok"
+
+    def test_random_host_still_blocked(self, fixed_hostname_detection):
+        with TestClient(app) as c:
+            resp = c.get("/health", headers=_set_host(None, "evil.example"))
+            assert resp.status_code == 421
+            assert resp.json()["detail"] == "host not allowed"
+
+
 class TestLanGuardDisabled:
     def test_guard_disabled_bad_host_passes(self, client, monkeypatch):
         from backend.app.config import get_settings
