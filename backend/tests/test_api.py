@@ -96,6 +96,8 @@ def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestC
     assert isinstance(payload["enable_barcode"], bool)
     assert isinstance(payload["enable_saas_submit"], bool)
     assert isinstance(payload["dry_run"], bool)
+    assert isinstance(payload["lan_guard_enabled"], bool)
+    assert isinstance(payload["pairing_enabled"], bool)
     assert payload["mobile_url"].endswith("/mobile")
     assert payload["history_url"].endswith("/history")
 
@@ -743,6 +745,8 @@ def test_mobile_page_serves_phone_intake_view(authenticated_client: TestClient) 
     assert "autoUpload: true" in response.text
     assert "/runtime/status" in response.text
     assert 'data-i18n="material.title"' in response.text
+    assert "mobile.runtime.pairingOff" in response.text
+    assert "mobile.runtime.lanGuardOn" in response.text
     assert "updateOutboundActionAvailability" in response.text
     assert "manualMaterialLookupBtn.disabled = !hasOrder" in response.text
 

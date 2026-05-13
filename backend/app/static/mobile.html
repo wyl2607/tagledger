@@ -965,10 +965,14 @@
     function renderRuntimeStatus(settings) {
       const saasText = settings.enable_saas_submit ? tr('mobile.runtime.saasOn') : tr('mobile.runtime.saasOff');
       const dryRunText = settings.dry_run ? tr('mobile.runtime.dryRun') : tr('mobile.runtime.realSubmit');
+      const pairingText = settings.pairing_enabled ? tr('mobile.runtime.pairingOn') : tr('mobile.runtime.pairingOff');
+      const lanGuardText = settings.lan_guard_enabled ? tr('mobile.runtime.lanGuardOn') : tr('mobile.runtime.lanGuardOff');
       runtimeMeta.innerHTML = `
         <span class="pill pill-blue">OCR: ${escapeHtml(settings.ocr_provider || 'unknown')}</span>
         <span class="pill ${settings.enable_barcode ? 'pill-green' : 'pill-yellow'}">${escapeHtml(settings.enable_barcode ? tr('mobile.runtime.barcodeOn') : tr('mobile.runtime.barcodeOff'))}</span>
         <span class="pill ${settings.enable_saas_submit ? 'pill-yellow' : 'pill-green'}">${escapeHtml(saasText)}</span>
+        <span class="pill ${settings.pairing_enabled ? 'pill-yellow' : 'pill-green'}">${escapeHtml(pairingText)}</span>
+        <span class="pill ${settings.lan_guard_enabled ? 'pill-blue' : 'pill-yellow'}">${escapeHtml(lanGuardText)}</span>
         <span class="pill">${escapeHtml(dryRunText)}</span>
       `;
     }

@@ -96,6 +96,8 @@ def runtime_status(request: Request) -> dict[str, bool | str]:
         "enable_barcode": settings.enable_barcode,
         "enable_saas_submit": settings.enable_saas_submit,
         "dry_run": settings.dry_run,
+        "lan_guard_enabled": settings.lan_guard_enabled,
+        "pairing_enabled": settings.pairing_enabled,
         "mobile_url": f"{base_url}/mobile",
         "history_url": f"{base_url}/history",
     }
