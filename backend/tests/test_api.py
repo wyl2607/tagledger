@@ -54,6 +54,23 @@ def test_database_url_can_be_overridden_for_isolated_runs(
     assert settings.database_path == tmp_path / "isolated.db"
 
 
+def test_lan_pairing_flags_can_be_overridden_for_factory_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app import config as config_module
+
+    config_module.get_settings.cache_clear()
+    monkeypatch.setenv("TAGLEDGER_PAIRING_ENABLED", "0")
+    monkeypatch.setenv("TAGLEDGER_LAN_GUARD_ENABLED", "false")
+    try:
+        settings = config_module.get_settings()
+    finally:
+        config_module.get_settings.cache_clear()
+
+    assert settings.pairing_enabled is False
+    assert settings.lan_guard_enabled is False
+
+
 def test_database_url_normalization_supports_alembic() -> None:
     from backend.app.config import Settings, normalize_database_url
 
