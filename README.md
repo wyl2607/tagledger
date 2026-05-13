@@ -66,6 +66,12 @@ PORT=8010 ./scripts/run_mac_demo.sh
 ./scripts/run_mobile_test.sh
 ```
 
+现场测试脚本默认设置 `TAGLEDGER_PAIRING_ENABLED=0`，同一 Wi-Fi 的手机和同事电脑可以直接打开中心入口或 `/mobile`。如需恢复设备配对保护：
+
+```bash
+TAGLEDGER_PAIRING_ENABLED=1 ./scripts/run_mobile_test.sh
+```
+
 然后用手机访问脚本打印的 `/mobile` 地址，例如：
 
 ```text

@@ -25,6 +25,7 @@ def test_release_scripts_fail_closed_on_forbidden_entries() -> None:
 
 def test_windows_lan_startup_script_exposes_qr_and_stale_port_checks() -> None:
     script = Path("scripts/run_lan.ps1").read_text(encoding="utf-8")
+    mobile_script = Path("scripts/run_mobile_test.sh").read_text(encoding="utf-8")
     qr_script = Path("scripts/print_lan_qr.py").read_text(encoding="utf-8")
     launcher = Path("Start Windows LAN.cmd").read_text(encoding="utf-8")
 
@@ -40,6 +41,8 @@ def test_windows_lan_startup_script_exposes_qr_and_stale_port_checks() -> None:
     assert "scripts\\run_lan.ps1" in launcher
     assert "ExecutionPolicy Bypass" in launcher
     assert "qrcode.QRCode" in qr_script
+    assert 'TAGLEDGER_PAIRING_ENABLED="${TAGLEDGER_PAIRING_ENABLED:-0}"' in mobile_script
+    assert "Set TAGLEDGER_PAIRING_ENABLED=1" in mobile_script
 
 
 def test_docs_describe_smart_entry_and_legacy_capture_boundary() -> None:
@@ -50,6 +53,7 @@ def test_docs_describe_smart_entry_and_legacy_capture_boundary() -> None:
     assert "初始化后显示所有工具和后续模块占位" in readme
     assert "旧桌面 OCR demo 保留为 `/capture`" in readme
     assert "手机同一 Wi-Fi 下扫码打开 `/mobile`" in readme
+    assert "TAGLEDGER_PAIRING_ENABLED=0" in readme
     assert "`/setup`" in windows_deploy
     assert "`/login`" in windows_deploy
     assert "`/workbench`" in windows_deploy

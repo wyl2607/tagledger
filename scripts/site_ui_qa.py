@@ -61,7 +61,7 @@ def start_server(base_url: str) -> subprocess.Popen[str]:
         (Path(f"{db_path}{suffix}")).unlink(missing_ok=True)
     env = os.environ.copy()
     env["DATABASE_URL"] = f"sqlite:///{db_path}"
-    env.setdefault("TAGLEDGER_PAIRING_REQUIRED", "false")
+    env.setdefault("TAGLEDGER_PAIRING_ENABLED", "0")
     process = subprocess.Popen(
         [
             sys.executable,

@@ -9,6 +9,8 @@ VENV_PYTHON="$ROOT_DIR/.venv/bin/python"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8001}"
 RELOAD="${RELOAD:-0}"
+TAGLEDGER_PAIRING_ENABLED="${TAGLEDGER_PAIRING_ENABLED:-0}"
+export TAGLEDGER_PAIRING_ENABLED
 
 find_lan_ip() {
   if command -v ifconfig >/dev/null 2>&1; then
@@ -98,6 +100,10 @@ Runtime status:
 
 Local fallback:
   http://127.0.0.1:${PORT}/mobile
+
+Pairing guard:
+  TAGLEDGER_PAIRING_ENABLED=${TAGLEDGER_PAIRING_ENABLED}
+  Set TAGLEDGER_PAIRING_ENABLED=1 to require phone pairing cookies.
 
 If iPhone cannot open it, confirm both devices are on the same Wi-Fi and allow incoming connections for Python/uvicorn in macOS firewall.
 EOF
