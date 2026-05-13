@@ -41,6 +41,10 @@ def test_windows_lan_startup_script_exposes_qr_and_stale_port_checks() -> None:
     assert "scripts\\run_lan.ps1" in launcher
     assert "ExecutionPolicy Bypass" in launcher
     assert "qrcode.QRCode" in qr_script
+    assert "TagLedger factory LAN server" in mobile_script
+    assert "Center entry:" in mobile_script
+    assert "http://${lan_ip}:${PORT}/" in mobile_script
+    assert "Phone picking:" in mobile_script
     assert 'TAGLEDGER_PAIRING_ENABLED="${TAGLEDGER_PAIRING_ENABLED:-0}"' in mobile_script
     assert "Set TAGLEDGER_PAIRING_ENABLED=1" in mobile_script
 

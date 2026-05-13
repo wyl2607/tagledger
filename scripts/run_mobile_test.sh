@@ -87,9 +87,12 @@ PY
 print_urls() {
   local lan_ip="$1"
   cat <<EOF
-TagLedger mobile test server
+TagLedger factory LAN server
 
-iPhone Safari:
+Center entry:
+  http://${lan_ip}:${PORT}/
+
+Phone picking:
   http://${lan_ip}:${PORT}/mobile
 
 History:
@@ -99,6 +102,7 @@ Runtime status:
   http://${lan_ip}:${PORT}/runtime/status
 
 Local fallback:
+  http://127.0.0.1:${PORT}/
   http://127.0.0.1:${PORT}/mobile
 
 Pairing guard:
