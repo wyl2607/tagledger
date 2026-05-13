@@ -762,6 +762,13 @@
         + groupHtml('outbound.group.pending', pending)
         + groupHtml('outbound.group.done', done);
       if (sorted.includes(currentValue)) outboundOrderSelect.value = currentValue;
+      updateOutboundActionAvailability();
+    }
+
+    function updateOutboundActionAvailability() {
+      const hasOrder = Boolean(outboundOrderSelect.value);
+      manualMaterialLookupBtn.disabled = !hasOrder;
+      manualMaterialLookupBtn.title = hasOrder ? '' : tr('outbound.manual.noOrder');
     }
 
     function statusPill(record) {
@@ -1901,6 +1908,7 @@
       selectedOutboundLocation = '';
       rememberOutboundOrder(selectedOutboundOrder);
       outboundScanBlock.hidden = true;
+      updateOutboundActionAvailability();
       try {
         await refreshOutboundStatus();
       } catch (error) {
@@ -1908,6 +1916,7 @@
       }
     });
     manualMaterialLookupBtn.addEventListener('click', () => {
+      if (manualMaterialLookupBtn.disabled) return;
       lookupManualMaterialCode().catch((error) => {
         manualMaterialStatus.innerHTML = `<span>${escapeHtml(error.message)}</span>`;
         showToast(error.message, 'error');

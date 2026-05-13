@@ -220,6 +220,21 @@ def run(base_url: str, *, start: bool) -> dict[str, object]:
             mobile.add_init_script("localStorage.setItem('tagledger.locale','zh')")
             mobile_page = mobile.new_page()
             login(mobile_page, base_url, *OPERATOR)
+            mobile_page.goto(f"{base_url}/mobile#capture", wait_until="networkidle")
+            mobile_page.locator("#outboundOrderSelect").select_option("")
+            if not mobile_page.locator("#manualMaterialLookupBtn").is_disabled():
+                raise AssertionError(
+                    "mobile outbound manual lookup should be disabled without order"
+                )
+            mobile_orders = mobile_page.locator("#outboundOrderSelect option:not([value=''])")
+            if mobile_orders.count():
+                mobile_page.locator("#outboundOrderSelect").select_option(
+                    mobile_orders.first.get_attribute("value") or ""
+                )
+                if mobile_page.locator("#manualMaterialLookupBtn").is_disabled():
+                    raise AssertionError(
+                        "mobile outbound manual lookup should enable after order selection"
+                    )
             capture_page(
                 mobile_page,
                 base_url,

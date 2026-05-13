@@ -22,6 +22,8 @@ check_contains "backend/app/static/portal.html" 'href="/workbench"'
 check_contains "backend/app/static/portal.html" 'href="/inbound"'
 check_contains "backend/app/static/outbound.html" "updateQueryAvailability"
 check_contains "backend/app/static/outbound.html" "queryBtn.disabled = !hasSelection"
+check_contains "backend/app/static/mobile.html" "updateOutboundActionAvailability"
+check_contains "backend/app/static/mobile.html" "manualMaterialLookupBtn.disabled = !hasOrder"
 check_contains "backend/app/static/home.html" "现场调度台"
 check_contains "backend/app/static/home.html" 'data-i18n="workbench.brand">现场调度台'
 check_contains "backend/app/static/home.html" "renderModules(payload.modules || [])"

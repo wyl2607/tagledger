@@ -726,6 +726,8 @@ def test_mobile_page_serves_phone_intake_view(authenticated_client: TestClient) 
     assert "autoUpload: true" in response.text
     assert "/runtime/status" in response.text
     assert 'data-i18n="material.title"' in response.text
+    assert "updateOutboundActionAvailability" in response.text
+    assert "manualMaterialLookupBtn.disabled = !hasOrder" in response.text
 
 
 def test_static_ui_assets_are_served(authenticated_client: TestClient) -> None:
