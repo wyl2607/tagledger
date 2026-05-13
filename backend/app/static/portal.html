@@ -79,7 +79,7 @@
     }
     .status-strip {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 18px;
     }
@@ -178,8 +178,9 @@
     <section class="status-strip" aria-label="系统状态">
       <div class="status-tile"><span>服务</span><strong id="serviceStatus">运行中</strong></div>
       <div class="status-tile"><span>当前账号</span><strong id="accountStatus">未登录</strong></div>
+      <div class="status-tile"><span>手机访问</span><strong id="pairingStatus">读取中</strong></div>
+      <div class="status-tile"><span>内网保护</span><strong id="lanGuardStatus">读取中</strong></div>
       <div class="status-tile"><span>今日主线</span><strong>96 单捡货</strong></div>
-      <div class="status-tile"><span>模块状态</span><strong>边用边上线</strong></div>
     </section>
 
     <section class="tool-section">
@@ -276,12 +277,29 @@
       logoutBtn.hidden = false;
     }
 
+    async function loadRuntimeStatus() {
+      const serviceStatus = document.querySelector('#serviceStatus');
+      const pairingStatus = document.querySelector('#pairingStatus');
+      const lanGuardStatus = document.querySelector('#lanGuardStatus');
+      try {
+        const settings = await fetch('/runtime/status').then((response) => response.json());
+        serviceStatus.textContent = '运行中';
+        pairingStatus.textContent = settings.pairing_enabled ? '需要配对' : '现场直连';
+        lanGuardStatus.textContent = settings.lan_guard_enabled ? '已开启' : '已关闭';
+      } catch {
+        serviceStatus.textContent = '需检查';
+        pairingStatus.textContent = '未知';
+        lanGuardStatus.textContent = '未知';
+      }
+    }
+
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/';
     });
 
     loadAccount();
+    loadRuntimeStatus();
   </script>
 </body>
 </html>
