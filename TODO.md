@@ -112,13 +112,14 @@
 
 ### P1: 对账应用流程
 
-- [ ] 在 preview 之后增加受控 apply 流程，但第一版不要自动覆盖全部差异。
-- [ ] `matched` 默认无需操作。
-- [ ] `quantity_mismatch` 需要用户确认采用 Excel、采用系统、或进入盘点复核。
-- [ ] `excel_missing` 标记为 Excel 缺失，不能自动删除系统库存。
-- [ ] `excel_new` 标记为 Excel 新增，不能自动创建正式库存，除非用户确认导入。
-- [ ] apply 必须写入流水或审计记录，保留操作者、原因、来源文件名、差异前后数量。
-- [ ] apply 权限建议先限制为 supervisor/admin；operator 只能查看 preview 和发起问题标记。
+- [x] 在 preview 之后增加受控 apply 流程，但第一版不要自动覆盖全部差异。
+- [x] `matched` 默认无需操作。
+- [x] `quantity_mismatch` 需要用户确认采用 Excel、采用系统、或进入盘点复核。
+- [x] `excel_missing` 标记为 Excel 缺失，不能自动删除系统库存。
+- [x] `excel_new` 标记为 Excel 新增，不能自动创建正式库存，除非用户确认导入。
+- [x] apply 必须写入流水或审计记录，保留操作者、原因、来源文件名、差异前后数量。
+- [x] apply 权限建议先限制为 supervisor/admin；operator 只能查看 preview 和发起问题标记。
+- [x] 2026-05-14 `/inventory` 对账 apply UI/API gate 通过：主管可从 preview 选择决策并调用 `/api/inventory/reconcile/apply`；默认数量差异进入盘点复核审计，只有手动选择“采用 Excel 数量”才写库存流水。
 - [ ] 支持把确认后的系统结果导出给人工回填共享 Excel，避免两套来源继续漂移。
 
 ### P2: 库位整理和盘点闭环
