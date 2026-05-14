@@ -1031,11 +1031,11 @@ def test_inventory_move_retire_empty_temporary_and_keeps_empty_permanent_visible
     assert hidden_rows[("CPXS000122014", "TMP-14")]["visible"] is False
 
 
-def test_inventory_move_allows_variance_and_records_adjustment(
+def test_inventory_move_rejects_quantity_above_source_stock(
     client: TestClient,
     session: Session,
 ) -> None:
-    _login_operator(client, session, username="inventory-variance-operator")
+    _login_operator(client, session, username="inventory-overmove-operator")
     source = _seed_location(
         session,
         part_key="CPXS000122040",
@@ -1058,31 +1058,23 @@ def test_inventory_move_allows_variance_and_records_adjustment(
             "target_location_code": "B-40",
             "quantity": 12,
             "target_location_kind": "permanent",
-            "reason": "现场调拨补录",
+            "reason": "over-count attempt",
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["source_location"]["quantity"] == 0
-    assert payload["target_location"]["quantity"] == 14
-
-    movements = session.exec(
-        select(InventoryMovement)
-        .where(InventoryMovement.part_key == "CPXS000122040")
-        .order_by(InventoryMovement.id.asc())
-    ).all()
-    assert [row.movement_type for row in movements] == [
-        "manual_adjust",
-        "manual_move_out",
-        "manual_move_in",
-    ]
-    adjust = movements[0]
-    assert adjust.before_qty == 10
-    assert adjust.after_qty == 12
-    assert adjust.quantity_delta == 2
-    assert "盘点发现差异" in (adjust.reason or "")
-    assert adjust.operator_id == "inventory-variance-operator"
+    assert response.status_code == 409
+    assert response.json()["detail"] == "insufficient inventory"
+    stored_source = session.get(InventoryLocation, source.id)
+    assert stored_source is not None
+    assert stored_source.quantity == 10
+    stored_target = session.exec(
+        select(InventoryLocation).where(
+            InventoryLocation.part_key == "CPXS000122040",
+            InventoryLocation.location_code == "B-40",
+        )
+    ).one()
+    assert stored_target.quantity == 2
+    assert session.exec(select(InventoryMovement)).all() == []
 
 
 def test_inventory_move_rejects_cross_factory_operator_source(
