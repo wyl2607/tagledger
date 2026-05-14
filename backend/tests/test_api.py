@@ -496,6 +496,8 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "采购入库" in portal.text
     assert "手机访问" in portal.text
     assert "现场直连" in portal.text
+    assert "复制中心入口" in portal.text
+    assert "navigator.clipboard.writeText" in portal.text
     assert "/runtime/status" in portal.text
     assert response.status_code == 200
     assert "/api/workbench" in response.text
@@ -532,6 +534,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'href="/outbound"' in portal
     assert 'href="/inbound"' in portal
     assert "loadRuntimeStatus" in portal
+    assert "copyPortalLink" in portal
     assert "settings.pairing_enabled" in portal
     assert "settings.lan_guard_enabled" in portal
     assert 'data-state="planned"' in portal

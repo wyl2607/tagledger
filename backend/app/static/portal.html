@@ -172,6 +172,7 @@
         <a class="nav-button primary-entry" href="/mobile">手机捡货</a>
         <a class="nav-button" href="/outbound">出库核对</a>
         <a class="nav-button" href="/workbench">角色工作台</a>
+        <button class="nav-button" id="copyPortalLinkBtn" type="button">复制中心入口</button>
       </div>
     </section>
 
@@ -293,10 +294,22 @@
       }
     }
 
+    async function copyPortalLink() {
+      const button = document.querySelector('#copyPortalLinkBtn');
+      const url = `${window.location.origin}/`;
+      try {
+        await navigator.clipboard.writeText(url);
+        button.textContent = '已复制中心入口';
+      } catch {
+        window.prompt('复制中心入口', url);
+      }
+    }
+
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/';
     });
+    document.querySelector('#copyPortalLinkBtn').addEventListener('click', copyPortalLink);
 
     loadAccount();
     loadRuntimeStatus();
