@@ -251,6 +251,15 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "system_quantity" in response.text
     assert "excel_quantity" in response.text
     assert "delta" in response.text
+    assert 'id="reconcileApplyPanel" hidden' in response.text
+    assert 'id="reconcileApplyBtn"' in response.text
+    assert 'id="reconcileReasonInput"' in response.text
+    assert 'id="reconcileIdempotencyKey"' in response.text
+    assert 'id="reconcileApplyResult"' in response.text
+    assert "/api/inventory/reconcile/apply" in response.text
+    assert "buildReconcileApplyDecisions" in response.text
+    assert "reconcileApplyPanel.hidden = !userCanManageInventory" in response.text
+    assert "inventory.reconcile.apply.permission" in response.text
     assert 'id="pickPartInput"' in response.text
     assert 'id="pickQuantityInput"' in response.text
     assert 'id="pickRecommendationBtn"' in response.text

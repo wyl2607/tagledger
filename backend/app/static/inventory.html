@@ -62,6 +62,12 @@
     .reconcile-upload { display: grid; gap: 10px; }
     .reconcile-upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .reconcile-upload-meta { color: var(--muted); font-weight: 850; overflow-wrap: anywhere; }
+    .reconcile-apply-panel { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .reconcile-apply-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .45fr) minmax(180px, .45fr); gap: 10px; align-items: end; }
+    .reconcile-apply-grid label { display: grid; gap: 5px; color: var(--muted); font-weight: 900; }
+    .reconcile-apply-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-weight: 900; }
+    .reconcile-apply-row { display: grid; gap: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .reconcile-decision { width: 100%; max-width: 260px; }
     .reconcile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .reconcile-summary-item { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
     .reconcile-summary-item span { display: block; color: var(--muted); font-weight: 900; }
@@ -87,7 +93,7 @@
     .reconcile-tag.new { background: #dcfce7; color: #166534; }
     .reconcile-tag.mismatch { background: #fef2f2; color: #991b1b; }
     @media (max-width: 920px) {
-      .inventory-head, .filters, .kpi-grid, .work-grid, .bucket-grid, .reconcile-summary, .reconcile-result-grid, .pick-form, .pick-row { grid-template-columns: 1fr; }
+      .inventory-head, .filters, .kpi-grid, .work-grid, .bucket-grid, .reconcile-summary, .reconcile-result-grid, .reconcile-apply-grid, .pick-form, .pick-row { grid-template-columns: 1fr; }
       .inventory-head h1 { font-size: 30px; }
       .depth-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
     }
@@ -216,6 +222,31 @@
         <div id="reconcileSummary" class="reconcile-summary"></div>
         <div id="reconcileBuckets" class="reconcile-result-grid"></div>
       </div>
+      <div id="reconcileApplyPanel" hidden class="reconcile-apply-panel">
+        <p class="muted" data-i18n="inventory.reconcile.apply.permission">只有主管或管理员可以把对账决策写入库存；操作会写入流水或审计记录。</p>
+        <div class="reconcile-apply-grid">
+          <label>
+            <span data-i18n="inventory.reconcile.apply.reason">应用原因</span>
+            <input id="reconcileReasonInput" data-i18n-placeholder="inventory.reconcile.apply.reasonPlaceholder" placeholder="盘点对账" value="盘点对账">
+          </label>
+          <label>
+            <span data-i18n="inventory.reconcile.apply.sourceFilename">来源文件</span>
+            <input id="reconcileSourceFilename" data-i18n-placeholder="inventory.reconcile.apply.sourceFilenamePlaceholder" placeholder="stocktake.csv">
+          </label>
+          <label>
+            <span data-i18n="inventory.reconcile.apply.idempotencyKey">幂等键</span>
+            <input id="reconcileIdempotencyKey" data-i18n-placeholder="inventory.reconcile.apply.idempotencyPlaceholder" placeholder="stocktake-2026-05-14">
+          </label>
+        </div>
+        <div class="reconcile-actions">
+          <button type="button" id="reconcileApplyBtn" data-i18n="inventory.reconcile.apply.button">应用已选择决策</button>
+          <span id="reconcileApplyError" class="reconcile-error" role="alert"></span>
+        </div>
+        <div id="reconcileApplyResult" hidden>
+          <div id="reconcileApplySummary" class="reconcile-apply-summary"></div>
+          <div id="reconcileApplyRows" class="pick-list"></div>
+        </div>
+      </div>
     </section>
 
     <section class="work-grid">
@@ -287,6 +318,7 @@
     let userCanManageInventory = false;
     let latestReconcilePreview = null;
     let latestReconcileFileMeta = null;
+    let latestReconcileApplyResult = null;
     let latestPickRecommendations = null;
 
     function zoneName(locationCode) {
@@ -304,6 +336,44 @@
       document.querySelector('#totalQty').textContent = summary.total_quantity || 0;
     }
 
+    function defaultReconcileDecision(bucketKey) {
+      const defaults = {
+        matched: 'noop',
+        quantity_mismatch: 'count_review',
+        excel_missing: 'mark_excel_missing',
+        excel_new: 'mark_excel_new',
+      };
+      return defaults[bucketKey] || 'noop';
+    }
+
+    function reconcileDecisionOptions(bucketKey) {
+      const options = {
+        matched: [
+          ['noop', tr('inventory.reconcile.decision.noop')],
+          ['keep_system', tr('inventory.reconcile.decision.keepSystem')],
+        ],
+        quantity_mismatch: [
+          ['use_excel', tr('inventory.reconcile.decision.useExcel')],
+          ['keep_system', tr('inventory.reconcile.decision.keepSystem')],
+          ['count_review', tr('inventory.reconcile.decision.countReview')],
+        ],
+        excel_missing: [
+          ['mark_excel_missing', tr('inventory.reconcile.decision.markExcelMissing')],
+        ],
+        excel_new: [
+          ['mark_excel_new', tr('inventory.reconcile.decision.markExcelNew')],
+        ],
+      };
+      return options[bucketKey] || [['noop', tr('inventory.reconcile.decision.noop')]];
+    }
+
+    function syncReconcileSourceFilename() {
+      const input = document.querySelector('#reconcileSourceFilename');
+      if (!input.value.trim() && latestReconcileFileMeta?.filename) {
+        input.value = latestReconcileFileMeta.filename;
+      }
+    }
+
     function reconcileRowTitle(row) {
       return [row.part_key, row.location_code].filter(Boolean).join(' · ') || tr('inventory.reconcile.row');
     }
@@ -318,18 +388,29 @@
       return parts.join(' · ');
     }
 
-    function renderReconcileRow(row, bucketKey) {
+    function renderReconcileRow(row, bucketKey, rowIndex = 0) {
       const tags = {
         matched: '',
         quantity_mismatch: `<span class="reconcile-tag mismatch">${esc(tr('inventory.reconcile.bucket.quantityMismatch'))}</span>`,
         excel_missing: `<span class="reconcile-tag missing">${esc(tr('inventory.reconcile.tag.excelMissing'))}</span>`,
         excel_new: `<span class="reconcile-tag new">${esc(tr('inventory.reconcile.tag.excelNew'))}</span>`,
       };
+      const decisionControl = userCanManageInventory ? `
+        <label>
+          <span class="reconcile-meta">${esc(tr('inventory.reconcile.decision.label'))}</span>
+          <select class="reconcile-decision" data-reconcile-decision="${esc(bucketKey)}" data-reconcile-index="${esc(rowIndex)}">
+            ${reconcileDecisionOptions(bucketKey).map(([value, label]) => `
+              <option value="${esc(value)}" ${value === defaultReconcileDecision(bucketKey) ? 'selected' : ''}>${esc(label)}</option>
+            `).join('')}
+          </select>
+        </label>
+      ` : '';
       return `
-        <div class="reconcile-row">
+        <div class="reconcile-row" data-reconcile-category="${esc(bucketKey)}">
           ${tags[bucketKey] || ''}
           <strong>${esc(reconcileRowTitle(row))}</strong>
           <span class="reconcile-meta">${esc(reconcileRowMeta(row))}</span>
+          ${decisionControl}
         </div>
       `;
     }
@@ -341,6 +422,8 @@
         result.hidden = true;
         document.querySelector('#reconcileSummary').innerHTML = '';
         document.querySelector('#reconcileBuckets').innerHTML = '';
+        document.querySelector('#reconcileApplyPanel').hidden = true;
+        renderReconcileApplyResult(null);
         return;
       }
       const summaryLabels = {
@@ -366,11 +449,110 @@
         return `
           <section class="reconcile-bucket" data-bucket="${esc(bucketKey)}">
             <h3><span>${esc(label)}</span><span class="reconcile-tag">${esc(rows.length)}</span></h3>
-            ${rows.length ? rows.map((row) => renderReconcileRow(row, bucketKey)).join('') : `<p class="muted">${esc(tr('inventory.reconcile.empty'))}</p>`}
+            ${rows.length ? rows.map((row, index) => renderReconcileRow(row, bucketKey, index)).join('') : `<p class="muted">${esc(tr('inventory.reconcile.empty'))}</p>`}
           </section>
         `;
       }).join('');
+      const decisionCount = Object.keys(bucketLabels)
+        .reduce((sum, key) => sum + (payload[key] || []).length, 0);
+      const reconcileApplyPanel = document.querySelector('#reconcileApplyPanel');
+      reconcileApplyPanel.hidden = !userCanManageInventory || decisionCount === 0;
+      if (userCanManageInventory && decisionCount > 0) {
+        syncReconcileSourceFilename();
+      }
+      renderReconcileApplyResult(null);
       result.hidden = false;
+    }
+
+    function reconcileDecisionForRow(bucketKey, index) {
+      return document.querySelector(`[data-reconcile-decision="${bucketKey}"][data-reconcile-index="${index}"]`)?.value
+        || defaultReconcileDecision(bucketKey);
+    }
+
+    function buildReconcileApplyDecisions() {
+      const payload = latestReconcilePreview || {};
+      const bucketKeys = ['matched', 'quantity_mismatch', 'excel_missing', 'excel_new'];
+      return bucketKeys.flatMap((bucketKey) => (payload[bucketKey] || []).map((row, index) => ({
+        category: bucketKey,
+        decision: reconcileDecisionForRow(bucketKey, index),
+        factory_id: row.factory_id,
+        part_key: row.part_key,
+        location_code: row.location_code,
+        system_quantity: row.system_quantity,
+        excel_quantity: row.excel_quantity,
+      })));
+    }
+
+    function renderReconcileApplyResult(payload) {
+      latestReconcileApplyResult = payload || null;
+      const result = document.querySelector('#reconcileApplyResult');
+      if (!payload) {
+        result.hidden = true;
+        document.querySelector('#reconcileApplySummary').innerHTML = '';
+        document.querySelector('#reconcileApplyRows').innerHTML = '';
+        return;
+      }
+      const summary = payload.summary || {};
+      document.querySelector('#reconcileApplySummary').innerHTML = `
+        <span>${esc(tr('inventory.reconcile.apply.summary.applied'))}: <strong>${esc(summary.applied_count || 0)}</strong></span>
+        <span>${esc(tr('inventory.reconcile.apply.summary.auditOnly'))}: <strong>${esc(summary.audit_only_count || 0)}</strong></span>
+        <span>${esc(tr('inventory.reconcile.apply.summary.skipped'))}: <strong>${esc(summary.skipped_count || 0)}</strong></span>
+      `;
+      document.querySelector('#reconcileApplyRows').innerHTML = (payload.results || []).map((row) => `
+        <div class="reconcile-apply-row">
+          <strong>${esc(reconcileRowTitle(row))}</strong>
+          <span class="reconcile-meta">${esc(row.category)} · ${esc(row.decision)} · ${esc(tr(`inventory.reconcile.apply.status.${row.status}`))}</span>
+          ${row.before_qty !== undefined && row.after_qty !== undefined ? `
+            <span class="reconcile-meta">${esc(tr('inventory.reconcile.apply.resultQuantities', {
+              before: row.before_qty,
+              after: row.after_qty,
+            }))}</span>
+          ` : ''}
+        </div>
+      `).join('');
+      result.hidden = false;
+    }
+
+    async function applyReconcileDecisions() {
+      const error = document.querySelector('#reconcileApplyError');
+      error.textContent = '';
+      if (!latestReconcilePreview || !userCanManageInventory) {
+        error.textContent = tr('inventory.reconcile.apply.error.noPreview');
+        return;
+      }
+      const decisions = buildReconcileApplyDecisions();
+      if (!decisions.length) {
+        error.textContent = tr('inventory.reconcile.apply.error.noDecisions');
+        return;
+      }
+      const payload = {
+        idempotency_key: document.querySelector('#reconcileIdempotencyKey').value.trim(),
+        source_filename: document.querySelector('#reconcileSourceFilename').value.trim() || latestReconcileFileMeta?.filename || 'manual',
+        reason: document.querySelector('#reconcileReasonInput').value.trim(),
+        decisions,
+      };
+      if (!payload.idempotency_key) {
+        error.textContent = tr('inventory.reconcile.apply.error.idempotencyKey');
+        return;
+      }
+      if (!payload.reason) {
+        error.textContent = tr('inventory.reconcile.apply.error.reason');
+        return;
+      }
+      try {
+        const response = await AuthUI.fetchJson('/api/inventory/reconcile/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        renderReconcileApplyResult(response);
+        await loadInventory();
+      } catch (requestError) {
+        const message = requestError?.message === 'system quantity changed since preview'
+          ? tr('inventory.reconcile.apply.error.previewExpired')
+          : (requestError?.message || tr('inventory.reconcile.apply.error.failed'));
+        error.textContent = message;
+      }
     }
 
     function renderReconcileFileMeta(meta) {
@@ -384,6 +566,7 @@
         filename: meta.filename || '-',
         count: meta.parsed_row_count ?? 0,
       });
+      syncReconcileSourceFilename();
     }
 
     function parseMissingColumns(detail) {
@@ -789,6 +972,7 @@
       }
       userCanManageInventory = AuthUI.hasCapability(user, 'can_manage_inventory');
       document.querySelector('#adjustmentPanel').hidden = !userCanManageInventory;
+      document.querySelector('#reconcileApplyPanel').hidden = !userCanManageInventory || !latestReconcilePreview;
       document.querySelector('#inventoryContent').hidden = false;
       await loadInventory();
     }
@@ -804,6 +988,9 @@
     document.querySelector('#pickRecommendationBtn').addEventListener('click', loadPickRecommendations);
     document.querySelector('#reconcilePreviewBtn').addEventListener('click', generateReconcilePreview);
     document.querySelector('#reconcileFilePreviewBtn').addEventListener('click', generateReconcilePreviewFromFile);
+    document.querySelector('#reconcileApplyBtn').addEventListener('click', () => {
+      applyReconcileDecisions().catch((error) => { document.querySelector('#reconcileApplyError').textContent = error.message; });
+    });
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/login';
@@ -820,6 +1007,7 @@
         renderPickRecommendations(latestPickRecommendations);
         renderReconcilePreview(latestReconcilePreview);
         renderReconcileFileMeta(latestReconcileFileMeta);
+        renderReconcileApplyResult(latestReconcileApplyResult);
       }
     });
   </script>
