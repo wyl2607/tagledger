@@ -1,4 +1,16 @@
+import re
 from pathlib import Path
+
+FORBIDDEN_LOCAL_PATH_PATTERNS = (
+    rf"{re.escape(chr(47) + 'Users' + chr(47))}[^$<{{/\\][^/\\\s]*",
+    rf"{re.escape(chr(47) + 'home' + chr(47))}[^$<{{/\\][^/\\\s]*",
+    r"C:[/\\]Users[/\\][^$<{/\\][^/\\\s]*",
+)
+
+
+def assert_no_private_local_paths(text: str) -> None:
+    for pattern in FORBIDDEN_LOCAL_PATH_PATTERNS:
+        assert not re.search(pattern, text)
 
 
 def test_release_scripts_fail_closed_on_forbidden_entries() -> None:
@@ -167,7 +179,7 @@ def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
         Path(path).read_text(encoding="utf-8") for path in ("README.md", "docs/WINDOWS_DEPLOY.md")
     )
 
-    assert f"{chr(47)}Users{chr(47)}" + "example-user" not in public_text
+    assert_no_private_local_paths(public_text)
     assert "192." + "168." not in public_text
     assert "sk-" not in public_text
     assert "OPENAI_API_KEY" not in public_text
@@ -242,7 +254,7 @@ def test_windows_fleet_assets_do_not_embed_private_local_paths() -> None:
         )
     )
 
-    assert "/Users/" + "yumei" not in fleet_blob
+    assert_no_private_local_paths(fleet_blob)
     assert "192." + "168." not in fleet_blob
     assert "C:\\Users\\vitec" not in fleet_blob
 
