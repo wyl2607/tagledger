@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>料号对照 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f3f4f6; }
+    .catalog-page { display: grid; gap: 18px; padding-bottom: 48px; }
+    .catalog-toolbar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .catalog-toolbar label { margin-top: 0; }
+    .catalog-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    table { width: 100%; min-width: 1120px; border-collapse: collapse; }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f9fafb;
+      font-size: 16px;
+      font-weight: 950;
+    }
+    td { font-size: 16px; font-weight: 760; }
+    tr:last-child td { border-bottom: 0; }
+    .empty-row { padding: 28px; text-align: center; color: var(--muted); font-weight: 900; }
+    @media (max-width: 920px) {
+      .catalog-toolbar { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body data-page="material-catalog">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="materials.brand">料号对照</span></span>
+      </a>
+      <div class="nav-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button type="button" data-locale="en" data-i18n="language.en">EN</button>
+          <button type="button" data-locale="de" data-i18n="language.de">DE</button>
+          <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
+        </div>
+        <a class="nav-button" href="/" data-i18n="nav.portal">中心入口</a>
+        <a class="nav-button" href="/workbench" data-i18n="workbench.brand">现场调度台</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="catalog-page">
+    <header class="page-head">
+      <h1 data-i18n="materials.title">松灵料号对照表</h1>
+      <p class="subtitle" data-i18n="materials.subtitle">导入后默认显示全部物料，支持物料编码、SKU、BYD 料号、描述、类型、品名和箱规尺寸快速检索。</p>
+    </header>
+
+    <section class="panel">
+      <form id="importForm" class="catalog-toolbar">
+        <div>
+          <label for="query" data-i18n="materials.search.label">快速检索</label>
+          <input id="query" type="search" autocomplete="off" data-i18n-placeholder="materials.search.placeholder" placeholder="物料编码 / SKU / BYD料号 / 描述 / 类型 / 品名 / 箱规尺寸">
+        </div>
+        <div>
+          <label for="mappingFile" data-i18n="materials.import.label">导入对照表</label>
+          <input id="mappingFile" name="file" type="file" accept=".xlsx,.xlsm">
+        </div>
+        <button id="importBtn" type="submit" data-i18n="materials.import.button">导入</button>
+      </form>
+      <div class="catalog-summary">
+        <span id="summary" class="pill" data-i18n="materials.summary.loading">加载中</span>
+        <span id="status" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="table-wrap" aria-label="Material catalog">
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="materials.column.materialCode">物料编码</th>
+            <th data-i18n="materials.column.sku">SKU</th>
+            <th data-i18n="materials.column.byd">BYD料号</th>
+            <th data-i18n="materials.column.ruiyun">瑞云料号</th>
+            <th data-i18n="materials.column.description">描述</th>
+            <th data-i18n="materials.column.type">类型</th>
+            <th data-i18n="materials.column.name">品名</th>
+            <th data-i18n="materials.column.carton">箱规尺寸</th>
+          </tr>
+        </thead>
+        <tbody id="catalogBody">
+          <tr><td class="empty-row" colspan="8" data-i18n="materials.loading">加载中...</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script src="/static/auth-ui.js"></script>
+  <script>
+    const tr = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+    const columns = ['material_code', 'sku', 'byd_part_number', 'ruiyun_part_number', 'description', 'material_type', 'product_name', 'carton_size'];
+    let searchTimer = null;
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, AuthUI.csrfHeaders(options));
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent('/materials')}`;
+        throw new Error('login required');
+      }
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      return data;
+    }
+
+    function renderRows(items) {
+      const body = document.querySelector('#catalogBody');
+      if (!items.length) {
+        body.innerHTML = `<tr><td class="empty-row" colspan="8">${esc(tr('materials.empty'))}</td></tr>`;
+        return;
+      }
+      body.innerHTML = items.map((item) => `
+        <tr>${columns.map((column) => `<td>${esc(item[column] || '-')}</td>`).join('')}</tr>
+      `).join('');
+    }
+
+    async function loadCatalog() {
+      const query = document.querySelector('#query').value.trim();
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      const payload = await requestJson(`/api/materials/catalog?${params.toString()}`);
+      renderRows(payload.items || []);
+      document.querySelector('#summary').textContent = tr('materials.summary', {
+        count: payload.count ?? 0,
+        total: payload.total ?? 0,
+      });
+      document.querySelector('#status').textContent = '';
+    }
+
+    document.querySelector('#query').addEventListener('input', () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => {
+        loadCatalog().catch((error) => {
+          document.querySelector('#status').textContent = error.message;
+        });
+      }, 180);
+    });
+
+    document.querySelector('#importForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const fileInput = document.querySelector('#mappingFile');
+      if (!fileInput.files.length) {
+        document.querySelector('#status').textContent = tr('materials.import.noFile');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      document.querySelector('#importBtn').disabled = true;
+      try {
+        const payload = await requestJson('/api/materials/catalog/import', {
+          method: 'POST',
+          body: formData,
+        });
+        document.querySelector('#status').textContent = tr('materials.import.done', { count: payload.count || 0 });
+        fileInput.value = '';
+        await loadCatalog();
+      } catch (error) {
+        document.querySelector('#status').textContent = error.message;
+      } finally {
+        document.querySelector('#importBtn').disabled = false;
+      }
+    });
+
+    I18n.init().then(() => loadCatalog());
+    window.addEventListener('i18n:change', loadCatalog);
+  </script>
+</body>
+</html>

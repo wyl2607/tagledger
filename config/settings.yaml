@@ -10,7 +10,9 @@ app:
   enable_saas_submit: false
   dry_run: true
   submission_retries: 3
-
+  outbound_workbook_path: data/outbound/outbound_today.xlsx
+  outbound_shipping_sheet: 出库单明细2
+  outbound_cutting_sheet: 96单小单
 metrics:
   # Estimated manual entry baseline for contribution reporting.
   manual_seconds: 90

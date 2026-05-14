@@ -9,7 +9,7 @@
     body { background: #f5f7fa; }
     main.outbound-page { display: grid; gap: 16px; padding-bottom: 48px; }
     .outbound-tools { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr); gap: 16px; align-items: start; }
-    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
     th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
     th { background: var(--soft); font-weight: 950; }
     .table-wrap { overflow: auto; }
@@ -23,7 +23,18 @@
     .scan-ok { border-color: #22c55e; background: #f0fdf4; }
     .scan-miss { border-color: #f59e0b; background: #fffbeb; }
     .scan-none { border-color: #ef4444; background: #fef2f2; }
-    .empty-state { border-left: 8px solid var(--warning); }
+    .pick-panel { display: grid; gap: 12px; }
+    .pick-meta { color: var(--muted); font-weight: 850; }
+    .pick-result { display: grid; gap: 10px; }
+    .pick-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-weight: 900; }
+    .pick-summary strong { color: var(--ink); }
+    .pick-shortage { width: fit-content; padding: 6px 9px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-weight: 950; }
+    .pick-list { display: grid; gap: 8px; }
+    .pick-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .pick-order { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: #111827; color: #fff; font-weight: 950; }
+    .pick-quantity { font-size: 22px; font-weight: 950; }
+    .pick-hint { color: var(--muted); font-size: 12px; font-weight: 850; }
+    .empty-state { border-color: #fde68a; background: #fffbeb; }
     .status-matched { color: #15803d; font-weight: 950; }
     .status-over_shipped, .status-shipping_extra { color: #b45309; font-weight: 950; }
     .status-under_shipped, .status-cutting_missing_shipping { color: #b91c1c; font-weight: 950; }
@@ -35,13 +46,14 @@
 <body data-page="outbound">
   <div class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/workbench"><span class="logo">TL</span><span><strong data-i18n="outbound.page.title">出库核对</strong><span data-i18n="outbound.page.brandSub">剪料表 / 发货单</span></span></a>
+      <a class="brand" href="/"><span class="logo">TL</span><span><strong data-i18n="outbound.page.title">出库核对</strong><span data-i18n="outbound.page.brandSub">剪料表 / 发货单</span></span></a>
       <div class="nav-actions">
         <div class="lang-switch" aria-label="Language">
           <button type="button" data-locale="en" data-i18n="language.en">EN</button>
           <button type="button" data-locale="de" data-i18n="language.de">DE</button>
           <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
         </div>
+        <a class="nav-button" href="/" data-i18n="nav.portal">中心入口</a>
         <a class="nav-button" href="/workbench" data-i18n="workbench.brand">工作台</a>
         <a class="nav-button" href="/mobile" data-i18n="nav.mobile">手机</a>
         <a class="nav-button" href="/outbound" aria-current="page" data-i18n="nav.outbound">出库核对</a>
@@ -82,7 +94,22 @@
     </section>
     <section class="card">
       <h2 data-i18n="outbound.page.parts.title">按备件编码核对数量</h2>
-      <div class="table-wrap"><table><thead><tr><th data-i18n="outbound.page.parts.code">备件编码</th><th data-i18n="outbound.page.parts.name">备件名称</th><th data-i18n="outbound.page.parts.cutting">剪料数量</th><th data-i18n="outbound.page.parts.shipping">发货数量</th><th data-i18n="outbound.page.parts.diff">差异</th><th data-i18n="outbound.page.parts.status">状态</th></tr></thead><tbody id="partRows"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th data-i18n="outbound.page.parts.code">备件编码</th><th data-i18n="outbound.page.parts.name">备件名称</th><th data-i18n="outbound.page.parts.cutting">剪料数量</th><th data-i18n="outbound.page.parts.shipping">发货数量</th><th data-i18n="outbound.page.parts.diff">差异</th><th data-i18n="outbound.page.parts.status">状态</th><th data-i18n="outbound.page.parts.pick">拣货推荐</th></tr></thead><tbody id="partRows"></tbody></table></div>
+    </section>
+    <section class="card pick-panel">
+      <h2 data-i18n="outbound.page.pick.title">出库拣货推荐</h2>
+      <p class="muted" data-i18n="outbound.page.pick.subtitle">从出库核对行直接生成“去哪里拿”的建议。临时库位优先，数量少的优先清空；库存不足会显示缺口。</p>
+      <div class="actions">
+        <input id="pickPartInput" data-i18n-placeholder="outbound.page.pick.partPlaceholder" placeholder="备件编码 / SKU">
+        <input id="pickQtyInput" type="text" inputmode="numeric" pattern="[0-9]*" data-i18n-placeholder="outbound.page.pick.qtyPlaceholder" placeholder="需求数量">
+        <button id="pickRecommendBtn" type="button" data-i18n="outbound.page.pick.button">生成推荐</button>
+      </div>
+      <div id="pickMeta" class="pick-meta"></div>
+      <div id="pickError" class="status"></div>
+      <div id="pickResult" class="pick-result" hidden>
+        <div id="pickSummary" class="pick-summary"></div>
+        <div id="pickList" class="pick-list"></div>
+      </div>
     </section>
   </main>
   <script src="/static/i18n.js"></script>
@@ -92,14 +119,22 @@
     const displayValue = (value, fallback = '-') => (value === null || value === undefined || value === '' ? fallback : value);
     const statusKey = { matched: 'outbound.page.status.matched', over_shipped: 'outbound.page.status.overShipped', under_shipped: 'outbound.page.status.underShipped', shipping_extra: 'outbound.page.status.shippingExtra', cutting_missing_shipping: 'outbound.page.status.cuttingMissing', quantity_unreadable: 'outbound.page.status.quantityUnreadable' };
     let latestSummary = null;
+    let latestPickPayload = null;
     async function requestJson(url) {
       const response = await fetch(url);
+      const text = await response.text();
+      let payload = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch (_error) {
+        payload = null;
+      }
       if (response.status === 401) {
         window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
         throw new Error('login required');
       }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
+      if (!response.ok) throw new Error(payload?.detail || `HTTP ${response.status}`);
+      return payload || {};
     }
     function renderKpis(payload) {
       const counts = payload.counts || {};
@@ -123,20 +158,36 @@
     function selectedOrders() {
       return Array.from(document.querySelectorAll('[data-order-choice]:checked')).map((node) => node.value);
     }
+    function updateQueryAvailability() {
+      const hasSelection = selectedOrders().length > 0;
+      const queryBtn = document.querySelector('#queryBtn');
+      queryBtn.disabled = !hasSelection;
+      queryBtn.title = hasSelection ? '' : tr('outbound.page.query.needSelection');
+      if (!hasSelection) {
+        document.querySelector('#queryResult').textContent = tr('outbound.page.query.needSelection');
+      } else if (document.querySelector('#queryResult').textContent === tr('outbound.page.query.needSelection')) {
+        document.querySelector('#queryResult').textContent = '';
+      }
+    }
     function renderOrderPicker(orderNumbers) {
       if (!(orderNumbers || []).length) {
         document.querySelector('#orderPicker').innerHTML = `<div class="alert alert-yellow empty-state"><strong class="alert-title">${escapeHtml(tr('outbound.page.empty.title'))}</strong>${escapeHtml(tr('outbound.page.empty.detail'))}</div>`;
         document.querySelector('#selectAllOrdersBtn').disabled = true;
         document.querySelector('#clearOrdersBtn').disabled = true;
+        updateQueryAvailability();
         return;
       }
       document.querySelector('#orderPicker').innerHTML = (orderNumbers || []).map((order) => `
         <label class="order-choice"><input type="checkbox" data-order-choice value="${escapeHtml(order)}" ${(orderNumbers || []).length === 1 ? 'checked' : ''}>${escapeHtml(order)}</label>
       `).join('');
+      document.querySelectorAll('[data-order-choice]').forEach((node) => {
+        node.addEventListener('change', updateQueryAvailability);
+      });
       if ((orderNumbers || []).length <= 1) {
         document.querySelector('#selectAllOrdersBtn').disabled = true;
         document.querySelector('#clearOrdersBtn').disabled = true;
       }
+      updateQueryAvailability();
     }
     function renderPartRows(rows) {
       document.querySelector('#partRows').innerHTML = rows.map((row) => `
@@ -147,8 +198,80 @@
           <td>${escapeHtml(displayValue(row.shipping_qty))}</td>
           <td>${escapeHtml(displayValue(row.difference))}</td>
           <td class="status-${escapeHtml(row.status)}">${escapeHtml(tr(statusKey[row.status] || 'outbound.page.status.unknown'))}</td>
+          <td>
+            <button type="button" class="secondary" data-pick-row data-part-code="${escapeHtml(row.part_code)}" data-shipping-qty="${escapeHtml(displayValue(row.shipping_qty, '0'))}" data-cutting-qty="${escapeHtml(displayValue(row.cutting_qty, '0'))}" data-i18n="outbound.page.pick.useRow">按该行推荐</button>
+          </td>
         </tr>
       `).join('');
+      document.querySelectorAll('[data-pick-row]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const partCode = String(button.dataset.partCode || '').trim();
+          const shippingQty = Number(button.dataset.shippingQty || '0');
+          const cuttingQty = Number(button.dataset.cuttingQty || '0');
+          const requestedQty = Number.isInteger(shippingQty) && shippingQty > 0
+            ? shippingQty
+            : (Number.isInteger(cuttingQty) && cuttingQty > 0 ? cuttingQty : 1);
+          setPickInputs(partCode, requestedQty);
+          loadPickRecommendations().catch((error) => {
+            document.querySelector('#pickError').textContent = error.message || tr('outbound.page.pick.error.failed');
+          });
+        });
+      });
+    }
+    function setPickInputs(partCode, quantity) {
+      document.querySelector('#pickPartInput').value = partCode || '';
+      document.querySelector('#pickQtyInput').value = String(quantity || '');
+      document.querySelector('#pickMeta').textContent = partCode
+        ? tr('outbound.page.pick.meta', { part: partCode, quantity: quantity || 0 })
+        : '';
+    }
+    function renderPickRecommendations(payload) {
+      latestPickPayload = payload || null;
+      const result = document.querySelector('#pickResult');
+      if (!payload) {
+        document.querySelector('#pickSummary').innerHTML = '';
+        document.querySelector('#pickList').innerHTML = '';
+        result.hidden = true;
+        return;
+      }
+      const shortage = Number(payload.shortage_quantity || 0);
+      document.querySelector('#pickSummary').innerHTML = `
+        <span>${escapeHtml(tr('inventory.pick.summary.part'))}: <strong>${escapeHtml(payload.part_key || '')}</strong></span>
+        <span>${escapeHtml(tr('inventory.pick.summary.requested'))}: <strong>${escapeHtml(payload.requested_quantity || 0)}</strong></span>
+        <span>${escapeHtml(tr('inventory.pick.summary.available'))}: <strong>${escapeHtml(payload.total_available || 0)}</strong></span>
+        ${payload.insufficient ? `<span class="pick-shortage">${escapeHtml(tr('inventory.pick.shortage', { quantity: shortage }))}</span>` : ''}
+      `;
+      const rows = payload.recommendations || [];
+      document.querySelector('#pickList').innerHTML = rows.length ? rows.map((row, index) => `
+        <div class="pick-row">
+          <span class="pick-order">${escapeHtml(index + 1)}</span>
+          <span>
+            <strong>${escapeHtml(row.location_code)}</strong>
+            <span class="pick-hint">${escapeHtml(row.location_kind === 'temporary' ? tr('inventory.kind.temporary') : tr('inventory.kind.permanent'))} · ${escapeHtml(tr('inventory.pick.available'))}: ${escapeHtml(row.available_quantity)}</span>
+          </span>
+          <span class="pick-quantity">${escapeHtml(row.pick_quantity)}</span>
+        </div>
+      `).join('') : `<p class="muted">${escapeHtml(tr('inventory.pick.empty'))}</p>`;
+      result.hidden = false;
+    }
+    async function loadPickRecommendations() {
+      const error = document.querySelector('#pickError');
+      error.textContent = '';
+      const partCode = document.querySelector('#pickPartInput').value.trim();
+      const quantity = Number(document.querySelector('#pickQtyInput').value);
+      if (!partCode || !Number.isInteger(quantity) || quantity <= 0) {
+        error.textContent = tr('outbound.page.pick.error.input');
+        renderPickRecommendations(null);
+        return;
+      }
+      const params = new URLSearchParams({ part_key: partCode, quantity: String(quantity) });
+      try {
+        const payload = await requestJson(`/api/inventory/pick-recommendations?${params.toString()}`);
+        renderPickRecommendations(payload);
+      } catch (requestError) {
+        error.textContent = requestError.message || tr('outbound.page.pick.error.failed');
+        renderPickRecommendations(null);
+      }
     }
     function renderQuery(payload) {
       const rows = payload.shipping_orders || [];
@@ -178,6 +301,10 @@
     }
     document.querySelector('#queryBtn').addEventListener('click', async () => {
       const code = document.querySelector('#codeQuery').value.trim();
+      if (!selectedOrders().length) {
+        updateQueryAvailability();
+        return;
+      }
       if (!code) return;
       const params = new URLSearchParams({ code });
       for (const order of selectedOrders()) params.append('order_no', order);
@@ -188,12 +315,26 @@
     });
     document.querySelector('#selectAllOrdersBtn').addEventListener('click', () => {
       document.querySelectorAll('[data-order-choice]').forEach((node) => { node.checked = true; });
+      updateQueryAvailability();
     });
     document.querySelector('#clearOrdersBtn').addEventListener('click', () => {
       document.querySelectorAll('[data-order-choice]').forEach((node) => { node.checked = false; });
+      updateQueryAvailability();
+    });
+    document.querySelector('#pickRecommendBtn').addEventListener('click', () => {
+      loadPickRecommendations().catch((error) => {
+        document.querySelector('#pickError').textContent = error.message || tr('outbound.page.pick.error.failed');
+      });
+    });
+    document.querySelector('#pickQtyInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') document.querySelector('#pickRecommendBtn').click();
+    });
+    document.querySelector('#pickPartInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') document.querySelector('#pickRecommendBtn').click();
     });
     function bootOutbound() {
       loadSummary().catch((error) => { document.querySelector('#orderSummary').textContent = error.message; });
+      renderPickRecommendations(latestPickPayload);
     }
     I18n.init().then(bootOutbound);
     window.addEventListener('i18n:change', bootOutbound);

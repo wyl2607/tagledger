@@ -58,8 +58,8 @@ class InboundInventoryRequest(BaseModel):
     part_key: str
     location_code: str
     quantity: int
-    operator_id: str = "self"
     reason: str = "inbound"
+    idempotency_key: str | None = None
 
 
 class InventoryLocationStatusRequest(BaseModel):
@@ -233,7 +233,7 @@ def get_outbound_current_order_preference(
 @router.post("/inventory/inbound")
 def post_inbound_inventory(
     payload: InboundInventoryRequest,
-    _: None = Depends(require_supervisor),
+    user: User = Depends(require_supervisor),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     try:
@@ -241,8 +241,9 @@ def post_inbound_inventory(
             part_key=payload.part_key,
             location_code=payload.location_code,
             quantity=payload.quantity,
-            operator_id=payload.operator_id,
+            operator_id=user.username,
             reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
             session=session,
         )
     except RuntimeError as exc:

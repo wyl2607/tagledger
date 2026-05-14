@@ -8,17 +8,16 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
-from backend.app.auth import current_user_optional
 from backend.app.config import get_settings
 from backend.app.database import create_db_and_tables, get_session
 from backend.app.middleware.lan_guard import LanGuardMiddleware, PairingMiddleware
-from backend.app.models import User
 from backend.app.routes import (
     auth,
     confirm,
     export,
     inventory,
     jobs,
+    materials,
     metrics,
     outbound,
     pairing,
@@ -97,21 +96,21 @@ def runtime_status(request: Request) -> dict[str, bool | str]:
         "enable_barcode": settings.enable_barcode,
         "enable_saas_submit": settings.enable_saas_submit,
         "dry_run": settings.dry_run,
+        "lan_guard_enabled": settings.lan_guard_enabled,
+        "pairing_enabled": settings.pairing_enabled,
         "mobile_url": f"{base_url}/mobile",
         "history_url": f"{base_url}/history",
     }
 
 
 @app.get("/", include_in_schema=False)
-def smart_home(
-    user: User | None = Depends(current_user_optional),
-    session: Session = Depends(get_session),
-) -> RedirectResponse:
+def portal_page(session: Session = Depends(get_session)) -> Response:
     if not users_exist(session):
         return RedirectResponse(url="/setup", status_code=303)
-    if user is not None:
-        return RedirectResponse(url="/workbench", status_code=303)
-    return RedirectResponse(url="/login", status_code=303)
+    portal_path = STATIC_DIR / "portal.html"
+    if not portal_path.exists():
+        raise HTTPException(status_code=404, detail="portal page not found")
+    return FileResponse(portal_path)
 
 
 def demo_home() -> FileResponse:
@@ -182,6 +181,22 @@ def inventory_page() -> FileResponse:
     return FileResponse(inventory_path)
 
 
+@app.get("/inbound", include_in_schema=False)
+def inbound_page() -> FileResponse:
+    inbound_path = STATIC_DIR / "inbound.html"
+    if not inbound_path.exists():
+        raise HTTPException(status_code=404, detail="inbound page not found")
+    return FileResponse(inbound_path)
+
+
+@app.get("/materials", include_in_schema=False)
+def materials_page() -> FileResponse:
+    materials_path = STATIC_DIR / "material-catalog.html"
+    if not materials_path.exists():
+        raise HTTPException(status_code=404, detail="material catalog page not found")
+    return FileResponse(materials_path)
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     login_path = STATIC_DIR / "login.html"
@@ -221,6 +236,7 @@ app.include_router(jobs.router)
 app.include_router(confirm.router)
 app.include_router(export.router)
 app.include_router(inventory.router)
+app.include_router(materials.router)
 app.include_router(metrics.router)
 app.include_router(outbound.router)
 app.include_router(transfers.router)

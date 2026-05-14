@@ -138,6 +138,57 @@ Common options:
 
 `-AddFirewallRule` may require an Administrator PowerShell window. Without it, add the Windows Defender Firewall inbound rule manually for the printed TCP port.
 
+## Windows Fleet Deployment (Multi-PC)
+
+Use this when one macOS/Linux operator needs to update multiple Windows hosts over SSH.
+
+1. Copy the safe template and keep device inventory local-only:
+
+```bash
+cp scripts/windows_fleet_devices.txt.example scripts/windows_fleet_devices.txt
+```
+
+2. Edit `scripts/windows_fleet_devices.txt` with one device per line:
+
+```text
+target[|app_dir][|port]
+```
+
+- `target` is required and must be `user@host`.
+- `app_dir` is optional. If omitted, deploy script resolves remote `%USERPROFILE%\tagledger`.
+- `port` is optional. If omitted, default is `8000` or `--service-port`.
+
+Prefer a stable hostname such as `user@factory-pc-01.local` instead of a raw
+DHCP address such as `user@192.0.2.10`. On typical Windows LAN setups,
+`hostname.local` follows the PC when its IP changes, so future fleet deploys do
+not need device-list edits. If `.local` does not resolve on a site network, use
+a router DHCP reservation or a DNS name and keep that name in the local device
+inventory.
+
+3. Run deploy from repo root (local operation only; no git push/PR/deploy pipeline action):
+
+```bash
+./scripts/windows_fleet_deploy.sh --identity ~/.ssh/win_key
+```
+
+Useful flags:
+
+```bash
+./scripts/windows_fleet_deploy.sh --devices scripts/windows_fleet_devices.txt --service-port 8010
+./scripts/windows_fleet_deploy.sh --skip-install
+./scripts/windows_fleet_deploy.sh --open-admin
+./scripts/windows_fleet_deploy.sh --keep-archive
+```
+
+Safety boundaries:
+
+- `windows_fleet_devices.txt` is local inventory and should never be committed.
+- Template file must stay generic; do not store real private IPs or personal paths in tracked docs/examples.
+- Script only performs local packaging + SSH/scp calls to listed hosts; it does not push code to GitHub or run release/publish actions.
+- Fleet deploy starts TagLedger with `scripts/remote_start_tagledger.ps1 -DetachedTask` so the server survives the SSH session used to launch it.
+- Add `--open-admin` to open the Windows default browser to `/admin` after the service passes health checks.
+- Use `scripts/remote_start_tagledger.ps1 -Port <n>` (or `Start TagLedger Service.cmd` + `TAGLEDGER_PORT`) for non-default local starts.
+
 ## First Login
 
 Protected operations such as outbound reconciliation, transfer creation, and admin management require a local TagLedger account.
@@ -147,6 +198,29 @@ Protected operations such as outbound reconciliation, transfer creation, and adm
 3. After initialization, `/` sends unauthenticated users to `/login` and logged-in users to `/workbench`.
 4. Use `/admin` to create operator or supervisor accounts for the floor team.
 5. Phones should use `/mobile` from the QR code. The legacy desktop OCR demo remains available at `/capture` when needed for label intake compatibility.
+
+## Daily Picking Accounts
+
+Use `scripts/seed_user_account.py` when a local Windows or Mac install needs a repeatable operator account for the day's picking orders. The password is read from `TAGLEDGER_USER_PASSWORD` or from an interactive prompt; do not store site passwords in tracked files.
+
+```bash
+TAGLEDGER_USER_PASSWORD='change-me-locally' \
+  python scripts/seed_user_account.py \
+  --username picker96 \
+  --display-name 今日96单捡货 \
+  --role operator \
+  --orders SO202605060078 \
+  --reset-password
+```
+
+Use comma-separated orders for one person with multiple assignments:
+
+```bash
+TAGLEDGER_USER_PASSWORD='change-me-locally' \
+  python scripts/seed_user_account.py --username picker-a --orders SO202605060078,SO202605060087
+```
+
+Run the command once per person when multiple operators are picking the same order. Operator accounts only see their assigned orders; supervisors and managers keep global visibility.
 
 ## Switch To Real OCR
 

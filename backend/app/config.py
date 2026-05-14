@@ -41,6 +41,13 @@ def normalize_database_url(url: str) -> str:
     return raw_url
 
 
+def env_bool(name: str, current: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return current
+    return raw_value.strip().lower() not in {"0", "false", "no", "off"}
+
+
 class Settings(BaseModel):
     database_url: str = "sqlite:///data/app.db"
     upload_dir: str = "data/uploads"
@@ -171,12 +178,18 @@ def get_settings() -> Settings:
             "on",
         }
     if os.getenv("CSRF_PROTECTION") is not None:
-        app_config["csrf_protection"] = os.getenv("CSRF_PROTECTION", "").lower() not in {
-            "0",
-            "false",
-            "no",
-            "off",
-        }
+        app_config["csrf_protection"] = env_bool(
+            "CSRF_PROTECTION",
+            bool(app_config.get("csrf_protection", True)),
+        )
+    app_config["lan_guard_enabled"] = env_bool(
+        "TAGLEDGER_LAN_GUARD_ENABLED",
+        bool(app_config.get("lan_guard_enabled", True)),
+    )
+    app_config["pairing_enabled"] = env_bool(
+        "TAGLEDGER_PAIRING_ENABLED",
+        bool(app_config.get("pairing_enabled", True)),
+    )
     if os.getenv("TAGLEDGER_DATA_DIR"):
         app_config["data_dir"] = os.getenv("TAGLEDGER_DATA_DIR")
     if os.getenv("TAGLEDGER_LOG_DIR"):

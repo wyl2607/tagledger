@@ -224,13 +224,43 @@ def _is_invalid_location(value: str) -> bool:
     return text in {"#VALUE!", "#N/A", "#REF!", "#DIV/0!", "#NAME?", "#NULL!", "#NUM!"}
 
 
-def _row_locations(row: tuple[object, ...]) -> tuple[str, ...]:
+def _row_locations(row: tuple[object, ...], *, start_index: int = 3) -> tuple[str, ...]:
     locations = []
-    for cell in row[3:]:
+    for cell in row[start_index:]:
         text = _cell_text(cell)
         if text and not _has_visible_mark(text) and not _is_invalid_location(text):
             locations.append(text)
     return tuple(locations)
+
+
+def _normalize_header_text(value: object) -> str:
+    text = _cell_text(value)
+    text = text.replace("（", "(").replace("）", ")")
+    return re.sub(r"\s+", "", text).lower()
+
+
+def _resolve_column_indexes(sheet) -> dict[str, int]:
+    header = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
+    mapping: dict[str, int] = {}
+    for idx, cell in enumerate(header):
+        token = _normalize_header_text(cell)
+        if not token:
+            continue
+        if "出库单号" in token and "order_no" not in mapping:
+            mapping["order_no"] = idx
+        if ("数量" in token or "qty" in token or "quantity" in token) and "quantity" not in mapping:
+            mapping["quantity"] = idx
+        if (
+            "备件编码" in token or "编码" in token or "part" in token or "sku" in token
+        ) and "part_code" not in mapping:
+            mapping["part_code"] = idx
+        if ("备件名称" in token or "名称" in token or "name" in token) and "name" not in mapping:
+            mapping["name"] = idx
+        if (
+            "库位" in token or "location" in token or "loc" in token
+        ) and "location_start" not in mapping:
+            mapping["location_start"] = idx
+    return mapping
 
 
 def _load_shipping_sheet(path: Path, sheet_name: str) -> list[OutboundItem]:
@@ -240,16 +270,25 @@ def _load_shipping_sheet(path: Path, sheet_name: str) -> list[OutboundItem]:
             return []
         sheet = workbook[sheet_name]
         items: list[OutboundItem] = []
+        col = _resolve_column_indexes(sheet)
+        order_idx = col.get("order_no", 0)
+        qty_idx = col.get("quantity", 1)
+        part_idx = col.get("part_code", 2)
+        name_idx = col.get("name", 3)
         current_order_no = ""
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            order_no = normalize_order_no(_cell_text(row[0] if len(row) > 0 else ""))
+            order_no = normalize_order_no(
+                _cell_text(row[order_idx] if len(row) > order_idx else "")
+            )
             if order_no:
                 current_order_no = order_no
             else:
                 order_no = current_order_no
-            quantity = _cell_int(row[1] if len(row) > 1 else None)
-            part_code = normalize_part_code(_cell_text(row[2] if len(row) > 2 else ""))
-            name = _cell_text(row[3] if len(row) > 3 else "")
+            quantity = _cell_int(row[qty_idx] if len(row) > qty_idx else None)
+            part_code = normalize_part_code(
+                _cell_text(row[part_idx] if len(row) > part_idx else "")
+            )
+            name = _cell_text(row[name_idx] if len(row) > name_idx else "")
             if order_no and part_code:
                 items.append(
                     OutboundItem(
@@ -273,16 +312,29 @@ def _load_cutting_sheet(path: Path, sheet_name: str) -> list[OutboundItem]:
             return []
         sheet = workbook[sheet_name]
         items: list[OutboundItem] = []
+        col = _resolve_column_indexes(sheet)
+        order_idx = col.get("order_no")
+        qty_idx = col.get("quantity", 0)
+        part_idx = col.get("part_code", 1)
+        name_idx = col.get("name", 2)
+        location_start = col.get("location_start", 3)
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            quantity = _cell_int(row[0] if len(row) > 0 else None)
-            part_code = normalize_part_code(_cell_text(row[1] if len(row) > 1 else ""))
-            name = _cell_text(row[2] if len(row) > 2 else "")
-            checked = any(_has_visible_mark(cell) for cell in row[3:])
-            locations = _row_locations(row)
+            order_no = (
+                normalize_order_no(_cell_text(row[order_idx] if len(row) > order_idx else ""))
+                if order_idx is not None
+                else ""
+            )
+            quantity = _cell_int(row[qty_idx] if len(row) > qty_idx else None)
+            part_code = normalize_part_code(
+                _cell_text(row[part_idx] if len(row) > part_idx else "")
+            )
+            name = _cell_text(row[name_idx] if len(row) > name_idx else "")
+            checked = any(_has_visible_mark(cell) for cell in row[location_start:])
+            locations = _row_locations(tuple(row), start_index=location_start)
             if part_code and ((quantity is not None and quantity > 0) or checked):
                 items.append(
                     OutboundItem(
-                        order_no="PICKING_TOTAL",
+                        order_no=order_no or "PICKING_TOTAL",
                         part_code=part_code,
                         quantity=quantity,
                         source="cutting",
@@ -294,6 +346,26 @@ def _load_cutting_sheet(path: Path, sheet_name: str) -> list[OutboundItem]:
         return items
     finally:
         workbook.close()
+
+
+def _real_order_numbers(items: list[OutboundItem]) -> set[str]:
+    return {item.order_no for item in items if item.order_no and item.order_no != "PICKING_TOTAL"}
+
+
+def _shipping_items_from_ordered_cutting(items: list[OutboundItem]) -> list[OutboundItem]:
+    return [
+        OutboundItem(
+            order_no=item.order_no,
+            part_code=item.part_code,
+            quantity=item.quantity,
+            source="shipping",
+            raw_line=item.raw_line,
+            name=item.name,
+            locations=item.locations,
+        )
+        for item in items
+        if item.order_no != "PICKING_TOTAL"
+    ]
 
 
 def _fail_outbound_config(message: str) -> NoReturn:
@@ -308,6 +380,12 @@ def load_outbound_items() -> tuple[list[OutboundItem], list[OutboundItem]]:
     shipping = _load_shipping_sheet(
         settings.outbound_workbook_file, settings.outbound_shipping_sheet
     )
+    cutting_orders = _real_order_numbers(cutting)
+    if cutting_orders:
+        scoped_shipping = [
+            item for item in shipping if normalize_order_no(item.order_no) in cutting_orders
+        ]
+        shipping = scoped_shipping or _shipping_items_from_ordered_cutting(cutting)
     if not cutting or not shipping:
         _fail_outbound_config(
             f"outbound workbook missing required rows or sheets: {settings.outbound_workbook_file}"
@@ -791,6 +869,7 @@ def _get_or_create_inventory_location(
     *,
     part_key: str,
     location_code: str,
+    commit: bool = True,
 ) -> InventoryLocation:
     row = session.exec(
         select(InventoryLocation).where(
@@ -808,8 +887,10 @@ def _get_or_create_inventory_location(
         zero_stock=True,
     )
     session.add(row)
-    session.commit()
-    session.refresh(row)
+    session.flush()
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row
 
 
@@ -897,12 +978,14 @@ def _select_location_for_outbound(
 
 
 def _inventory_location_payload(location: InventoryLocation) -> dict[str, object]:
+    quantity = int(location.quantity)
     return {
         "id": location.id,
         "part_key": location.part_key,
         "part_name": location.part_name,
         "location_code": location.location_code,
-        "quantity": int(location.quantity),
+        "quantity": quantity,
+        "quantity_on_hand": quantity,
         "status": location.status,
         "zero_stock": bool(location.zero_stock),
         "location_kind": _normalize_location_kind(location.location_kind),
@@ -923,6 +1006,7 @@ def _movement_payload(movement: InventoryMovement) -> dict[str, object]:
         "before_qty": movement.before_qty,
         "after_qty": movement.after_qty,
         "operator_id": movement.operator_id,
+        "idempotency_key": movement.idempotency_key,
         "reason": movement.reason,
         "created_at": movement.created_at.isoformat() if movement.created_at else None,
     }
@@ -941,6 +1025,8 @@ def _record_inventory_movement(
     after_qty: int,
     operator_id: str,
     reason: str | None,
+    idempotency_key: str | None = None,
+    commit: bool = True,
 ) -> InventoryMovement:
     row = InventoryMovement(
         movement_type=movement_type,
@@ -952,11 +1038,14 @@ def _record_inventory_movement(
         before_qty=before_qty,
         after_qty=after_qty,
         operator_id=(operator_id.strip() or "self")[:80],
+        idempotency_key=_normalize_idempotency_key(idempotency_key),
         reason=reason,
     )
     session.add(row)
-    session.commit()
-    session.refresh(row)
+    session.flush()
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row
 
 
@@ -972,11 +1061,16 @@ def _apply_inventory_delta(
     order_no: str | None = None,
     scan_id: int | None = None,
     allow_new_location: bool = False,
+    commit: bool = True,
+    idempotency_key: str | None = None,
 ) -> tuple[InventoryLocation, InventoryMovement]:
     normalized_part = compact_part_code(part_key)
     normalized_location = _normalize_location_code(location_code)
     location = _get_or_create_inventory_location(
-        session, part_key=normalized_part, location_code=normalized_location
+        session,
+        part_key=normalized_part,
+        location_code=normalized_location,
+        commit=False,
     )
     if (
         not allow_new_location
@@ -1008,23 +1102,112 @@ def _apply_inventory_delta(
     elif location.status == "retired":
         location.status = "active"
     location.updated_at = now
-    session.add(location)
-    session.commit()
-    session.refresh(location)
-    movement = _record_inventory_movement(
-        session,
-        movement_type=movement_type,
-        part_key=normalized_part,
-        location_code=normalized_location,
-        order_no=order_no,
-        scan_id=scan_id,
-        quantity_delta=quantity_delta,
-        before_qty=before_qty,
-        after_qty=after_qty,
-        operator_id=operator_id,
-        reason=reason,
-    )
+    try:
+        session.add(location)
+        session.flush()
+        movement = _record_inventory_movement(
+            session,
+            movement_type=movement_type,
+            part_key=normalized_part,
+            location_code=normalized_location,
+            order_no=order_no,
+            scan_id=scan_id,
+            quantity_delta=quantity_delta,
+            before_qty=before_qty,
+            after_qty=after_qty,
+            operator_id=operator_id,
+            reason=reason,
+            idempotency_key=idempotency_key,
+            commit=False,
+        )
+        if commit:
+            session.commit()
+            session.refresh(location)
+            session.refresh(movement)
+    except Exception:
+        session.rollback()
+        raise
     return location, movement
+
+
+def _normalize_idempotency_key(value: str | None) -> str | None:
+    key = (value or "").strip()
+    if not key:
+        return None
+    if len(key) > 120:
+        raise RuntimeError("idempotency_key must be <= 120 characters")
+    return key
+
+
+def _inbound_request_signature(
+    *,
+    part_key: str,
+    location_code: str,
+    quantity: int,
+    reason: str,
+) -> str:
+    return json.dumps(
+        {
+            "part_key": part_key,
+            "location_code": location_code,
+            "quantity": quantity,
+            "reason": reason,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _find_existing_inbound_movement(
+    session: Session,
+    *,
+    operator_id: str,
+    idempotency_key: str,
+    part_key: str,
+    location_code: str,
+    quantity: int,
+    reason: str,
+) -> InventoryMovement | None:
+    movement = session.exec(
+        select(InventoryMovement)
+        .where(
+            InventoryMovement.movement_type == "inbound",
+            InventoryMovement.operator_id == (operator_id.strip() or "self")[:80],
+            InventoryMovement.idempotency_key == idempotency_key,
+        )
+        .order_by(InventoryMovement.id.desc())
+    ).first()
+    if movement is None:
+        return None
+    if (
+        movement.part_key != part_key
+        or movement.location_code != location_code
+        or int(movement.quantity_delta) != quantity
+        or (movement.reason or "") != reason
+    ):
+        raise RuntimeError("idempotency_key reused with different inbound payload")
+    return movement
+
+
+def _inbound_payload_from_existing(
+    *,
+    session: Session,
+    movement: InventoryMovement,
+) -> dict[str, object] | None:
+    location = _find_inventory_location(
+        session,
+        part_key=movement.part_key,
+        location_code=movement.location_code,
+    )
+    if location is None:
+        return None
+    return {
+        "updated": True,
+        "created": False,
+        "location": _inventory_location_payload(location),
+        "movement": _movement_payload(movement),
+    }
 
 
 def inbound_inventory(
@@ -1034,23 +1217,106 @@ def inbound_inventory(
     quantity: int,
     operator_id: str,
     reason: str,
+    idempotency_key: str | None = None,
     session: Session,
 ) -> dict[str, object]:
     qty = int(quantity)
     if qty <= 0:
         raise RuntimeError("quantity must be > 0")
-    location, movement = _apply_inventory_delta(
-        session,
-        movement_type="inbound",
-        part_key=part_key,
-        location_code=location_code,
-        quantity_delta=qty,
-        operator_id=operator_id,
-        reason=reason[:200] or "inbound",
-        allow_new_location=True,
+    normalized_part = compact_part_code(part_key)
+    normalized_location = _normalize_location_code(location_code)
+    normalized_reason = reason[:200] or "inbound"
+    normalized_idempotency_key = _normalize_idempotency_key(idempotency_key)
+    request_signature = _inbound_request_signature(
+        part_key=normalized_part,
+        location_code=normalized_location,
+        quantity=qty,
+        reason=normalized_reason,
     )
+    if normalized_idempotency_key:
+        existing_movement = _find_existing_inbound_movement(
+            session,
+            operator_id=operator_id,
+            idempotency_key=normalized_idempotency_key,
+            part_key=normalized_part,
+            location_code=normalized_location,
+            quantity=qty,
+            reason=normalized_reason,
+        )
+        if existing_movement is not None:
+            existing_payload = _inbound_payload_from_existing(
+                session=session,
+                movement=existing_movement,
+            )
+            if existing_payload is not None:
+                return existing_payload
+            raise RuntimeError("idempotency_key previous inbound result is unavailable")
+    try:
+        location, movement = _apply_inventory_delta(
+            session,
+            movement_type="inbound",
+            part_key=normalized_part,
+            location_code=normalized_location,
+            quantity_delta=qty,
+            operator_id=operator_id,
+            reason=normalized_reason,
+            allow_new_location=True,
+            commit=False,
+            idempotency_key=normalized_idempotency_key,
+        )
+        audit = AuditLog(
+            event_type="inventory_inbound",
+            actor_username=(operator_id.strip() or "self")[:80],
+            target_type="inventory_movement",
+            target_id=str(movement.id),
+            action="inventory.inbound",
+            reason=normalized_reason,
+            success=True,
+            detail_json=json.dumps(
+                {
+                    "movement_id": movement.id,
+                    "location_id": location.id,
+                    "part_key": normalized_part,
+                    "location_code": normalized_location,
+                    "quantity": qty,
+                    "idempotency_key": normalized_idempotency_key,
+                    "request_signature": request_signature,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        session.add(audit)
+        session.commit()
+        session.refresh(location)
+        session.refresh(movement)
+    except IntegrityError:
+        session.rollback()
+        if not normalized_idempotency_key:
+            raise
+        existing_movement = _find_existing_inbound_movement(
+            session,
+            operator_id=operator_id,
+            idempotency_key=normalized_idempotency_key,
+            part_key=normalized_part,
+            location_code=normalized_location,
+            quantity=qty,
+            reason=normalized_reason,
+        )
+        if existing_movement is None:
+            raise
+        existing_payload = _inbound_payload_from_existing(
+            session=session,
+            movement=existing_movement,
+        )
+        if existing_payload is None:
+            raise RuntimeError("idempotency_key previous inbound result is unavailable") from None
+        return existing_payload
+    except Exception:
+        session.rollback()
+        raise
     return {
         "updated": True,
+        "created": True,
         "location": _inventory_location_payload(location),
         "movement": _movement_payload(movement),
     }

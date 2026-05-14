@@ -30,6 +30,7 @@ def export_records_csv_filtered(
     session: Session,
     *,
     statuses: list[RecordStatus] | None = None,
+    operator_id: str | None = None,
     keyword: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -37,6 +38,8 @@ def export_records_csv_filtered(
     statement = select(Record).order_by(Record.id)
     if statuses:
         statement = statement.where(Record.status.in_(statuses))
+    if operator_id:
+        statement = statement.where(Record.operator_id == operator_id)
     cleaned_keyword = keyword.strip().upper() if keyword else None
     if cleaned_keyword:
         like_term = f"%{cleaned_keyword}%"

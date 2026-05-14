@@ -1,0 +1,5 @@
+# target[|app_dir][|port]
+# target must be user@host
+operator@win-floor-01
+# operator@win-floor-02|C:\TagLedger\app
+# operator@win-floor-03||8010

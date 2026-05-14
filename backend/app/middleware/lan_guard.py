@@ -50,6 +50,16 @@ def _probe_outbound_ipv4() -> str | None:
 
 def _detect_allowed_hosts() -> set[str]:
     allowed: set[str] = {"localhost", "127.0.0.1", "[::1]"}
+    host_candidates = {socket.gethostname(), socket.getfqdn()}
+    for raw_host in host_candidates:
+        host = raw_host.strip().lower().rstrip(".")
+        if not host:
+            continue
+        allowed.add(host)
+        short_host = host.split(".", 1)[0]
+        if short_host:
+            allowed.add(short_host)
+            allowed.add(f"{short_host}.local")
     try:
         infos = socket.getaddrinfo(socket.gethostname(), None)
         for info in infos:
@@ -125,6 +135,7 @@ def _first_lan_ipv4() -> str | None:
 
 
 def _normalize_host(host_header: str) -> str:
+    host_header = host_header.strip().lower().rstrip(".")
     if ":" in host_header and not host_header.startswith("["):
         last_colon = host_header.rfind(":")
         maybe_port = host_header[last_colon + 1 :]
@@ -159,6 +170,10 @@ def _is_private_or_loopback(ip_str: str) -> bool:
     if isinstance(ip, ipaddress.IPv6Address):
         return ip == LOOPBACK6 or (not ip.is_link_local and ip.is_private)
     return False
+
+
+def _is_signoff_assist_preview(path: str, method: str) -> bool:
+    return method == "GET" and path.startswith("/api/signoff/assist/") and path.endswith("/preview")
 
 
 class LanGuardMiddleware(BaseHTTPMiddleware):
@@ -204,6 +219,8 @@ class PairingMiddleware(BaseHTTPMiddleware):
         for prefix in PAIRING_EXEMPT_PREFIXES:
             if path.startswith(prefix):
                 return await call_next(request)
+        if _is_signoff_assist_preview(path, request.method):
+            return await call_next(request)
 
         cookie_value = request.cookies.get("tl_pair")
         if not is_paired(cookie_value):

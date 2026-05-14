@@ -212,6 +212,20 @@ def _latest_open_assist_session(
     ).first()
 
 
+def _open_assist_session_for_key(
+    session: Session,
+    candidate_id: int,
+    pairing_key_id: int,
+) -> SignoffAssistSession | None:
+    return session.exec(
+        select(SignoffAssistSession)
+        .where(SignoffAssistSession.candidate_id == candidate_id)
+        .where(SignoffAssistSession.pairing_key_id == pairing_key_id)
+        .where(SignoffAssistSession.operator_decision.is_(None))  # type: ignore[attr-defined]
+        .order_by(SignoffAssistSession.id.desc())
+    ).first()
+
+
 def _revoke_active_pairing_keys(
     session: Session,
     candidate_id: int,
@@ -426,14 +440,24 @@ def get_signoff_assist_preview(
     payload = _assist_payload(candidate, evidence_photos)
     prepared_payload_hash = _payload_hash(payload)
 
-    assist_session = SignoffAssistSession(
-        factory_id=candidate.factory_id,
+    assist_session = _open_assist_session_for_key(
+        session,
         candidate_id=candidate.id or 0,
         pairing_key_id=pairing_key.id or 0,
-        prepared_payload_hash=prepared_payload_hash,
-        previewed_at=now,
-        updated_at=now,
     )
+    if assist_session is None:
+        assist_session = SignoffAssistSession(
+            factory_id=candidate.factory_id,
+            candidate_id=candidate.id or 0,
+            pairing_key_id=pairing_key.id or 0,
+            prepared_payload_hash=prepared_payload_hash,
+            previewed_at=now,
+            updated_at=now,
+        )
+    else:
+        assist_session.prepared_payload_hash = prepared_payload_hash
+        assist_session.previewed_at = now
+        assist_session.updated_at = now
     pairing_key.preview_count += 1
     pairing_key.last_previewed_at = now
     candidate.status = ReturnSignoffStatus.assist_previewed
