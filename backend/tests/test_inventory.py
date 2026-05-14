@@ -279,6 +279,256 @@ def test_inventory_reconcile_preview_classifies_rows_and_is_read_only(
     assert stored.quantity == 5
 
 
+def test_inventory_reconcile_apply_requires_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-reconcile-operator")
+    _seed_location(
+        session,
+        part_key="CPXS000122210",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-operator-blocked",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122210",
+                    "location_code": "A-A01-011",
+                    "excel_quantity": 7,
+                    "system_quantity": 5,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_inventory_reconcile_apply_updates_confirmed_mismatch_and_audits(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122211",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-adjust-001",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122211",
+                    "location_code": "A-A01-011",
+                    "excel_quantity": 7,
+                    "system_quantity": 5,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "applied_count": 1,
+        "audit_only_count": 0,
+        "skipped_count": 0,
+    }
+    result = payload["results"][0]
+    assert result["status"] == "applied"
+    assert result["before_qty"] == 5
+    assert result["after_qty"] == 7
+    assert result["movement"]["movement_type"] == "reconcile_adjust"
+
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122211")
+    ).one()
+    assert location.quantity == 7
+    movement = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122211")
+    ).one()
+    assert movement.quantity_delta == 2
+    assert movement.operator_id == "inventory-supervisor"
+    assert movement.reason == "daily stocktake; source=stocktake.csv"
+    audit = session.exec(
+        select(AuditLog).where(AuditLog.action == "inventory.reconcile.apply")
+    ).one()
+    assert audit.actor_username == "inventory-supervisor"
+    assert audit.target_type == "inventory_reconcile"
+    assert "stocktake.csv" in (audit.detail_json or "")
+    assert "stocktake-adjust-001" in (audit.detail_json or "")
+
+
+def test_inventory_reconcile_apply_rejects_duplicate_idempotency_key(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122214",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+    payload = {
+        "idempotency_key": "stocktake-adjust-duplicate",
+        "source_filename": "stocktake.csv",
+        "reason": "daily stocktake",
+        "decisions": [
+            {
+                "category": "quantity_mismatch",
+                "decision": "use_excel",
+                "part_key": "CPXS000122214",
+                "location_code": "A-A01-011",
+                "excel_quantity": 7,
+                "system_quantity": 5,
+            }
+        ],
+    }
+
+    first = client.post("/api/inventory/reconcile/apply", json=payload)
+    second = client.post("/api/inventory/reconcile/apply", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["detail"] == "duplicate reconcile apply request"
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122214")
+    ).one()
+    assert location.quantity == 7
+    assert (
+        len(
+            session.exec(
+                select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122214")
+            ).all()
+        )
+        == 1
+    )
+
+
+def test_inventory_reconcile_apply_requires_preview_system_quantity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122215",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-missing-system-quantity",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122215",
+                    "location_code": "A-A01-011",
+                    "excel_quantity": 7,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "system_quantity is required for use_excel"
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122215")
+    ).one()
+    assert location.quantity == 5
+
+
+def test_inventory_reconcile_apply_audits_non_destructive_decisions(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122212",
+        location_code="A-A01-012",
+        quantity=4,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-audit-only-001",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "excel_missing",
+                    "decision": "mark_excel_missing",
+                    "part_key": "CPXS000122212",
+                    "location_code": "A-A01-012",
+                    "system_quantity": 4,
+                },
+                {
+                    "category": "excel_new",
+                    "decision": "mark_excel_new",
+                    "part_key": "CPXS000122213",
+                    "location_code": "TMP-09",
+                    "excel_quantity": 2,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "applied_count": 0,
+        "audit_only_count": 2,
+        "skipped_count": 0,
+    }
+    assert {row["status"] for row in payload["results"]} == {"audit_only"}
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122212")
+    ).one()
+    assert location.quantity == 4
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122213")
+        ).first()
+        is None
+    )
+    assert session.exec(select(InventoryMovement)).all() == []
+    audits = session.exec(
+        select(AuditLog)
+        .where(AuditLog.action == "inventory.reconcile.apply")
+        .order_by(AuditLog.id.asc())
+    ).all()
+    assert all((row.target_id or "").startswith("reconcile:") for row in audits)
+    assert audits[0].target_id != audits[1].target_id
+    assert "stocktake-audit-only-001" in (audits[0].detail_json or "")
+    assert "excel_missing" in (audits[0].detail_json or "")
+    assert "excel_new" in (audits[1].detail_json or "")
+
+
 def test_inventory_csv_file_rows_parse_required_columns() -> None:
     rows = parse_inventory_file_rows(
         filename="inventory.csv",

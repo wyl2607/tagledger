@@ -8,6 +8,7 @@ from backend.app.models import User
 from backend.app.services.inventory_excel import parse_inventory_file_rows
 from backend.app.services.inventory_service import (
     adjust_inventory_location,
+    apply_inventory_reconcile,
     list_inventory_locations,
     move_inventory_quantity,
     preview_inventory_reconcile,
@@ -40,6 +41,23 @@ class InventoryReconcilePreviewRow(BaseModel):
 
 class InventoryReconcilePreviewRequest(BaseModel):
     rows: list[InventoryReconcilePreviewRow] = Field(default_factory=list)
+
+
+class InventoryReconcileApplyDecision(BaseModel):
+    category: str = Field(min_length=1, max_length=40)
+    decision: str = Field(min_length=1, max_length=40)
+    factory_id: str | None = Field(default=None, max_length=40)
+    part_key: str = Field(min_length=1, max_length=80)
+    location_code: str = Field(min_length=1, max_length=80)
+    system_quantity: int | None = Field(default=None, ge=0)
+    excel_quantity: int | None = Field(default=None, ge=0)
+
+
+class InventoryReconcileApplyRequest(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=120)
+    source_filename: str | None = Field(default=None, max_length=120)
+    reason: str = Field(min_length=1, max_length=200)
+    decisions: list[InventoryReconcileApplyDecision] = Field(default_factory=list)
 
 
 @router.get("/locations")
@@ -151,6 +169,26 @@ def post_inventory_reconcile_preview(
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/reconcile/apply")
+def post_inventory_reconcile_apply(
+    payload: InventoryReconcileApplyRequest,
+    user: User = Depends(require_supervisor),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    try:
+        return apply_inventory_reconcile(
+            session=session,
+            decisions=[decision.model_dump() for decision in payload.decisions],
+            idempotency_key=payload.idempotency_key,
+            source_filename=payload.source_filename,
+            reason=payload.reason,
+            operator=user,
+        )
+    except RuntimeError as exc:
+        status_code = 404 if "not found" in str(exc) else 409
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @router.post("/reconcile/preview-file")
