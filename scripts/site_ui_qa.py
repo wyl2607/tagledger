@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "data" / "screenshots" / "site-ui-qa"
 MANAGER = ("site-manager", "site-manager-pass")
 OPERATOR = ("site-operator", "site-operator-pass")
+QA_PART_KEY = "QAINBOUND001"
+QA_LOCATION_CODE = "QA-A-01"
 
 
 def free_port() -> int:
@@ -156,6 +158,112 @@ def capture_page(
     page.screenshot(path=ARTIFACT_DIR / f"{name}.png", full_page=full_page)
 
 
+def open_inventory(page: Page, base_url: str) -> None:
+    page.goto(f"{base_url}/inventory", wait_until="networkidle")
+    page.locator("#inventoryContent").wait_for(state="visible", timeout=10_000)
+
+
+def generate_reconcile_preview(page: Page, rows: list[dict[str, object]]) -> None:
+    page.locator("#reconcileRowsInput").fill(json.dumps(rows, ensure_ascii=False))
+    page.locator("#reconcilePreviewBtn").click()
+    page.wait_for_function(
+        "document.querySelector('#reconcilePreviewResult')?.hidden === false",
+        timeout=10_000,
+    )
+
+
+def assert_inventory_quantity(
+    page: Page,
+    *,
+    part_key: str,
+    location_code: str,
+    quantity: int,
+) -> None:
+    payload = page.evaluate(
+        """async ({ partKey }) => {
+            const params = new URLSearchParams({ part_key: partKey, include_hidden: 'true' });
+            return AuthUI.fetchJson(`/api/inventory/locations?${params.toString()}`);
+        }""",
+        {"partKey": part_key},
+    )
+    matching = [
+        row
+        for row in payload.get("locations", [])
+        if row.get("part_key") == part_key and row.get("location_code") == location_code
+    ]
+    if len(matching) != 1:
+        raise AssertionError(f"expected one inventory row for {part_key} at {location_code}")
+    actual = matching[0].get("quantity")
+    if actual != quantity:
+        raise AssertionError(
+            f"expected {part_key} at {location_code} quantity {quantity}, got {actual}"
+        )
+
+
+def exercise_manager_inventory_reconcile_apply(page: Page, base_url: str) -> None:
+    open_inventory(page, base_url)
+    rows = [
+        {
+            "factory_id": "factory_a",
+            "part_key": QA_PART_KEY,
+            "location_code": QA_LOCATION_CODE,
+            "quantity": 5,
+        }
+    ]
+    generate_reconcile_preview(page, rows)
+    mismatch_rows = page.locator('[data-bucket="quantity_mismatch"] .reconcile-row')
+    if mismatch_rows.count() != 1:
+        raise AssertionError("manager inventory reconcile preview should show one mismatch")
+    decision = page.locator(
+        '[data-reconcile-decision="quantity_mismatch"][data-reconcile-index="0"]'
+    )
+    if decision.input_value() != "count_review":
+        raise AssertionError("quantity mismatch should default to count_review")
+    if not page.locator("#reconcileApplyPanel").is_visible():
+        raise AssertionError("manager should see reconcile apply controls")
+    decision.select_option("use_excel")
+    page.locator("#reconcileReasonInput").fill("site_ui_qa_reconcile")
+    page.locator("#reconcileSourceFilename").fill("site-ui-qa-stocktake.csv")
+    page.locator("#reconcileIdempotencyKey").fill(f"site-ui-qa-{int(time.time() * 1000)}")
+    page.locator("#reconcileApplyBtn").click()
+    page.wait_for_function(
+        "document.querySelector('#reconcileApplyResult')?.hidden === false",
+        timeout=10_000,
+    )
+    applied_count = page.locator("#reconcileApplySummary strong").first.inner_text()
+    if applied_count != "1":
+        raise AssertionError("manager reconcile apply summary should include one applied row")
+    assert_inventory_quantity(
+        page,
+        part_key=QA_PART_KEY,
+        location_code=QA_LOCATION_CODE,
+        quantity=5,
+    )
+    page.screenshot(path=ARTIFACT_DIR / "manager-inventory-reconcile-apply.png", full_page=True)
+
+
+def exercise_operator_inventory_reconcile_preview(page: Page, base_url: str) -> None:
+    open_inventory(page, base_url)
+    rows = [
+        {
+            "factory_id": "factory_a",
+            "part_key": QA_PART_KEY,
+            "location_code": QA_LOCATION_CODE,
+            "quantity": 4,
+        }
+    ]
+    generate_reconcile_preview(page, rows)
+    if page.locator('[data-bucket="quantity_mismatch"] .reconcile-row').count() != 1:
+        raise AssertionError("operator inventory reconcile preview should show one mismatch")
+    if page.locator(".reconcile-decision").count() != 0:
+        raise AssertionError("operator should not see reconcile decision controls")
+    if page.locator("#reconcileApplyBtn").is_visible():
+        raise AssertionError("operator should not see reconcile apply button")
+    if page.locator("#reconcileApplyPanel").is_visible():
+        raise AssertionError("operator should not see reconcile apply panel")
+    page.screenshot(path=ARTIFACT_DIR / "operator-inventory-reconcile-preview.png", full_page=True)
+
+
 def run(base_url: str, *, start: bool) -> dict[str, object]:
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     process = start_server(base_url) if start else None
@@ -170,16 +278,18 @@ def run(base_url: str, *, start: bool) -> dict[str, object]:
                 "page",
                 lambda page: page.on(
                     "console",
-                    lambda msg: console_messages.append(f"{page.url}: {msg.type}: {msg.text}")
-                    if msg.type in {"error", "warning"}
-                    else None,
+                    lambda msg: (
+                        console_messages.append(f"{page.url}: {msg.type}: {msg.text}")
+                        if msg.type in {"error", "warning"}
+                        else None
+                    ),
                 ),
             )
             page = context.new_page()
             login(page, base_url, *MANAGER)
             page.goto(f"{base_url}/inbound", wait_until="networkidle")
-            page.locator("#partKey").fill("QA-INBOUND-001")
-            page.locator("#locationCode").fill("QA-A-01")
+            page.locator("#partKey").fill(QA_PART_KEY)
+            page.locator("#locationCode").fill(QA_LOCATION_CODE)
             page.locator("#quantity").fill("3")
             page.locator("#reason").fill("site_ui_qa_inbound")
             page.locator("#submitInboundBtn").click()
@@ -190,6 +300,7 @@ def run(base_url: str, *, start: bool) -> dict[str, object]:
             if "入库完成" not in page.locator("#inboundStatus").inner_text():
                 raise AssertionError("inbound page did not complete receiving")
             page.screenshot(path=ARTIFACT_DIR / "manager-inbound.png", full_page=True)
+            exercise_manager_inventory_reconcile_apply(page, base_url)
             page.goto(f"{base_url}/outbound", wait_until="networkidle")
             page.locator("#clearOrdersBtn").click()
             if not page.locator("#queryBtn").is_disabled():
@@ -210,6 +321,7 @@ def run(base_url: str, *, start: bool) -> dict[str, object]:
                 capture_page(page, base_url, name, path)
             context.clear_cookies()
             login(page, base_url, *OPERATOR)
+            exercise_operator_inventory_reconcile_preview(page, base_url)
             for name, path in (
                 ("operator-workbench", "/workbench"),
                 ("operator-outbound", "/outbound"),

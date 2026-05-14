@@ -223,9 +223,11 @@ def main() -> None:
             timeout=10_000
         )
         with operator_mobile_page.expect_response(
-            lambda response: "/api/outbound/scan" in response.url
-            and response.request.method == "POST"
-            and response.status == 200,
+            lambda response: (
+                "/api/outbound/scan" in response.url
+                and response.request.method == "POST"
+                and response.status == 200
+            ),
             timeout=20_000,
         ):
             operator_mobile_page.locator("#outboundConfirmScanBtn").click()
