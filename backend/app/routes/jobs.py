@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from backend.app.auth import require_login
-from backend.app.config import get_settings
+from backend.app.config import ROOT_DIR, get_settings
 from backend.app.database import get_session
 from backend.app.models import Record, RecordStatus, User
 from backend.app.schemas import RecordListItem, RecordRead, RetryResponse
@@ -16,6 +16,25 @@ from backend.app.services.material_mapping import find_material_matches
 from backend.app.workers.submit_worker import enqueue_submission
 
 router = APIRouter()
+
+
+def _record_image_path(storage_ref: str) -> Path | None:
+    settings = get_settings()
+    upload_root = settings.upload_path.resolve()
+    raw_path = Path(storage_ref)
+    if raw_path.is_absolute():
+        candidate = raw_path.resolve()
+    else:
+        root_relative = (ROOT_DIR / raw_path).resolve()
+        if root_relative == upload_root or upload_root in root_relative.parents:
+            candidate = root_relative
+        else:
+            candidate = (upload_root / raw_path).resolve()
+    try:
+        candidate.relative_to(upload_root)
+    except ValueError:
+        return None
+    return candidate
 
 
 def record_barcodes(record: Record) -> list[dict[str, str]]:
@@ -152,7 +171,9 @@ def get_record_image(
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
     _require_record_access(record, user)
-    image_path = Path(record.image_path)
+    image_path = _record_image_path(record.image_path)
+    if image_path is None:
+        raise HTTPException(status_code=404, detail="image not found")
     if not image_path.exists() or not image_path.is_file():
         raise HTTPException(status_code=404, detail="image not found")
     return FileResponse(image_path)

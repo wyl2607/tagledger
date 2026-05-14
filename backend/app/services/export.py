@@ -20,6 +20,17 @@ CSV_FIELDS = [
     "updated_at",
 ]
 
+DANGEROUS_CSV_PREFIXES = {"=", "+", "-", "@"}
+
+
+def _sanitize_csv_cell(value: object) -> object:
+    if not isinstance(value, str) or not value:
+        return value
+    stripped = value.lstrip(" \t\r\n")
+    if stripped and stripped[0] in DANGEROUS_CSV_PREFIXES:
+        return f"'{value}"
+    return value
+
 
 def export_records_csv(session: Session, status: RecordStatus | None = None) -> str:
     statuses = [status] if status is not None else None
@@ -59,5 +70,5 @@ def export_records_csv_filtered(
     writer = csv.DictWriter(buffer, fieldnames=CSV_FIELDS)
     writer.writeheader()
     for record in records:
-        writer.writerow({field: getattr(record, field) for field in CSV_FIELDS})
+        writer.writerow({field: _sanitize_csv_cell(getattr(record, field)) for field in CSV_FIELDS})
     return buffer.getvalue()

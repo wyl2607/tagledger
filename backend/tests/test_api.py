@@ -665,6 +665,8 @@ def test_operator_record_reads_are_scoped_to_own_records(
     session: Session,
     tmp_path,
 ) -> None:
+    from backend.app.config import get_settings
+
     operator = create_user(
         session,
         username="history-operator",
@@ -674,9 +676,11 @@ def test_operator_record_reads_are_scoped_to_own_records(
     )
     token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
     client.cookies.set("mlocr_session", token)
-    own_image = tmp_path / "own.jpg"
+    upload_root = get_settings().upload_path
+    upload_root.mkdir(parents=True, exist_ok=True)
+    own_image = upload_root / "scoped-own.jpg"
     own_image.write_bytes(b"own image")
-    other_image = tmp_path / "other.jpg"
+    other_image = upload_root / "scoped-other.jpg"
     other_image.write_bytes(b"other image")
     own = Record(
         image_path=str(own_image),
@@ -700,13 +704,17 @@ def test_operator_record_reads_are_scoped_to_own_records(
     session.refresh(own)
     session.refresh(other)
 
-    jobs = client.get("/jobs")
-    other_jobs = client.get("/jobs", params={"operator_id": "other-operator"})
-    own_job = client.get(f"/jobs/{own.id}")
-    other_job = client.get(f"/jobs/{other.id}")
-    own_image_response = client.get(f"/records/{own.id}/image")
-    other_image_response = client.get(f"/records/{other.id}/image")
-    export = client.get("/export.csv")
+    try:
+        jobs = client.get("/jobs")
+        other_jobs = client.get("/jobs", params={"operator_id": "other-operator"})
+        own_job = client.get(f"/jobs/{own.id}")
+        other_job = client.get(f"/jobs/{other.id}")
+        own_image_response = client.get(f"/records/{own.id}/image")
+        other_image_response = client.get(f"/records/{other.id}/image")
+        export = client.get("/export.csv")
+    finally:
+        own_image.unlink(missing_ok=True)
+        other_image.unlink(missing_ok=True)
 
     assert jobs.status_code == 200
     assert [row["id"] for row in jobs.json()] == [own.id]
@@ -1260,11 +1268,85 @@ def test_export_csv_contains_records(authenticated_client: TestClient, session: 
     assert "VIN400" in response.text
 
 
+def test_export_csv_escapes_formula_injection_values(
+    authenticated_client: TestClient, session: Session
+) -> None:
+    session.add(
+        Record(
+            image_path="export-danger.jpg",
+            category=Category.A,
+            model='=HYPERLINK("http://example.com")',
+            vin_or_bin="\n+VIN-DANG",
+            serial_number="\t@SN-DANG",
+            status=RecordStatus.confirmed,
+        )
+    )
+    session.commit()
+
+    response = authenticated_client.get("/export.csv")
+
+    assert response.status_code == 200
+    assert "'=HYPERLINK" in response.text
+    assert "'\n+VIN-DANG" in response.text
+    assert "'\t@SN-DANG" in response.text
+
+
 def test_get_record_image_returns_file(
     authenticated_client: TestClient, session: Session, tmp_path
 ) -> None:
-    image_path = tmp_path / "history-image.jpg"
+    from backend.app.config import get_settings
+
+    image_path = get_settings().upload_path / "history-image.jpg"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
     image_path.write_bytes(b"fake jpeg bytes")
+    record = Record(
+        image_path=str(image_path),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    try:
+        response = authenticated_client.get(f"/records/{record.id}/image")
+    finally:
+        image_path.unlink(missing_ok=True)
+
+    assert response.status_code == 200
+    assert response.content == b"fake jpeg bytes"
+
+
+def test_get_record_image_accepts_root_relative_upload_path(
+    authenticated_client: TestClient, session: Session
+) -> None:
+    from backend.app.config import ROOT_DIR
+
+    image_path = ROOT_DIR / "data/uploads/root-relative-history-image.jpg"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"root relative image")
+    record = Record(
+        image_path="data/uploads/root-relative-history-image.jpg",
+        category=Category.A,
+        status=RecordStatus.confirmed,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    try:
+        response = authenticated_client.get(f"/records/{record.id}/image")
+    finally:
+        image_path.unlink(missing_ok=True)
+
+    assert response.status_code == 200
+    assert response.content == b"root relative image"
+
+
+def test_get_record_image_rejects_outside_upload_dir(
+    authenticated_client: TestClient, session: Session, tmp_path
+) -> None:
+    image_path = tmp_path / "outside-image.jpg"
+    image_path.write_bytes(b"outside bytes")
     record = Record(
         image_path=str(image_path),
         category=Category.A,
@@ -1276,8 +1358,7 @@ def test_get_record_image_returns_file(
 
     response = authenticated_client.get(f"/records/{record.id}/image")
 
-    assert response.status_code == 200
-    assert response.content == b"fake jpeg bytes"
+    assert response.status_code == 404
 
 
 def test_list_jobs_supports_status_limit_and_offset(
