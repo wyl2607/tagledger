@@ -172,7 +172,8 @@
         <a class="nav-button primary-entry" href="/mobile">手机捡货</a>
         <a class="nav-button" href="/outbound">出库核对</a>
         <a class="nav-button" href="/workbench">角色工作台</a>
-        <button class="nav-button" id="copyPortalLinkBtn" type="button">复制中心入口</button>
+        <button class="nav-button" data-copy-path="/" data-copy-done="已复制中心入口" type="button">复制中心入口</button>
+        <button class="nav-button" data-copy-path="/mobile" data-copy-done="已复制手机捡货" type="button">复制手机捡货</button>
       </div>
     </section>
 
@@ -294,15 +295,15 @@
       }
     }
 
-    async function copyPortalLink() {
-      const button = document.querySelector('#copyPortalLinkBtn');
+    async function copyEntryLink(event) {
+      const button = event.currentTarget;
       const originalText = button.textContent;
-      const url = `${window.location.origin}/`;
+      const url = `${window.location.origin}${button.dataset.copyPath || '/'}`;
       try {
         await navigator.clipboard.writeText(url);
-        button.textContent = '已复制中心入口';
+        button.textContent = button.dataset.copyDone || '已复制';
       } catch {
-        window.prompt('复制中心入口', url);
+        window.prompt(originalText, url);
       }
       window.setTimeout(() => {
         button.textContent = originalText;
@@ -313,7 +314,9 @@
       await AuthUI.logout();
       window.location.href = '/';
     });
-    document.querySelector('#copyPortalLinkBtn').addEventListener('click', copyPortalLink);
+    document.querySelectorAll('[data-copy-path]').forEach((button) => {
+      button.addEventListener('click', copyEntryLink);
+    });
 
     loadAccount();
     loadRuntimeStatus();
