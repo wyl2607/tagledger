@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 .omx/
 .claude/worktrees/
+scripts/windows_fleet_devices.txt
+scripts/ai_trigger_fleet_deploy.sh
 data/uploads/*
 !data/uploads/.gitkeep
 data/uploads/*.preprocessed.png

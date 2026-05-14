@@ -71,6 +71,22 @@ def create_db_and_tables() -> None:
                     "ON signoff_pairing_keys(last_previewed_at)"
                 )
             )
+        inventory_movement_columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(inventory_movements)")).fetchall()
+        }
+        if inventory_movement_columns:
+            if "idempotency_key" not in inventory_movement_columns:
+                conn.execute(
+                    text("ALTER TABLE inventory_movements ADD COLUMN idempotency_key TEXT")
+                )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_inventory_movements_inbound_idempotency "
+                    "ON inventory_movements(movement_type, operator_id, idempotency_key) "
+                    "WHERE idempotency_key IS NOT NULL"
+                )
+            )
 
 
 def get_session() -> Generator[Session, None, None]:

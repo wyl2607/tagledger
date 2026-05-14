@@ -1,7 +1,9 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from backend.app.models import InventoryLocation, InventoryMovement
+from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
+from backend.app.services import outbound_reconciliation
 from backend.app.services.auth_service import (
     CSRF_COOKIE,
     CSRF_HEADER,
@@ -9,6 +11,8 @@ from backend.app.services.auth_service import (
     create_session,
     create_user,
 )
+from backend.app.services.inventory_excel import parse_inventory_file_rows
+from backend.app.services.inventory_service import recommend_inventory_picks
 
 
 def _login_supervisor(client: TestClient, session: Session) -> None:
@@ -25,18 +29,43 @@ def _login_supervisor(client: TestClient, session: Session) -> None:
     client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
 
 
+def _login_operator(
+    client: TestClient, session: Session, username: str = "inventory-operator"
+) -> None:
+    user = create_user(
+        session,
+        username=username,
+        display_name="Inventory Operator",
+        password=f"{username}-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, "pytest-csrf-token")
+    client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
+
+
+def _login_user(client: TestClient, session: Session, user) -> None:
+    token, _ = create_session(session, user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, "pytest-csrf-token")
+    client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
+
+
 def _seed_location(
     session: Session,
     *,
     part_key: str,
     location_code: str,
     quantity: int,
+    part_name: str | None = None,
     location_kind: str = "permanent",
     factory_id: str = "factory_a",
 ) -> InventoryLocation:
     row = InventoryLocation(
         factory_id=factory_id,
         part_key=part_key,
+        part_name=part_name,
         location_code=location_code,
         quantity=quantity,
         status="active" if quantity > 0 else "zero_stock",
@@ -68,6 +97,709 @@ def test_inventory_accepts_legacy_long_term_locations(
     location = response.json()["locations"][0]
     assert location["id"] == row.id
     assert location["location_kind"] == "permanent"
+
+
+def test_inventory_locations_include_location_profile(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122102",
+        location_code="A-A01-011",
+        quantity=4,
+        location_kind="permanent",
+    )
+
+    response = client.get("/api/inventory/locations")
+
+    assert response.status_code == 200
+    location = response.json()["locations"][0]
+    assert location["location_code"] == "A-A01-011"
+    assert location["location_profile"]["parse_status"] == "standard"
+    assert location["location_profile"]["zone"] == "A"
+    assert location["location_profile"]["aisle_or_column"] == "A"
+    assert location["location_profile"]["rack_index"] == 1
+    assert location["location_profile"]["level"] == 1
+    assert location["location_profile"]["depth"] == 1
+    assert location["location_profile"]["centerline_rank"] == 1
+
+
+def test_inventory_location_map_requires_login(client: TestClient) -> None:
+    response = client.get("/api/inventory/location-map")
+
+    assert response.status_code == 401
+
+
+def test_inventory_reconcile_preview_requires_login(client: TestClient) -> None:
+    client.cookies.set(CSRF_COOKIE, "anonymous-csrf-token")
+    client.headers.update({CSRF_HEADER: "anonymous-csrf-token"})
+    response = client.post(
+        "/api/inventory/reconcile/preview",
+        json={"rows": [{"part_key": "CPXS000122901", "location_code": "A-A01-001", "quantity": 1}]},
+    )
+
+    assert response.status_code == 401
+
+
+def test_inventory_location_map_allows_operator_login(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122104",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    response = client.get("/api/inventory/location-map")
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["standard_location_count"] == 1
+
+
+def test_inventory_locations_require_login_and_allow_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _seed_location(
+        session,
+        part_key="CPXS000122105",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    assert client.get("/api/inventory/locations").status_code == 401
+
+    _login_operator(client, session)
+    response = client.get("/api/inventory/locations")
+
+    assert response.status_code == 200
+    assert response.json()["locations"][0]["part_key"] == "CPXS000122105"
+
+
+def test_inventory_location_map_endpoint_returns_aggregated_cells(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122103",
+        part_name="Mapped Part",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    response = client.get("/api/inventory/location-map")
+
+    assert response.status_code == 200
+    payload = response.json()
+    cell = payload["zones"]["A"]["columns"]["A"]["racks"]["1"]["levels"]["1"]["depths"]["1"]
+    assert cell["location_code"] == "A-A01-011"
+    assert cell["location_profile"]["parse_status"] == "standard"
+    assert cell["materials"] == [
+        {"part_key": "CPXS000122103", "part_name": "Mapped Part", "quantity": 4}
+    ]
+
+
+def test_inventory_reconcile_preview_classifies_rows_and_is_read_only(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-preview-operator")
+    _seed_location(
+        session,
+        part_key="CPXS000122201",
+        location_code="A-A01-011",
+        quantity=10,
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122202",
+        location_code="A-A01-012",
+        quantity=5,
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122203",
+        location_code="A-A01-013",
+        quantity=2,
+    )
+
+    location_count_before = session.exec(select(InventoryLocation)).all()
+    movement_count_before = session.exec(select(InventoryMovement)).all()
+    audit_count_before = session.exec(select(AuditLog)).all()
+
+    response = client.post(
+        "/api/inventory/reconcile/preview",
+        json={
+            "rows": [
+                {
+                    "factory_id": "factory_a",
+                    "part_key": "CPXS000122201",
+                    "location_code": "A-A01-011",
+                    "quantity": 10,
+                },
+                {
+                    "factory_id": "factory_a",
+                    "part_key": "CPXS000122202",
+                    "location_code": "A-A01-012",
+                    "quantity": 7,
+                },
+                {
+                    "factory_id": "factory_a",
+                    "part_key": "CPXS000122204",
+                    "location_code": "A-A01-014",
+                    "quantity": 3,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "matched_count": 1,
+        "quantity_mismatch_count": 1,
+        "excel_missing_count": 1,
+        "excel_new_count": 1,
+    }
+    assert payload["matched"][0]["part_key"] == "CPXS000122201"
+    mismatch = payload["quantity_mismatch"][0]
+    assert mismatch["part_key"] == "CPXS000122202"
+    assert mismatch["system_quantity"] == 5
+    assert mismatch["excel_quantity"] == 7
+    assert mismatch["delta"] == 2
+    assert payload["excel_missing"][0]["part_key"] == "CPXS000122203"
+    assert payload["excel_new"][0]["part_key"] == "CPXS000122204"
+
+    assert len(session.exec(select(InventoryLocation)).all()) == len(location_count_before)
+    assert len(session.exec(select(InventoryMovement)).all()) == len(movement_count_before)
+    assert len(session.exec(select(AuditLog)).all()) == len(audit_count_before)
+    stored = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122202")
+    ).one()
+    assert stored.quantity == 5
+
+
+def test_inventory_reconcile_apply_requires_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-reconcile-operator")
+    _seed_location(
+        session,
+        part_key="CPXS000122210",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-operator-blocked",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122210",
+                    "location_code": "A-A01-011",
+                    "excel_quantity": 7,
+                    "system_quantity": 5,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_inventory_reconcile_apply_updates_confirmed_mismatch_and_audits(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122211",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-adjust-001",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122211",
+                    "location_code": "A-A01-011",
+                    "excel_quantity": 7,
+                    "system_quantity": 5,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "applied_count": 1,
+        "audit_only_count": 0,
+        "skipped_count": 0,
+    }
+    result = payload["results"][0]
+    assert result["status"] == "applied"
+    assert result["before_qty"] == 5
+    assert result["after_qty"] == 7
+    assert result["movement"]["movement_type"] == "reconcile_adjust"
+
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122211")
+    ).one()
+    assert location.quantity == 7
+    movement = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122211")
+    ).one()
+    assert movement.quantity_delta == 2
+    assert movement.operator_id == "inventory-supervisor"
+    assert movement.reason == "daily stocktake; source=stocktake.csv"
+    audit = session.exec(
+        select(AuditLog).where(AuditLog.action == "inventory.reconcile.apply")
+    ).one()
+    assert audit.actor_username == "inventory-supervisor"
+    assert audit.target_type == "inventory_reconcile"
+    assert "stocktake.csv" in (audit.detail_json or "")
+    assert "stocktake-adjust-001" in (audit.detail_json or "")
+
+
+def test_inventory_reconcile_apply_rejects_duplicate_idempotency_key(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122214",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+    payload = {
+        "idempotency_key": "stocktake-adjust-duplicate",
+        "source_filename": "stocktake.csv",
+        "reason": "daily stocktake",
+        "decisions": [
+            {
+                "category": "quantity_mismatch",
+                "decision": "use_excel",
+                "part_key": "CPXS000122214",
+                "location_code": "A-A01-011",
+                "excel_quantity": 7,
+                "system_quantity": 5,
+            }
+        ],
+    }
+
+    first = client.post("/api/inventory/reconcile/apply", json=payload)
+    second = client.post("/api/inventory/reconcile/apply", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["detail"] == "duplicate reconcile apply request"
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122214")
+    ).one()
+    assert location.quantity == 7
+    assert (
+        len(
+            session.exec(
+                select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122214")
+            ).all()
+        )
+        == 1
+    )
+
+
+def test_inventory_reconcile_apply_rejects_duplicate_idempotency_key_across_users(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122216",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+    payload = {
+        "idempotency_key": "stocktake-adjust-cross-user",
+        "source_filename": "stocktake.csv",
+        "reason": "daily stocktake",
+        "decisions": [
+            {
+                "category": "quantity_mismatch",
+                "decision": "use_excel",
+                "part_key": "CPXS000122216",
+                "location_code": "A-A01-011",
+                "excel_quantity": 7,
+                "system_quantity": 5,
+            }
+        ],
+    }
+    first = client.post("/api/inventory/reconcile/apply", json=payload)
+    second_user = create_user(
+        session,
+        username="inventory-reconcile-supervisor-two",
+        display_name="Inventory Reconcile Supervisor Two",
+        password="inventory-reconcile-supervisor-two-pass",
+        role="supervisor",
+    )
+    _login_user(client, session, second_user)
+
+    second = client.post("/api/inventory/reconcile/apply", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["detail"] == "duplicate reconcile apply request"
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122216")
+    ).one()
+    assert location.quantity == 7
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122216")
+    ).all()
+    assert len(movements) == 1
+
+
+def test_inventory_reconcile_apply_requires_preview_system_quantity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122215",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-missing-system-quantity",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122215",
+                    "location_code": "A-A01-011",
+                    "excel_quantity": 7,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "system_quantity is required for use_excel"
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122215")
+    ).one()
+    assert location.quantity == 5
+
+
+def test_inventory_reconcile_apply_audits_non_destructive_decisions(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122212",
+        location_code="A-A01-012",
+        quantity=4,
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-audit-only-001",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "excel_missing",
+                    "decision": "mark_excel_missing",
+                    "part_key": "CPXS000122212",
+                    "location_code": "A-A01-012",
+                    "system_quantity": 4,
+                },
+                {
+                    "category": "excel_new",
+                    "decision": "mark_excel_new",
+                    "part_key": "CPXS000122213",
+                    "location_code": "TMP-09",
+                    "excel_quantity": 2,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "applied_count": 0,
+        "audit_only_count": 2,
+        "skipped_count": 0,
+    }
+    assert {row["status"] for row in payload["results"]} == {"audit_only"}
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122212")
+    ).one()
+    assert location.quantity == 4
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122213")
+        ).first()
+        is None
+    )
+    assert session.exec(select(InventoryMovement)).all() == []
+    audits = session.exec(
+        select(AuditLog)
+        .where(AuditLog.action == "inventory.reconcile.apply")
+        .order_by(AuditLog.id.asc())
+    ).all()
+    assert all((row.target_id or "").startswith("reconcile:") for row in audits)
+    assert audits[0].target_id != audits[1].target_id
+    assert "stocktake-audit-only-001" in (audits[0].detail_json or "")
+    assert "excel_missing" in (audits[0].detail_json or "")
+    assert "excel_new" in (audits[1].detail_json or "")
+
+
+def test_inventory_csv_file_rows_parse_required_columns() -> None:
+    rows = parse_inventory_file_rows(
+        filename="inventory.csv",
+        content=(
+            b"\xef\xbb\xbffactory_id,part_key,location_code,quantity\n"
+            b"factory_a,C.P.XS.000122301,A-A01-011,10\n"
+            b",CPXS000122302,TMP-01,2\n"
+        ),
+    )
+
+    assert rows == [
+        {
+            "factory_id": "factory_a",
+            "part_key": "C.P.XS.000122301",
+            "location_code": "A-A01-011",
+            "quantity": 10,
+        },
+        {
+            "part_key": "CPXS000122302",
+            "location_code": "TMP-01",
+            "quantity": 2,
+        },
+    ]
+
+
+def test_inventory_xlsx_file_rows_parse_when_openpyxl_available() -> None:
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["part_key", "location_code", "quantity", "factory_id"])
+    sheet.append(["CPXS000122303", "A-A01-012", 5, "factory_b"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    rows = parse_inventory_file_rows(filename="inventory.xlsx", content=buffer.getvalue())
+
+    assert rows == [
+        {
+            "factory_id": "factory_b",
+            "part_key": "CPXS000122303",
+            "location_code": "A-A01-012",
+            "quantity": 5,
+        }
+    ]
+
+
+def test_inventory_file_rows_reject_fractional_quantity() -> None:
+    with pytest.raises(RuntimeError, match="quantity must be an integer"):
+        parse_inventory_file_rows(
+            filename="inventory.csv",
+            content=b"part_key,location_code,quantity\nCPXS000122304,A-A01-011,1.5\n",
+        )
+
+
+def test_inventory_file_rows_accept_zero_quantity() -> None:
+    rows = parse_inventory_file_rows(
+        filename="inventory.csv",
+        content=b"part_key,location_code,quantity\nCPXS000122305,A-A01-011,0\n",
+    )
+
+    assert rows == [
+        {
+            "part_key": "CPXS000122305",
+            "location_code": "A-A01-011",
+            "quantity": 0,
+        }
+    ]
+
+
+def test_pick_recommendations_prioritize_temporary_then_smallest_quantity_then_sort_key(
+    session: Session,
+) -> None:
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="A-A01-013",
+        quantity=8,
+        location_kind="permanent",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="TMP-02",
+        quantity=4,
+        location_kind="temporary",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="TMP-01",
+        quantity=2,
+        location_kind="temporary",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122301",
+        location_code="A-A01-011",
+        quantity=2,
+        location_kind="permanent",
+    )
+
+    payload = recommend_inventory_picks(
+        session=session,
+        part_key="C.P.XS.000122301",
+        quantity=7,
+        factory_id="factory_a",
+    )
+
+    assert payload["insufficient"] is False
+    assert payload["total_available"] == 16
+    assert [
+        (
+            row["location_code"],
+            row["location_kind"],
+            row["available_quantity"],
+            row["pick_quantity"],
+        )
+        for row in payload["recommendations"]
+    ] == [
+        ("TMP-01", "temporary", 2, 2),
+        ("TMP-02", "temporary", 4, 4),
+        ("A-A01-011", "permanent", 2, 1),
+    ]
+
+
+def test_pick_recommendations_are_read_only_and_report_shortage(
+    session: Session,
+) -> None:
+    location = _seed_location(
+        session,
+        part_key="CPXS000122302",
+        location_code="TMP-03",
+        quantity=3,
+        location_kind="temporary",
+    )
+    location_count_before = len(session.exec(select(InventoryLocation)).all())
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    payload = recommend_inventory_picks(
+        session=session,
+        part_key="CPXS000122302",
+        quantity=5,
+    )
+
+    assert payload["insufficient"] is True
+    assert payload["shortage_quantity"] == 2
+    assert payload["recommendations"][0]["pick_quantity"] == 3
+    stored = session.get(InventoryLocation, location.id)
+    assert stored is not None
+    assert stored.quantity == 3
+    assert len(session.exec(select(InventoryLocation)).all()) == location_count_before
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
+
+
+def test_operator_can_move_inventory_and_is_recorded_as_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-mover")
+    source = _seed_location(
+        session,
+        part_key="CPXS000122106",
+        location_code="A-A01-011",
+        quantity=8,
+        location_kind="permanent",
+    )
+
+    response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": source.id,
+            "target_location_code": "A-A01-012",
+            "quantity": 3,
+            "target_location_kind": "permanent",
+            "reason": "operator shelf transfer",
+        },
+    )
+
+    assert response.status_code == 200
+    movement_ids = [row["operator_id"] for row in response.json()["movements"]]
+    assert movement_ids == ["inventory-mover", "inventory-mover"]
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122106")
+    ).all()
+    assert {row.operator_id for row in movements} == {"inventory-mover"}
+
+
+def test_operator_cannot_manually_adjust_inventory_quantity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session)
+    row = _seed_location(
+        session,
+        part_key="CPXS000122107",
+        location_code="A-A01-011",
+        quantity=4,
+    )
+
+    response = client.patch(
+        f"/api/inventory/locations/{row.id}",
+        json={"quantity": 6, "reason": "operator correction attempt"},
+    )
+
+    assert response.status_code == 403
+    stored = session.get(InventoryLocation, row.id)
+    assert stored is not None
+    assert stored.quantity == 4
 
 
 def test_inventory_adjust_preserves_pending_status(
@@ -221,6 +953,173 @@ def test_inventory_move_updates_both_locations_and_preserves_movements(
     assert sorted(row.movement_type for row in movements) == ["manual_move_in", "manual_move_out"]
 
 
+def test_inventory_move_retire_empty_temporary_and_keeps_empty_permanent_visible(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-empty-visibility-operator")
+    temporary_source = _seed_location(
+        session,
+        part_key="CPXS000122014",
+        location_code="TMP-14",
+        quantity=3,
+        location_kind="temporary",
+    )
+    permanent_source = _seed_location(
+        session,
+        part_key="CPXS000122015",
+        location_code="A-A01-011",
+        quantity=2,
+        location_kind="permanent",
+    )
+
+    temporary_response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": temporary_source.id,
+            "target_location_code": "A-A01-012",
+            "quantity": 3,
+            "target_location_kind": "permanent",
+            "reason": "整理库位",
+        },
+    )
+    permanent_response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": permanent_source.id,
+            "target_location_code": "A-A01-013",
+            "quantity": 2,
+            "target_location_kind": "permanent",
+            "reason": "整理库位",
+        },
+    )
+
+    assert temporary_response.status_code == 200
+    assert permanent_response.status_code == 200
+    assert temporary_response.json()["source_location"]["status"] == "retired"
+    assert temporary_response.json()["source_location"]["visible"] is False
+    assert permanent_response.json()["source_location"]["status"] == "zero_stock"
+    assert permanent_response.json()["source_location"]["visible"] is True
+    assert permanent_response.json()["source_location"]["restock_required"] is True
+
+    list_response = client.get("/api/inventory/locations")
+    assert list_response.status_code == 200
+    visible_locations = {
+        (row["part_key"], row["location_code"]): row for row in list_response.json()["locations"]
+    }
+    assert ("CPXS000122014", "TMP-14") not in visible_locations
+    permanent_empty = visible_locations[("CPXS000122015", "A-A01-011")]
+    assert permanent_empty["restock_required"] is True
+
+    map_response = client.get("/api/inventory/location-map")
+    assert map_response.status_code == 200
+    map_payload = map_response.json()
+    assert map_payload["summary"]["temporary_location_count"] == 0
+    assert map_payload["summary"]["restock_required_count"] == 1
+    restock_cell = map_payload["zones"]["A"]["columns"]["A"]["racks"]["1"]["levels"]["1"]["depths"][
+        "1"
+    ]
+    assert restock_cell["location_code"] == "A-A01-011"
+    assert restock_cell["restock_required"] is True
+
+    hidden_response = client.get("/api/inventory/locations", params={"include_hidden": "true"})
+    assert hidden_response.status_code == 200
+    hidden_rows = {
+        (row["part_key"], row["location_code"]): row for row in hidden_response.json()["locations"]
+    }
+    assert hidden_rows[("CPXS000122014", "TMP-14")]["status"] == "retired"
+    assert hidden_rows[("CPXS000122014", "TMP-14")]["visible"] is False
+
+
+def test_inventory_move_rejects_quantity_above_source_stock(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-overmove-operator")
+    source = _seed_location(
+        session,
+        part_key="CPXS000122040",
+        location_code="A-40",
+        quantity=10,
+        location_kind="permanent",
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122040",
+        location_code="B-40",
+        quantity=2,
+        location_kind="permanent",
+    )
+
+    response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": source.id,
+            "target_location_code": "B-40",
+            "quantity": 12,
+            "target_location_kind": "permanent",
+            "reason": "over-count attempt",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "insufficient inventory"
+    stored_source = session.get(InventoryLocation, source.id)
+    assert stored_source is not None
+    assert stored_source.quantity == 10
+    stored_target = session.exec(
+        select(InventoryLocation).where(
+            InventoryLocation.part_key == "CPXS000122040",
+            InventoryLocation.location_code == "B-40",
+        )
+    ).one()
+    assert stored_target.quantity == 2
+    assert session.exec(select(InventoryMovement)).all() == []
+
+
+def test_inventory_move_rejects_cross_factory_operator_source(
+    client: TestClient,
+    session: Session,
+) -> None:
+    operator = create_user(
+        session,
+        username="inventory-factory-a-operator",
+        display_name="Factory A Operator",
+        password="inventory-factory-a-operator-pass",
+        role="operator",
+    )
+    operator.factory_id = "factory_a"
+    session.add(operator)
+    session.commit()
+    _login_user(client, session, operator)
+    source = _seed_location(
+        session,
+        factory_id="factory_b",
+        part_key="CPXS000122041",
+        location_code="B-41",
+        quantity=5,
+        location_kind="permanent",
+    )
+
+    response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": source.id,
+            "target_location_code": "B-42",
+            "quantity": 3,
+            "target_location_kind": "permanent",
+            "reason": "cross factory attempt",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "source location is outside your factory"
+    stored = session.get(InventoryLocation, source.id)
+    assert stored is not None
+    assert stored.quantity == 5
+    assert session.exec(select(InventoryMovement)).all() == []
+
+
 def test_inventory_move_rejects_same_location(
     client: TestClient,
     session: Session,
@@ -249,17 +1148,264 @@ def test_inventory_move_rejects_same_location(
     assert response.json()["detail"] == "target location must differ from source location"
 
 
-def test_inventory_api_requires_supervisor(client: TestClient, session: Session) -> None:
-    operator = create_user(
-        session,
-        username="inventory-operator",
-        display_name="Inventory Operator",
-        password="inventory-operator-pass",
-        role="operator",
-    )
-    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
-    client.cookies.set(SESSION_COOKIE, token)
-    client.cookies.set(CSRF_COOKIE, "pytest-csrf-token")
-    client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
+def test_outbound_inbound_returns_quantity_on_hand_and_records_movement(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
 
-    assert client.get("/api/inventory/locations").status_code == 403
+    response = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122006",
+            "location_code": "QA-IN-06",
+            "quantity": 7,
+            "operator_id": "spoofed-operator",
+            "reason": "purchase_inbound_test",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["updated"] is True
+    assert payload["location"]["quantity"] == 7
+    assert payload["location"]["quantity_on_hand"] == 7
+    assert payload["movement"]["movement_type"] == "inbound"
+    assert payload["movement"]["before_qty"] == 0
+    assert payload["movement"]["after_qty"] == 7
+    assert payload["movement"]["operator_id"] == "inventory-supervisor"
+    movement = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122006")
+    ).one()
+    assert movement.operator_id == "inventory-supervisor"
+    assert movement.reason == "purchase_inbound_test"
+
+
+def test_outbound_inbound_rejects_non_positive_quantity(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+
+    for quantity in (0, -3):
+        response = client.post(
+            "/api/outbound/inventory/inbound",
+            json={
+                "part_key": "CPXS000122007",
+                "location_code": "QA-IN-07",
+                "quantity": quantity,
+            },
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "quantity must be > 0"
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122007")
+        ).first()
+        is None
+    )
+
+
+def test_outbound_inbound_rolls_back_location_when_movement_fails(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    _login_supervisor(client, session)
+
+    def fail_movement(*args, **kwargs):
+        raise RuntimeError("movement write failed")
+
+    monkeypatch.setattr(outbound_reconciliation, "_record_inventory_movement", fail_movement)
+
+    response = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122008",
+            "location_code": "QA-IN-08",
+            "quantity": 4,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "movement write failed"
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122008")
+        ).first()
+        is None
+    )
+    assert session.exec(select(InventoryMovement)).all() == []
+
+
+def test_outbound_inbound_idempotency_key_prevents_duplicate_stock_moves(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    payload = {
+        "part_key": "CPXS000122009",
+        "location_code": "QA-IN-09",
+        "quantity": 6,
+        "reason": "purchase_inbound_test",
+        "idempotency_key": "inbound-click-001",
+    }
+
+    first = client.post("/api/outbound/inventory/inbound", json=payload)
+    second = client.post("/api/outbound/inventory/inbound", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["created"] is True
+    assert second.json()["created"] is False
+    assert first.json()["movement"]["id"] == second.json()["movement"]["id"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122009")
+    ).one()
+    assert location.quantity == 6
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122009")
+    ).all()
+    assert len(movements) == 1
+    audits = session.exec(select(AuditLog).where(AuditLog.action == "inventory.inbound")).all()
+    assert len(audits) == 1
+
+
+def test_outbound_inbound_idempotency_key_rejects_changed_payload(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    first = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122010",
+            "location_code": "QA-IN-10",
+            "quantity": 3,
+            "reason": "purchase_inbound_test",
+            "idempotency_key": "inbound-click-002",
+        },
+    )
+    changed = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122010",
+            "location_code": "QA-IN-10",
+            "quantity": 4,
+            "reason": "purchase_inbound_test",
+            "idempotency_key": "inbound-click-002",
+        },
+    )
+
+    assert first.status_code == 200
+    assert changed.status_code == 409
+    assert "idempotency_key reused with different inbound payload" in changed.json()["detail"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122010")
+    ).one()
+    assert location.quantity == 3
+
+
+def test_outbound_inbound_rejects_overlong_idempotency_key(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+
+    response = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122099",
+            "location_code": "QA-IN-99",
+            "quantity": 3,
+            "reason": "purchase_inbound_test",
+            "idempotency_key": "x" * 121,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "idempotency_key must be <= 120 characters"
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122099")
+        ).first()
+        is None
+    )
+
+
+def test_outbound_inbound_blank_idempotency_key_is_treated_as_missing(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    payload = {
+        "part_key": "CPXS000122011",
+        "location_code": "QA-IN-11",
+        "quantity": 5,
+        "reason": "purchase_inbound_test",
+        "idempotency_key": "   ",
+    }
+
+    first = client.post("/api/outbound/inventory/inbound", json=payload)
+    second = client.post("/api/outbound/inventory/inbound", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["movement"]["id"] != second.json()["movement"]["id"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122011")
+    ).one()
+    assert location.quantity == 10
+
+
+def test_outbound_inbound_idempotency_key_is_scoped_by_operator(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    payload = {
+        "part_key": "CPXS000122012",
+        "location_code": "QA-IN-12",
+        "quantity": 5,
+        "reason": "purchase_inbound_test",
+        "idempotency_key": "shared-inbound-click",
+    }
+    first = client.post("/api/outbound/inventory/inbound", json=payload)
+    second_user = create_user(
+        session,
+        username="inventory-supervisor-two",
+        display_name="Inventory Supervisor Two",
+        password="inventory-supervisor-two-pass",
+        role="supervisor",
+    )
+    token, _ = create_session(session, second_user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set(SESSION_COOKIE, token)
+
+    second = client.post("/api/outbound/inventory/inbound", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["movement"]["id"] != second.json()["movement"]["id"]
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122012")
+    ).one()
+    assert location.quantity == 10
+
+
+def test_inventory_manual_adjust_requires_supervisor(client: TestClient, session: Session) -> None:
+    _login_operator(client, session)
+    row = _seed_location(
+        session,
+        part_key="CPXS000122013",
+        location_code="QA-IN-13",
+        quantity=5,
+    )
+
+    assert (
+        client.patch(
+            f"/api/inventory/locations/{row.id}",
+            json={"quantity": 6, "reason": "operator adjustment blocked"},
+        ).status_code
+        == 403
+    )

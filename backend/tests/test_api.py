@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from backend.app.models import Category, Record, RecordStatus
 from backend.app.services.auth_service import CSRF_COOKIE, CSRF_HEADER, create_session, create_user
@@ -15,8 +15,12 @@ STATIC_UI_PAGES = [
     Path("backend/app/static/login.html"),
     Path("backend/app/static/setup.html"),
     Path("backend/app/static/admin.html"),
+    Path("backend/app/static/dashboard.html"),
+    Path("backend/app/static/history.html"),
     Path("backend/app/static/mobile.html"),
     Path("backend/app/static/inventory.html"),
+    Path("backend/app/static/inbound.html"),
+    Path("backend/app/static/material-catalog.html"),
     Path("backend/app/static/outbound.html"),
     Path("backend/app/static/transfers.html"),
     Path("backend/app/static/signoff.html"),
@@ -50,6 +54,23 @@ def test_database_url_can_be_overridden_for_isolated_runs(
     assert settings.database_path == tmp_path / "isolated.db"
 
 
+def test_lan_pairing_flags_can_be_overridden_for_factory_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app import config as config_module
+
+    config_module.get_settings.cache_clear()
+    monkeypatch.setenv("TAGLEDGER_PAIRING_ENABLED", "0")
+    monkeypatch.setenv("TAGLEDGER_LAN_GUARD_ENABLED", "false")
+    try:
+        settings = config_module.get_settings()
+    finally:
+        config_module.get_settings.cache_clear()
+
+    assert settings.pairing_enabled is False
+    assert settings.lan_guard_enabled is False
+
+
 def test_database_url_normalization_supports_alembic() -> None:
     from backend.app.config import Settings, normalize_database_url
 
@@ -75,6 +96,8 @@ def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestC
     assert isinstance(payload["enable_barcode"], bool)
     assert isinstance(payload["enable_saas_submit"], bool)
     assert isinstance(payload["dry_run"], bool)
+    assert isinstance(payload["lan_guard_enabled"], bool)
+    assert isinstance(payload["pairing_enabled"], bool)
     assert payload["mobile_url"].endswith("/mobile")
     assert payload["history_url"].endswith("/history")
 
@@ -202,7 +225,235 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "text/html" in response.headers["content-type"]
     assert 'data-i18n="inventory.title"' in response.text
     assert "/api/inventory/locations" in response.text
+    assert "/api/inventory/location-map" in response.text
+    assert 'id="locationMap"' in response.text
     assert "/api/inventory/move" in response.text
+    assert 'id="adjustmentPanel" hidden' in response.text
+    assert "AuthUI.hasCapability(user, 'can_manage_inventory')" in response.text
+    assert "renderBuckets" in response.text
+    assert "temporary" in response.text
+    assert "upstairs" in response.text
+    assert "unresolved" in response.text
+    assert 'id="reconcileRowsInput"' in response.text
+    assert 'id="reconcilePreviewBtn"' in response.text
+    assert "/api/inventory/reconcile/preview" in response.text
+    assert 'id="reconcileFileInput"' in response.text
+    assert 'id="reconcileFilePreviewBtn"' in response.text
+    assert "/api/inventory/reconcile/preview-file" in response.text
+    assert "generateReconcilePreviewFromFile" in response.text
+    assert "renderReconcileFileMeta" in response.text
+    assert "reconcileFileErrorMessage" in response.text
+    assert "renderReconcilePreview" in response.text
+    assert "matched" in response.text
+    assert "quantity_mismatch" in response.text
+    assert "excel_missing" in response.text
+    assert "excel_new" in response.text
+    assert "system_quantity" in response.text
+    assert "excel_quantity" in response.text
+    assert "delta" in response.text
+    assert 'id="reconcileApplyPanel" hidden' in response.text
+    assert 'id="reconcileApplyBtn"' in response.text
+    assert 'id="reconcileReasonInput"' in response.text
+    assert 'id="reconcileIdempotencyKey"' in response.text
+    assert 'id="reconcileApplyResult"' in response.text
+    assert "/api/inventory/reconcile/apply" in response.text
+    assert "buildReconcileApplyDecisions" in response.text
+    assert "reconcileApplyPanel.hidden = !userCanManageInventory" in response.text
+    assert "inventory.reconcile.apply.permission" in response.text
+    assert 'id="pickPartInput"' in response.text
+    assert 'id="pickQuantityInput"' in response.text
+    assert 'id="pickRecommendationBtn"' in response.text
+    assert "/api/inventory/pick-recommendations" in response.text
+    assert "renderPickRecommendations" in response.text
+    assert "pick_quantity" in response.text
+    assert "available_quantity" in response.text
+    assert "location_kind" in response.text
+    assert "insufficient" in response.text
+    assert "shortage_quantity" in response.text
+
+
+def test_inventory_reconcile_preview_api_requires_login(client: TestClient) -> None:
+    client.cookies.set(CSRF_COOKIE, "anonymous-csrf-token")
+    client.headers.update({CSRF_HEADER: "anonymous-csrf-token"})
+    response = client.post(
+        "/api/inventory/reconcile/preview",
+        json={"rows": [{"part_key": "CPXS000122999", "location_code": "A-A01-001", "quantity": 1}]},
+    )
+
+    assert response.status_code == 401
+
+
+def test_inventory_reconcile_preview_file_requires_login(client: TestClient) -> None:
+    client.cookies.set(CSRF_COOKIE, "anonymous-csrf-token")
+    client.headers.update({CSRF_HEADER: "anonymous-csrf-token"})
+    response = client.post(
+        "/api/inventory/reconcile/preview-file",
+        files={"file": ("inventory.csv", b"part_key,location_code,quantity\nP1,A-01,1\n")},
+    )
+
+    assert response.status_code == 401
+
+
+def test_inventory_reconcile_preview_file_reuses_preview_and_is_read_only(
+    authenticated_client: TestClient,
+    session: Session,
+) -> None:
+    from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
+
+    location = InventoryLocation(
+        factory_id="factory_a",
+        part_key="CPXS000122304",
+        part_name="Preview File Part",
+        location_code="A-A01-011",
+        quantity=4,
+        status="active",
+        zero_stock=False,
+        location_kind="permanent",
+    )
+    session.add(location)
+    session.commit()
+    location_count_before = len(session.exec(select(InventoryLocation)).all())
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    response = authenticated_client.post(
+        "/api/inventory/reconcile/preview-file",
+        files={
+            "file": (
+                "inventory.csv",
+                b"factory_id,part_key,location_code,quantity\n"
+                b"factory_a,C.P.XS.000122304,A-A01-011,6\n"
+                b"factory_a,CPXS000122305,TMP-02,3\n",
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parsed_row_count"] == 2
+    mismatch = payload["quantity_mismatch"][0]
+    assert mismatch["part_key"] == "CPXS000122304"
+    assert mismatch["system_quantity"] == 4
+    assert mismatch["excel_quantity"] == 6
+    assert payload["excel_new"][0]["part_key"] == "CPXS000122305"
+    assert len(session.exec(select(InventoryLocation)).all()) == location_count_before
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
+    stored = session.get(InventoryLocation, location.id)
+    assert stored is not None
+    assert stored.quantity == 4
+
+
+def test_inventory_reconcile_preview_file_rejects_malformed_content(
+    authenticated_client: TestClient,
+) -> None:
+    response = authenticated_client.post(
+        "/api/inventory/reconcile/preview-file",
+        files={"file": ("inventory.csv", b"\xff\xfe\x00not-valid-utf8")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid inventory file"
+
+
+def test_inventory_pick_recommendations_require_login(client: TestClient) -> None:
+    response = client.get(
+        "/api/inventory/pick-recommendations",
+        params={"part_key": "CPXS000122399", "quantity": 1},
+    )
+
+    assert response.status_code == 401
+
+
+def test_inventory_pick_recommendations_api_returns_ordered_read_only_plan(
+    authenticated_client: TestClient,
+    session: Session,
+) -> None:
+    from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
+
+    locations = [
+        InventoryLocation(
+            factory_id="factory_a",
+            part_key="CPXS000122303",
+            part_name="Pick Part",
+            location_code="A-A01-012",
+            quantity=5,
+            status="active",
+            zero_stock=False,
+            location_kind="permanent",
+        ),
+        InventoryLocation(
+            factory_id="factory_a",
+            part_key="CPXS000122303",
+            part_name="Pick Part",
+            location_code="TMP-10",
+            quantity=2,
+            status="active",
+            zero_stock=False,
+            location_kind="temporary",
+        ),
+        InventoryLocation(
+            factory_id="factory_b",
+            part_key="CPXS000122303",
+            part_name="Other Factory Pick Part",
+            location_code="TMP-01",
+            quantity=1,
+            status="active",
+            zero_stock=False,
+            location_kind="temporary",
+        ),
+    ]
+    session.add_all(locations)
+    session.commit()
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    response = authenticated_client.get(
+        "/api/inventory/pick-recommendations",
+        params={
+            "factory_id": "factory_a",
+            "part_key": "C.P.XS.000122303",
+            "quantity": 4,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["factory_id"] == "factory_a"
+    assert payload["part_key"] == "CPXS000122303"
+    assert payload["requested_quantity"] == 4
+    assert payload["insufficient"] is False
+    assert [(row["location_code"], row["pick_quantity"]) for row in payload["recommendations"]] == [
+        ("TMP-10", 2),
+        ("A-A01-012", 2),
+    ]
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
+    stored = session.get(InventoryLocation, locations[0].id)
+    assert stored is not None
+    assert stored.quantity == 5
+
+
+def test_inbound_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/inbound")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "采购入库" in response.text
+    assert "/api/outbound/inventory/inbound" in response.text
+    assert "can_manage_inventory" in response.text
+
+
+def test_material_catalog_page_serves_html(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/materials")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert 'data-i18n="materials.title"' in response.text
+    assert "/api/materials/catalog" in response.text
+    assert "/api/materials/catalog/import" in response.text
+    assert "limit=30" not in response.text
 
 
 def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
@@ -213,7 +464,15 @@ def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
     assert "出库核对" in response.text
     assert "/api/outbound/summary" in response.text
     assert "/api/outbound/query" in response.text
+    assert "/api/inventory/pick-recommendations" in response.text
+    assert 'id="pickPartInput"' in response.text
+    assert 'id="pickQtyInput"' in response.text
+    assert 'id="pickRecommendBtn"' in response.text
+    assert "data-pick-row" in response.text
+    assert "loadPickRecommendations" in response.text
     assert "data-order-choice" in response.text
+    assert "updateQueryAvailability" in response.text
+    assert "queryBtn.disabled = !hasSelection" in response.text
     assert "belongs_to_selected" in response.text
     assert "displayValue(row.quantity)" in response.text
     assert "displayValue(row.cutting_qty)" in response.text
@@ -227,12 +486,23 @@ def test_outbound_page_serves_html(authenticated_client: TestClient) -> None:
 
 
 def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClient) -> None:
+    portal = authenticated_client.get("/")
     response = authenticated_client.get("/workbench")
 
+    assert portal.status_code == 200
+    assert "先选岗位，再开工" in portal.text
+    assert "/mobile" in portal.text
+    assert "/outbound" in portal.text
+    assert "采购入库" in portal.text
+    assert "手机访问" in portal.text
+    assert "现场直连" in portal.text
+    assert "/runtime/status" in portal.text
     assert response.status_code == 200
     assert "/api/workbench" in response.text
     assert "/static/i18n.js" in response.text
     assert "workbench.modules.title" in response.text
+    workbench_payload = authenticated_client.get("/api/workbench").json()
+    assert any(module["href"] == "/materials" for module in workbench_payload["modules"])
 
 
 def test_signoff_page_serves_management_console(authenticated_client: TestClient) -> None:
@@ -247,14 +517,27 @@ def test_signoff_page_serves_management_console(authenticated_client: TestClient
 
 def test_static_role_ui_contracts_are_explicit() -> None:
     workbench = _static_text("backend/app/static/home.html")
+    portal = _static_text("backend/app/static/portal.html")
     mobile = _static_text("backend/app/static/mobile.html")
     admin = _static_text("backend/app/static/admin.html")
     inventory = _static_text("backend/app/static/inventory.html")
+    inbound = _static_text("backend/app/static/inbound.html")
+    materials = _static_text("backend/app/static/material-catalog.html")
     transfers = _static_text("backend/app/static/transfers.html")
     signoff = _static_text("backend/app/static/signoff.html")
 
+    assert "先选岗位，再开工" in portal
+    assert 'href="/workbench"' in portal
+    assert 'href="/mobile"' in portal
+    assert 'href="/outbound"' in portal
+    assert 'href="/inbound"' in portal
+    assert "loadRuntimeStatus" in portal
+    assert "settings.pairing_enabled" in portal
+    assert "settings.lan_guard_enabled" in portal
+    assert 'data-state="planned"' in portal
     assert "renderModules(payload.modules || [])" in workbench
     assert "payload.global_stats" in workbench
+    assert 'href="/" data-i18n="nav.portal"' in workbench
     assert 'href="/admin"' not in mobile
     assert 'href="/transfers"' not in mobile
     assert 'href="/dashboard"' not in mobile
@@ -264,14 +547,33 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'id="assignedOrder"' in admin
     assert "outbound_last_order_no" in admin
     assert "can_manage_inventory" in inventory
+    assert "can_manage_inventory" in inbound
+    assert "/api/outbound/inventory/inbound" in inbound
+    assert "quantity_on_hand ?? location.quantity" in inbound
+    assert "idempotency_key" in inbound
+    assert 'href="/" data-i18n="nav.portal"' in materials
+    assert "/api/materials/catalog" in materials
+    assert "/api/materials/catalog/import" in materials
+    assert "limit=30" not in materials
+    assert 'href="/" data-i18n="nav.portal"' in inventory
     assert "can_manage_users" in admin
+    assert 'href="/" data-i18n="nav.portal"' in admin
     assert 'id="createTransferCard" hidden' in transfers
     assert "can_manage_transfers" in transfers
+    assert 'href="/" data-i18n="nav.portal"' in transfers
     assert "can_manage_signoff" in signoff
+    assert 'href="/" data-i18n="nav.portal"' in signoff
     assert "/api/signoff/candidates" in signoff
     assert "copyPreview" in signoff
     assert "'Content-Type': 'application/json'" in signoff
     assert "/api/signoff/pairing-keys/${pairingKeyId}/revoke" in signoff
+    history = _static_text("backend/app/static/history.html")
+    assert 'href="/" data-i18n="nav.portal"' in history
+    assert 'href="/workbench" data-i18n="workbench.brand"' in history
+    assert "AuthUI.fetchJson" in history
+    dashboard = _static_text("backend/app/static/dashboard.html")
+    assert "AuthUI.currentUser()" in dashboard
+    assert "AuthUI.redirectToLogin('/dashboard')" in dashboard
 
 
 def test_static_i18n_keys_exist_for_three_languages() -> None:
@@ -324,11 +626,99 @@ def test_write_endpoints_require_login_even_with_valid_csrf(
     )
     retry_one = client.post(f"/jobs/retry/{record.id}")
     retry_all = client.post("/jobs/retry")
+    export = client.get("/export.csv")
 
     assert upload.status_code == 401
     assert confirm.status_code == 401
     assert retry_one.status_code == 401
     assert retry_all.status_code == 401
+    assert export.status_code == 401
+
+
+def test_read_record_endpoints_require_login(
+    client: TestClient, session: Session, tmp_path
+) -> None:
+    image_path = tmp_path / "label.jpg"
+    image_path.write_bytes(b"fake image")
+    record = Record(
+        image_path=str(image_path),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    jobs = client.get("/jobs")
+    job = client.get(f"/jobs/{record.id}")
+    image = client.get(f"/records/{record.id}/image")
+    workbench = client.get("/api/workbench")
+
+    assert jobs.status_code == 401
+    assert job.status_code == 401
+    assert image.status_code == 401
+    assert workbench.status_code == 401
+
+
+def test_operator_record_reads_are_scoped_to_own_records(
+    client: TestClient,
+    session: Session,
+    tmp_path,
+) -> None:
+    operator = create_user(
+        session,
+        username="history-operator",
+        display_name="History Operator",
+        password="history-operator-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
+    client.cookies.set("mlocr_session", token)
+    own_image = tmp_path / "own.jpg"
+    own_image.write_bytes(b"own image")
+    other_image = tmp_path / "other.jpg"
+    other_image.write_bytes(b"other image")
+    own = Record(
+        image_path=str(own_image),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+        operator_id="history-operator",
+        vin_or_bin="VIN-OWN",
+        raw_ocr_text="own raw text",
+    )
+    other = Record(
+        image_path=str(other_image),
+        category=Category.A,
+        status=RecordStatus.confirmed,
+        operator_id="other-operator",
+        vin_or_bin="VIN-OTHER",
+        raw_ocr_text="other raw text",
+    )
+    session.add(own)
+    session.add(other)
+    session.commit()
+    session.refresh(own)
+    session.refresh(other)
+
+    jobs = client.get("/jobs")
+    other_jobs = client.get("/jobs", params={"operator_id": "other-operator"})
+    own_job = client.get(f"/jobs/{own.id}")
+    other_job = client.get(f"/jobs/{other.id}")
+    own_image_response = client.get(f"/records/{own.id}/image")
+    other_image_response = client.get(f"/records/{other.id}/image")
+    export = client.get("/export.csv")
+
+    assert jobs.status_code == 200
+    assert [row["id"] for row in jobs.json()] == [own.id]
+    assert other_jobs.status_code == 403
+    assert own_job.status_code == 200
+    assert own_job.json()["raw_ocr_text"] == "own raw text"
+    assert other_job.status_code == 403
+    assert own_image_response.status_code == 200
+    assert other_image_response.status_code == 403
+    assert export.status_code == 200
+    assert "VIN-OWN" in export.text
+    assert "VIN-OTHER" not in export.text
 
 
 def test_outbound_query_accepts_multiple_selected_orders(
@@ -382,6 +772,10 @@ def test_mobile_page_serves_phone_intake_view(authenticated_client: TestClient) 
     assert "autoUpload: true" in response.text
     assert "/runtime/status" in response.text
     assert 'data-i18n="material.title"' in response.text
+    assert "mobile.runtime.pairingOff" in response.text
+    assert "mobile.runtime.lanGuardOn" in response.text
+    assert "updateOutboundActionAvailability" in response.text
+    assert "manualMaterialLookupBtn.disabled = !hasOrder" in response.text
 
 
 def test_static_ui_assets_are_served(authenticated_client: TestClient) -> None:

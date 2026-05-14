@@ -11,6 +11,7 @@ from backend.app.models import (
     Record,
     RecordStatus,
 )
+from backend.app.services.auth_service import create_session, create_user
 
 
 def add_record(
@@ -39,8 +40,8 @@ def add_record(
     return record
 
 
-def test_summary_empty_db_returns_zeros(client: TestClient) -> None:
-    response = client.get("/api/metrics/summary")
+def test_summary_empty_db_returns_zeros(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/api/metrics/summary")
 
     assert response.status_code == 200
     payload = response.json()
@@ -52,13 +53,13 @@ def test_summary_empty_db_returns_zeros(client: TestClient) -> None:
     assert payload["by_category"] == {"A": 0, "B": 0, "C": 0}
 
 
-def test_summary_counts_by_status(client: TestClient, session: Session) -> None:
+def test_summary_counts_by_status(authenticated_client: TestClient, session: Session) -> None:
     add_record(session, status=RecordStatus.confirmed, category=Category.A)
     add_record(session, status=RecordStatus.submitted, category=Category.B)
     add_record(session, status=RecordStatus.submission_failed, category=Category.B)
     add_record(session, status=RecordStatus.duplicate, category=Category.C)
 
-    response = client.get("/api/metrics/summary")
+    response = authenticated_client.get("/api/metrics/summary")
 
     assert response.status_code == 200
     payload = response.json()
@@ -70,14 +71,14 @@ def test_summary_counts_by_status(client: TestClient, session: Session) -> None:
     assert payload["by_category"] == {"A": 1, "B": 2, "C": 1}
 
 
-def test_throughput_groups_by_date(client: TestClient, session: Session) -> None:
+def test_throughput_groups_by_date(authenticated_client: TestClient, session: Session) -> None:
     today = datetime.now(UTC).replace(hour=8, minute=0, second=0, microsecond=0)
     yesterday = today - timedelta(days=1)
     add_record(session, status=RecordStatus.uploaded, created_at=today)
     add_record(session, status=RecordStatus.confirmed, created_at=today)
     add_record(session, status=RecordStatus.submitted, created_at=yesterday)
 
-    response = client.get("/api/metrics/throughput", params={"days": 2})
+    response = authenticated_client.get("/api/metrics/throughput", params={"days": 2})
 
     assert response.status_code == 200
     payload = response.json()
@@ -96,12 +97,12 @@ def test_throughput_groups_by_date(client: TestClient, session: Session) -> None
     }
 
 
-def test_ocr_quality_thresholds(client: TestClient, session: Session) -> None:
+def test_ocr_quality_thresholds(authenticated_client: TestClient, session: Session) -> None:
     add_record(session, status=RecordStatus.ocr_done, confidence_score=0.95)
     add_record(session, status=RecordStatus.ocr_done, confidence_score=0.75)
     add_record(session, status=RecordStatus.needs_review, confidence_score=0.65)
 
-    response = client.get("/api/metrics/ocr-quality")
+    response = authenticated_client.get("/api/metrics/ocr-quality")
 
     assert response.status_code == 200
     payload = response.json()
@@ -111,7 +112,10 @@ def test_ocr_quality_thresholds(client: TestClient, session: Session) -> None:
     assert payload["needs_review_count"] == 1
 
 
-def test_savings_estimation_with_default_assumption(client: TestClient, session: Session) -> None:
+def test_savings_estimation_with_default_assumption(
+    authenticated_client: TestClient,
+    session: Session,
+) -> None:
     created = datetime(2026, 4, 28, 8, 0, tzinfo=UTC)
     add_record(
         session,
@@ -126,7 +130,7 @@ def test_savings_estimation_with_default_assumption(client: TestClient, session:
         updated_at=created + timedelta(seconds=60),
     )
 
-    response = client.get("/api/metrics/savings")
+    response = authenticated_client.get("/api/metrics/savings")
 
     assert response.status_code == 200
     payload = response.json()
@@ -135,10 +139,13 @@ def test_savings_estimation_with_default_assumption(client: TestClient, session:
     assert payload["total_saved_minutes"] == 1.5
 
 
-def test_metrics_all_endpoint_returns_full_payload(client: TestClient, session: Session) -> None:
+def test_metrics_all_endpoint_returns_full_payload(
+    authenticated_client: TestClient,
+    session: Session,
+) -> None:
     add_record(session, status=RecordStatus.confirmed, confidence_score=0.91)
 
-    response = client.get("/api/metrics/all")
+    response = authenticated_client.get("/api/metrics/all")
 
     assert response.status_code == 200
     payload = response.json()
@@ -157,7 +164,7 @@ def test_metrics_all_endpoint_returns_full_payload(client: TestClient, session: 
 
 
 def test_logistics_metrics_summarize_inventory_and_outbound_activity(
-    client: TestClient,
+    authenticated_client: TestClient,
     session: Session,
 ) -> None:
     now = datetime.now(UTC)
@@ -222,7 +229,7 @@ def test_logistics_metrics_summarize_inventory_and_outbound_activity(
     )
     session.commit()
 
-    response = client.get("/api/metrics/logistics", params={"days": 7})
+    response = authenticated_client.get("/api/metrics/logistics", params={"days": 7})
 
     assert response.status_code == 200
     payload = response.json()
@@ -247,3 +254,41 @@ def test_logistics_metrics_summarize_inventory_and_outbound_activity(
         "active_scan_quantity": 3,
         "active_order_count": 1,
     }
+
+
+def test_metrics_require_login(client: TestClient) -> None:
+    for path in (
+        "/api/metrics/summary",
+        "/api/metrics/throughput",
+        "/api/metrics/processing-time",
+        "/api/metrics/ocr-quality",
+        "/api/metrics/savings",
+        "/api/metrics/logistics",
+        "/api/metrics/all",
+    ):
+        response = client.get(path)
+        assert response.status_code == 401
+
+
+def test_metrics_require_supervisor(client: TestClient, session: Session) -> None:
+    operator = create_user(
+        session,
+        username="metrics-operator",
+        display_name="Metrics Operator",
+        password="metrics-operator-pass",
+        role="operator",
+    )
+    token, _ = create_session(session, operator, ip_address="testclient", user_agent="pytest")
+    client.cookies.set("mlocr_session", token)
+
+    for path in (
+        "/api/metrics/summary",
+        "/api/metrics/throughput",
+        "/api/metrics/processing-time",
+        "/api/metrics/ocr-quality",
+        "/api/metrics/savings",
+        "/api/metrics/logistics",
+        "/api/metrics/all",
+    ):
+        response = client.get(path)
+        assert response.status_code == 403

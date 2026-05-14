@@ -24,7 +24,7 @@ def test_auth_pages_are_served(client: TestClient) -> None:
         assert expected in response.text
 
 
-def test_root_routes_to_setup_login_or_workbench(
+def test_root_routes_to_setup_or_portal(
     client: TestClient,
     session: Session,
 ) -> None:
@@ -41,16 +41,18 @@ def test_root_routes_to_setup_login_or_workbench(
     )
 
     initialized_visit = client.get("/", follow_redirects=False)
-    assert initialized_visit.status_code == 303
-    assert initialized_visit.headers["location"] == "/login"
+    assert initialized_visit.status_code == 200
+    assert "先选岗位，再开工" in initialized_visit.text
+    assert "/workbench" in initialized_visit.text
 
     _login_as(client, session, manager)
     authenticated_visit = client.get("/", follow_redirects=False)
-    assert authenticated_visit.status_code == 303
-    assert authenticated_visit.headers["location"] == "/workbench"
+    assert authenticated_visit.status_code == 200
+    assert "现场总入口" in authenticated_visit.text
+    assert "/mobile" in authenticated_visit.text
 
 
-def test_root_routes_invalid_session_cookie_to_login(
+def test_root_serves_portal_with_invalid_session_cookie(
     client: TestClient,
     session: Session,
 ) -> None:
@@ -65,8 +67,9 @@ def test_root_routes_invalid_session_cookie_to_login(
 
     response = client.get("/", follow_redirects=False)
 
-    assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert response.status_code == 200
+    assert "先选岗位，再开工" in response.text
+    assert "/login" in response.text
 
 
 def test_capture_preserves_legacy_ocr_demo(client: TestClient) -> None:
@@ -338,10 +341,21 @@ def test_operator_workbench_and_outbound_scope_are_order_limited(
     assert {module["id"] for module in workbench_payload["modules"]} == {
         "mobile",
         "outbound",
+        "inventory",
         "my_stats",
     }
+    inventory_module = next(
+        module for module in workbench_payload["modules"] if module["id"] == "inventory"
+    )
+    assert inventory_module["href"] == "/inventory"
+    assert workbench_payload["user"]["capabilities"]["can_manage_inventory"] is False
     assert workbench_payload["my_stats"]["scan_quantity"] == 2
     assert workbench_payload["global_stats"] is None
+
+    inventory_page = client.get("/inventory")
+    assert inventory_page.status_code == 200
+    assert 'id="adjustmentPanel" hidden' in inventory_page.text
+    assert "AuthUI.hasCapability(user, 'can_manage_inventory')" in inventory_page.text
 
     choices = client.get("/api/outbound/orders")
     assert choices.status_code == 200
@@ -522,6 +536,7 @@ def test_workbench_modules_include_signoff_for_supervisor(
     assert response.status_code == 200
     payload = response.json()
     module_ids = [m["id"] for m in payload["modules"]]
+    assert "inbound" in module_ids
     assert "signoff" in module_ids
     assert payload["user"]["capabilities"]["can_manage_signoff"] is True
 
@@ -546,6 +561,7 @@ def test_workbench_modules_include_signoff_for_manager(
     assert response.status_code == 200
     payload = response.json()
     assert payload["user"]["capabilities"]["can_manage_signoff"] is True
+    assert "inbound" in [m["id"] for m in payload["modules"]]
     assert "signoff" in [m["id"] for m in payload["modules"]]
 
 
@@ -569,5 +585,6 @@ def test_workbench_modules_hide_signoff_for_operator(
     assert response.status_code == 200
     payload = response.json()
     module_ids = [m["id"] for m in payload["modules"]]
+    assert "inbound" not in module_ids
     assert "signoff" not in module_ids
     assert payload["user"]["capabilities"]["can_manage_signoff"] is False

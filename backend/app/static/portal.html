@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>中心入口 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f3f4f6; }
+    .portal-shell { max-width: 1180px; margin: 0 auto; padding: 18px 24px 48px; }
+    .portal-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+      align-items: stretch;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .portal-command {
+      min-height: 246px;
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+      padding: 26px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(255,107,53,.11), rgba(255,255,255,0) 42%),
+        #fff;
+      box-shadow: var(--shadow);
+    }
+    .portal-kicker { color: #475569; font-size: 15px; font-weight: 950; letter-spacing: .02em; }
+    .portal-head h1 { margin: 0; font-size: 42px; letter-spacing: 0; }
+    .portal-head p { max-width: 720px; margin: 10px 0 0; color: #374151; font-weight: 900; line-height: 1.35; }
+    .crew-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .crew-chip {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px 6px 6px;
+      border: 1px solid #d6d9de;
+      border-radius: 999px;
+      background: #fff;
+      color: #111827;
+      font-weight: 950;
+    }
+    .crew-avatar {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: #111827;
+      color: #fff;
+      font-size: 16px;
+    }
+    .portal-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background: #111827;
+      box-shadow: var(--shadow);
+    }
+    .portal-actions .nav-button {
+      min-height: 66px;
+      justify-content: flex-start;
+      border-color: rgba(255,255,255,.14);
+      background: #fff;
+      color: #111827;
+      border-radius: 8px;
+      font-size: 22px;
+    }
+    .portal-actions .nav-button.primary-entry {
+      background: var(--orange);
+      border-color: var(--orange);
+    }
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .status-tile {
+      min-height: 82px;
+      padding: 14px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .status-tile span { display: block; color: #475569; font-size: 15px; font-weight: 900; }
+    .status-tile strong { display: block; margin-top: 6px; font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }
+    .tool-section { margin-top: 22px; }
+    .tool-section h2 { margin: 0 0 12px; font-size: 24px; }
+    .tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .tool-card {
+      min-height: 150px;
+      display: grid;
+      align-content: space-between;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid #d6d9de;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .tool-card[href]:hover, .tool-card[href]:focus-visible {
+      border-color: var(--orange);
+      background: #fff8f3;
+      outline: 0;
+    }
+    .tool-card strong { display: block; font-size: 24px; line-height: 1.14; overflow-wrap: anywhere; }
+    .tool-card span { display: block; margin-top: 8px; color: #475569; line-height: 1.3; font-weight: 850; overflow-wrap: anywhere; }
+    .tool-card small {
+      width: max-content;
+      max-width: 100%;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #eef6ff;
+      color: var(--info);
+      font-size: 14px;
+      font-weight: 950;
+    }
+    .tool-card[data-state="ready"] small { background: #ecfdf5; color: var(--success); }
+    .tool-card[data-state="beta"] small { background: #fff7ed; color: #c2410c; }
+    .tool-card[data-state="planned"] {
+      color: #6b7280;
+      background: #f9fafb;
+      cursor: default;
+    }
+    .tool-card[data-state="planned"] small { background: #f3f4f6; color: #6b7280; }
+    @media (max-width: 920px) {
+      .portal-head, .status-strip, .tool-grid { grid-template-columns: 1fr; }
+      .portal-head h1 { font-size: 34px; }
+      .portal-command { min-height: 0; padding: 22px; }
+    }
+  </style>
+</head>
+<body data-page="portal">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong>TagLedger</strong><span>现场总入口</span></span>
+      </a>
+      <div class="nav-actions">
+        <span id="userBadge" class="pill">读取账号中</span>
+        <a id="loginLink" class="nav-link" href="/login">登录</a>
+        <button id="logoutBtn" class="secondary mini" type="button" hidden>退出</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="portal-shell">
+    <section class="portal-head">
+      <div class="portal-command">
+        <div>
+          <div class="portal-kicker">今日现场调度</div>
+          <h1>先选岗位，再开工</h1>
+          <p>捡货、出库、库存、调拨、签核和账号管理都从这里进。现场同事不用找菜单，看到自己的任务就点进去。</p>
+        </div>
+        <div class="crew-row" aria-label="岗位">
+          <span class="crew-chip"><span class="crew-avatar">拣</span>发货员</span>
+          <span class="crew-chip"><span class="crew-avatar">核</span>主管核对</span>
+          <span class="crew-chip"><span class="crew-avatar">管</span>账号管理</span>
+        </div>
+      </div>
+      <div class="portal-actions">
+        <a class="nav-button primary-entry" href="/mobile">手机捡货</a>
+        <a class="nav-button" href="/outbound">出库核对</a>
+        <a class="nav-button" href="/workbench">角色工作台</a>
+      </div>
+    </section>
+
+    <section class="status-strip" aria-label="系统状态">
+      <div class="status-tile"><span>服务</span><strong id="serviceStatus">运行中</strong></div>
+      <div class="status-tile"><span>当前账号</span><strong id="accountStatus">未登录</strong></div>
+      <div class="status-tile"><span>手机访问</span><strong id="pairingStatus">读取中</strong></div>
+      <div class="status-tile"><span>内网保护</span><strong id="lanGuardStatus">读取中</strong></div>
+      <div class="status-tile"><span>今日主线</span><strong>96 单捡货</strong></div>
+    </section>
+
+    <section class="tool-section">
+      <h2>今日作业</h2>
+      <div class="tool-grid">
+        <a class="tool-card" data-state="ready" href="/mobile">
+          <small>可用</small>
+          <div><strong>手机捡货</strong><span>扫码、拍照、录入当前单。</span></div>
+        </a>
+        <a class="tool-card" data-state="ready" href="/outbound">
+          <small>可用</small>
+          <div><strong>出库核对</strong><span>看进度、差异、剩余。</span></div>
+        </a>
+        <a class="tool-card" data-state="ready" href="/workbench">
+          <small>可用</small>
+          <div><strong>角色工作台</strong><span>按权限显示可用页面。</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="tool-section">
+      <h2>管理工具</h2>
+      <div class="tool-grid">
+        <a class="tool-card" data-state="beta" href="/inventory">
+          <small>开发中</small>
+          <div><strong>库存与库位</strong><span>看库存、库位与补货。</span></div>
+        </a>
+        <a class="tool-card" data-state="beta" href="/transfers">
+          <small>开发中</small>
+          <div><strong>跨场子调拨</strong><span>看/记三场调拨。</span></div>
+        </a>
+        <a class="tool-card" data-state="beta" href="/signoff">
+          <small>开发中</small>
+          <div><strong>退货签核</strong><span>处理候选单和配对。</span></div>
+        </a>
+        <a class="tool-card" data-state="ready" href="/admin">
+          <small>可用</small>
+          <div><strong>账号与权限</strong><span>账号：创建/分配/重置。</span></div>
+        </a>
+        <a class="tool-card" data-state="beta" href="/dashboard">
+          <small>开发中</small>
+          <div><strong>全局统计</strong><span>查看录入/OCR/出库指标。</span></div>
+        </a>
+        <a class="tool-card" data-state="ready" href="/history">
+          <small>可用</small>
+          <div><strong>历史记录</strong><span>查看已确认和最近结果。</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="tool-section">
+      <h2>后续模块占位</h2>
+      <div class="tool-grid">
+        <a class="tool-card" data-state="ready" href="/inbound">
+          <small>可用</small>
+          <div><strong>采购入库</strong><span>按物料、库位、数量入库。</span></div>
+        </a>
+        <div class="tool-card" data-state="planned">
+          <small>占位</small>
+          <div><strong>质检处理</strong><span>待开发：异常、返工、抽检。</span></div>
+        </div>
+        <div class="tool-card" data-state="planned">
+          <small>占位</small>
+          <div><strong>报表中心</strong><span>待开发：日结、周报、导出。</span></div>
+        </div>
+        <a class="tool-card" data-state="beta" href="/capture">
+          <small>旧模块</small>
+          <div><strong>桌面 OCR 录入</strong><span>旧标签拍照/OCR demo。</span></div>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/auth-ui.js"></script>
+  <script>
+    async function loadAccount() {
+      const loginLink = document.querySelector('#loginLink');
+      const logoutBtn = document.querySelector('#logoutBtn');
+      const userBadge = document.querySelector('#userBadge');
+      const accountStatus = document.querySelector('#accountStatus');
+      const payload = await fetch('/api/auth/me').then((response) => response.json()).catch(() => ({ user: null }));
+      const user = payload.user;
+      if (!user) {
+        userBadge.textContent = '未登录';
+        accountStatus.textContent = '未登录';
+        loginLink.hidden = false;
+        logoutBtn.hidden = true;
+        return;
+      }
+      const label = `${user.display_name || user.username} · ${user.role}`;
+      userBadge.textContent = label;
+      accountStatus.textContent = user.display_name || user.username;
+      loginLink.hidden = true;
+      logoutBtn.hidden = false;
+    }
+
+    async function loadRuntimeStatus() {
+      const serviceStatus = document.querySelector('#serviceStatus');
+      const pairingStatus = document.querySelector('#pairingStatus');
+      const lanGuardStatus = document.querySelector('#lanGuardStatus');
+      try {
+        const settings = await fetch('/runtime/status').then((response) => response.json());
+        serviceStatus.textContent = '运行中';
+        pairingStatus.textContent = settings.pairing_enabled ? '需要配对' : '现场直连';
+        lanGuardStatus.textContent = settings.lan_guard_enabled ? '已开启' : '已关闭';
+      } catch {
+        serviceStatus.textContent = '需检查';
+        pairingStatus.textContent = '未知';
+        lanGuardStatus.textContent = '未知';
+      }
+    }
+
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await AuthUI.logout();
+      window.location.href = '/';
+    });
+
+    loadAccount();
+    loadRuntimeStatus();
+  </script>
+</body>
+</html>

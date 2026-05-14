@@ -213,15 +213,29 @@ def _module_payload(user: User) -> list[dict[str, object]]:
             "href": "/workbench#my-stats",
             "group": "records",
         },
+        {
+            "id": "inventory",
+            "title": "库存与库位",
+            "description": "查看库存、库位地图，并按数量挪动库位。",
+            "href": "/inventory",
+            "group": "inventory",
+        },
     ]
     if has_role(user, "supervisor"):
         modules.extend(
             [
                 {
-                    "id": "inventory",
-                    "title": "库存与库位",
-                    "description": "按工厂、物料和库位查看库存，手工调整数量或挪动库位。",
-                    "href": "/inventory",
+                    "id": "inbound",
+                    "title": "采购入库",
+                    "description": "按物料、库位和数量登记来料。",
+                    "href": "/inbound",
+                    "group": "inventory",
+                },
+                {
+                    "id": "materials",
+                    "title": "料号对照",
+                    "description": "导入松灵料号表，按物料编码、SKU、BYD 料号和描述快速检索。",
+                    "href": "/materials",
                     "group": "inventory",
                 },
                 {

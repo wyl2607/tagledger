@@ -565,7 +565,7 @@
       const total = batchItems.length || 1;
       const finished = batchItems.filter((item) => ['OK', tr('common.error')].includes(item.status)).length;
       const percent = Math.round((finished / total) * 100);
-      batchProgressBar.style.width = `${percent}%`;
+      batchProgressBar.style.transform = `scaleX(${percent / 100})`;
       setStatus(batchStatus, batchItems.length ? tr('upload.progress.done', { done: finished, total: batchItems.length }) : '');
     }
 

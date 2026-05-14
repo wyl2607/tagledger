@@ -10,6 +10,7 @@ from backend.app.config import get_settings
 from backend.app.database import get_session
 from backend.app.models import Record, RecordStatus, User
 from backend.app.schemas import RecordListItem, RecordRead, RetryResponse
+from backend.app.services.auth_service import has_role
 from backend.app.services.dedup import find_duplicates, serialize_duplicates
 from backend.app.services.material_mapping import find_material_matches
 from backend.app.workers.submit_worker import enqueue_submission
@@ -70,29 +71,51 @@ def to_record_list_item(record: Record) -> RecordListItem:
     )
 
 
+def _record_owner_filter(statement, user: User, requested_operator_id: str | None = None):
+    if has_role(user, "supervisor"):
+        if requested_operator_id:
+            return statement.where(Record.operator_id == requested_operator_id)
+        return statement
+    if requested_operator_id and requested_operator_id != user.username:
+        raise HTTPException(status_code=403, detail="operator is outside your assigned scope")
+    return statement.where(Record.operator_id == user.username)
+
+
+def _require_record_access(record: Record, user: User) -> None:
+    if has_role(user, "supervisor"):
+        return
+    if record.operator_id != user.username:
+        raise HTTPException(status_code=403, detail="record is outside your assigned scope")
+
+
 @router.get("/jobs", response_model=list[RecordListItem])
 def list_jobs(
     status: RecordStatus | None = None,
     operator_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> list[RecordListItem]:
     statement = select(Record).order_by(Record.id.desc())
     if status is not None:
         statement = statement.where(Record.status == status)
-    if operator_id:
-        statement = statement.where(Record.operator_id == operator_id)
+    statement = _record_owner_filter(statement, user, operator_id)
     statement = statement.offset(offset).limit(limit)
     records = session.exec(statement).all()
     return [to_record_list_item(record) for record in records]
 
 
 @router.get("/jobs/{record_id}", response_model=RecordRead)
-def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRead:
+def get_job(
+    record_id: int,
+    user: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> RecordRead:
     record = session.get(Record, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
+    _require_record_access(record, user)
     duplicates = find_duplicates(
         session,
         vin_or_bin=record.vin_or_bin,
@@ -120,10 +143,15 @@ def get_job(record_id: int, session: Session = Depends(get_session)) -> RecordRe
 
 
 @router.get("/records/{record_id}/image", include_in_schema=False)
-def get_record_image(record_id: int, session: Session = Depends(get_session)) -> FileResponse:
+def get_record_image(
+    record_id: int,
+    user: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> FileResponse:
     record = session.get(Record, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="record not found")
+    _require_record_access(record, user)
     image_path = Path(record.image_path)
     if not image_path.exists() or not image_path.is_file():
         raise HTTPException(status_code=404, detail="image not found")

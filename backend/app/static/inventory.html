@@ -18,7 +18,30 @@
     .kpi { min-height: 96px; display: grid; align-content: center; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
     .kpi span { color: var(--muted); font-weight: 900; }
     .kpi strong { font-size: 30px; line-height: 1; }
-    .work-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 14px; }
+    .work-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr); gap: 14px; align-items: start; }
+    .map-shell { display: grid; gap: 14px; margin-top: 14px; }
+    .map-zone { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .map-zone h3, .bucket-zone h3 { margin: 0; }
+    .map-column { display: grid; gap: 10px; }
+    .map-column-title { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-weight: 950; }
+    .rack-row { display: grid; gap: 8px; padding: 10px; border: 1px solid #d8dee8; border-radius: 8px; background: #fff; }
+    .rack-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-weight: 950; }
+    .depth-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+    .map-cell, .bucket-card { min-height: 92px; display: grid; gap: 5px; align-content: start; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer; }
+    .map-cell[aria-selected="true"], .bucket-card[aria-selected="true"] { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 107, 53, .16); }
+    .map-cell strong, .bucket-card strong { overflow-wrap: anywhere; }
+    .cell-metrics { color: var(--muted); font-weight: 900; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 5px; }
+    .badge { width: fit-content; padding: 3px 7px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 950; }
+    .badge.warn { background: #fef2f2; color: #991b1b; }
+    .badge.restock { background: #fff7ed; color: #9a3412; }
+    .badge.unresolved { background: #fef3c7; color: #92400e; }
+    .bucket-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .bucket-zone { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .material-list { display: grid; gap: 8px; margin: 12px 0; }
+    .material-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer; }
+    .material-item[aria-selected="true"] { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 107, 53, .12); }
+    .inventory-list { margin-top: 14px; }
     .location-grid { display: grid; gap: 10px; }
     .zone { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
     .zone h3 { margin: 0; font-size: 18px; }
@@ -31,16 +54,55 @@
     .temporary { color: #1d4ed8; }
     .form-grid { display: grid; gap: 12px; }
     .form-grid button { width: 100%; }
+    .reconcile-panel, .pick-panel { display: grid; gap: 14px; }
+    .reconcile-input { width: 100%; min-height: 136px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .reconcile-actions, .pick-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .reconcile-actions button, .pick-actions button { width: fit-content; }
+    .reconcile-error, .pick-error { color: #991b1b; font-weight: 900; }
+    .reconcile-upload { display: grid; gap: 10px; }
+    .reconcile-upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .reconcile-upload-meta { color: var(--muted); font-weight: 850; overflow-wrap: anywhere; }
+    .reconcile-apply-panel { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .reconcile-apply-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .45fr) minmax(180px, .45fr); gap: 10px; align-items: end; }
+    .reconcile-apply-grid label { display: grid; gap: 5px; color: var(--muted); font-weight: 900; }
+    .reconcile-apply-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-weight: 900; }
+    .reconcile-apply-row { display: grid; gap: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .reconcile-decision { width: 100%; max-width: 260px; }
+    .reconcile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .reconcile-summary-item { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .reconcile-summary-item span { display: block; color: var(--muted); font-weight: 900; }
+    .reconcile-summary-item strong { font-size: 24px; }
+    .pick-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(120px, .45fr) minmax(160px, .65fr); gap: 10px; align-items: end; }
+    .pick-form label { display: grid; gap: 5px; color: var(--muted); font-weight: 900; }
+    .pick-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-weight: 900; }
+    .pick-summary strong { color: var(--ink); }
+    .pick-shortage { width: fit-content; padding: 6px 9px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-weight: 950; }
+    .pick-list { display: grid; gap: 8px; }
+    .pick-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .pick-order { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: #111827; color: #fff; font-weight: 950; }
+    .pick-row strong, .pick-row span { overflow-wrap: anywhere; }
+    .pick-quantity { font-size: 22px; font-weight: 950; }
+    .reconcile-result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .reconcile-bucket { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+    .reconcile-bucket h3 { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .reconcile-row { display: grid; gap: 4px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .reconcile-row strong, .reconcile-row span { overflow-wrap: anywhere; }
+    .reconcile-meta { color: var(--muted); font-weight: 850; }
+    .reconcile-tag { width: fit-content; padding: 3px 7px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 950; }
+    .reconcile-tag.missing { background: #fef3c7; color: #92400e; }
+    .reconcile-tag.new { background: #dcfce7; color: #166534; }
+    .reconcile-tag.mismatch { background: #fef2f2; color: #991b1b; }
     @media (max-width: 920px) {
-      .inventory-head, .filters, .kpi-grid, .work-grid { grid-template-columns: 1fr; }
+      .inventory-head, .filters, .kpi-grid, .work-grid, .bucket-grid, .reconcile-summary, .reconcile-result-grid, .reconcile-apply-grid, .pick-form, .pick-row { grid-template-columns: 1fr; }
       .inventory-head h1 { font-size: 30px; }
+      .depth-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
     }
   </style>
 </head>
 <body>
   <div class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/workbench">
+      <a class="brand" href="/">
         <span class="logo">TL</span>
         <span><strong data-i18n="app.name">TagLedger</strong><span data-i18n="inventory.title">库存与库位</span></span>
       </a>
@@ -50,7 +112,9 @@
           <button type="button" data-locale="de" data-i18n="language.de">DE</button>
           <button type="button" data-locale="zh" data-i18n="language.zh">中文</button>
         </div>
+        <a class="nav-button" href="/" data-i18n="nav.portal">中心入口</a>
         <a class="nav-button" href="/workbench" data-i18n="workbench.brand">工作台</a>
+        <a class="nav-button" href="/inbound" data-i18n="nav.inbound">入库</a>
         <a class="nav-button" href="/transfers" data-i18n="nav.transfers">调拨</a>
         <button type="button" class="secondary" id="logoutBtn" data-i18n="admin.logout">退出登录</button>
       </div>
@@ -93,34 +157,118 @@
     <section class="kpi-grid" aria-label="Inventory summary">
       <div class="kpi"><span data-i18n="inventory.kpi.visible">可见库位</span><strong id="visibleCount">0</strong></div>
       <div class="kpi"><span data-i18n="inventory.kpi.restock">需补货</span><strong id="restockCount">0</strong></div>
-      <div class="kpi"><span data-i18n="inventory.kpi.retired">已隐藏临时库位</span><strong id="retiredCount">0</strong></div>
+      <div class="kpi"><span data-i18n="inventory.kpi.mixed">混放库位</span><strong id="mixedCount">0</strong></div>
       <div class="kpi"><span data-i18n="inventory.kpi.quantity">可见库存数</span><strong id="totalQty">0</strong></div>
+    </section>
+
+    <section class="panel pick-panel">
+      <div>
+        <h2 data-i18n="inventory.pick.title">物料拣货推荐</h2>
+        <p class="muted" data-i18n="inventory.pick.subtitle">输入物料号和需求数量，按临时库位优先、数量和库位顺序生成拣货建议。</p>
+      </div>
+      <div class="pick-form">
+        <label>
+          <span data-i18n="inventory.pick.part">物料号</span>
+          <input id="pickPartInput" data-i18n-placeholder="inventory.pick.partPlaceholder" placeholder="CPXS000122303">
+        </label>
+        <label>
+          <span data-i18n="inventory.pick.quantity">需求数量</span>
+          <input id="pickQuantityInput" type="text" inputmode="numeric" pattern="[0-9]*" data-i18n-placeholder="inventory.pick.quantityPlaceholder" placeholder="4">
+        </label>
+        <label>
+          <span data-i18n="inventory.pick.factory">工厂</span>
+          <select id="pickFactoryInput">
+            <option value="" data-i18n="common.all">全部</option>
+            <option value="factory_a">factory_a</option>
+            <option value="factory_b">factory_b</option>
+            <option value="factory_c">factory_c</option>
+          </select>
+        </label>
+      </div>
+      <div class="pick-actions">
+        <button type="button" id="pickRecommendationBtn" data-i18n="inventory.pick.action">生成拣货推荐</button>
+        <span id="pickError" class="pick-error" role="alert"></span>
+      </div>
+      <div id="pickRecommendationResult" hidden>
+        <div id="pickSummary" class="pick-summary"></div>
+        <div id="pickRecommendationList" class="pick-list"></div>
+      </div>
+    </section>
+
+    <section class="panel reconcile-panel">
+      <div>
+        <h2 data-i18n="inventory.reconcile.title">Excel 对账预览</h2>
+        <p class="muted" data-i18n="inventory.reconcile.subtitle">上传 CSV/XLSX 或粘贴已解析 JSON，系统只生成预览分类，不写入库存。</p>
+      </div>
+      <div class="reconcile-upload">
+        <label>
+          <span data-i18n="inventory.reconcile.file">库存文件（CSV / XLSX）</span>
+          <input id="reconcileFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        </label>
+        <div class="reconcile-upload-row">
+          <button type="button" id="reconcileFilePreviewBtn" data-i18n="inventory.reconcile.action.previewFile">上传并预览文件</button>
+          <span id="reconcileFileMeta" class="reconcile-upload-meta"></span>
+        </div>
+      </div>
+      <label>
+        <span data-i18n="inventory.reconcile.rows">已解析库存行 JSON</span>
+        <textarea id="reconcileRowsInput" class="reconcile-input" spellcheck="false" data-i18n-placeholder="inventory.reconcile.rowsPlaceholder" placeholder='[{"factory_id":"factory_a","part_key":"CPXS000122201","location_code":"A-A01-011","quantity":10}]'></textarea>
+      </label>
+      <div class="reconcile-actions">
+        <button type="button" id="reconcilePreviewBtn" data-i18n="inventory.reconcile.action.preview">生成对账预览</button>
+        <span id="reconcileError" class="reconcile-error" role="alert"></span>
+      </div>
+      <div id="reconcilePreviewResult" hidden>
+        <div id="reconcileSummary" class="reconcile-summary"></div>
+        <div id="reconcileBuckets" class="reconcile-result-grid"></div>
+      </div>
+      <div id="reconcileApplyPanel" hidden class="reconcile-apply-panel">
+        <p class="muted" data-i18n="inventory.reconcile.apply.permission">只有主管或管理员可以把对账决策写入库存；操作会写入流水或审计记录。</p>
+        <div class="reconcile-apply-grid">
+          <label>
+            <span data-i18n="inventory.reconcile.apply.reason">应用原因</span>
+            <input id="reconcileReasonInput" data-i18n-placeholder="inventory.reconcile.apply.reasonPlaceholder" placeholder="盘点对账" value="盘点对账">
+          </label>
+          <label>
+            <span data-i18n="inventory.reconcile.apply.sourceFilename">来源文件</span>
+            <input id="reconcileSourceFilename" data-i18n-placeholder="inventory.reconcile.apply.sourceFilenamePlaceholder" placeholder="stocktake.csv">
+          </label>
+          <label>
+            <span data-i18n="inventory.reconcile.apply.idempotencyKey">幂等键</span>
+            <input id="reconcileIdempotencyKey" data-i18n-placeholder="inventory.reconcile.apply.idempotencyPlaceholder" placeholder="stocktake-2026-05-14">
+          </label>
+        </div>
+        <div class="reconcile-actions">
+          <button type="button" id="reconcileApplyBtn" data-i18n="inventory.reconcile.apply.button">应用已选择决策</button>
+          <span id="reconcileApplyError" class="reconcile-error" role="alert"></span>
+        </div>
+        <div id="reconcileApplyResult" hidden>
+          <div id="reconcileApplySummary" class="reconcile-apply-summary"></div>
+          <div id="reconcileApplyRows" class="pick-list"></div>
+        </div>
+      </div>
     </section>
 
     <section class="work-grid">
       <div class="panel">
         <h2 data-i18n="inventory.map.title">厂区库位图</h2>
-        <p class="muted" data-i18n="inventory.map.subtitle">按库位前缀分区显示。点击库位后可在右侧调整数量或挪到新库位。</p>
-        <div id="locationGrid" class="location-grid"></div>
+        <p class="muted" data-i18n="inventory.map.subtitle">A/B 区按列、架、层、depth 展示。点击库位后查看物料明细并发起虚拟调拨。</p>
+        <div id="locationMap" class="map-shell" data-map-source="/api/inventory/location-map"></div>
+        <div id="locationBuckets" class="bucket-grid"></div>
+        <div class="inventory-list">
+          <h2 data-i18n="inventory.list.title">库存列表</h2>
+          <div id="locationGrid" class="location-grid"></div>
+        </div>
       </div>
 
       <aside class="panel">
-        <h2 data-i18n="inventory.editor.title">手动编辑</h2>
+        <h2 data-i18n="inventory.editor.title">库位操作</h2>
         <p class="muted" id="selectedInfo" data-i18n="inventory.editor.empty">先选择一个库位。</p>
+        <div id="materialDetails" class="material-list"></div>
         <div class="form-grid">
           <label>
-            <span data-i18n="inventory.editor.quantity">校正数量</span>
-            <input id="adjustQty" type="text" inputmode="numeric" pattern="[0-9]*">
-          </label>
-          <label>
-            <span data-i18n="inventory.editor.reason">原因</span>
-            <input id="adjustReason" data-i18n-placeholder="inventory.editor.reasonPlaceholder" placeholder="盘点 / 纠错 / 临时库位用完">
-          </label>
-          <button type="button" id="adjustBtn" data-i18n="inventory.action.adjust">写入数量调整</button>
-          <hr>
-          <label>
             <span data-i18n="inventory.move.target">目标库位</span>
-            <input id="moveTarget" data-i18n-placeholder="inventory.move.targetPlaceholder" placeholder="例如 B-04">
+            <input id="moveTarget" data-i18n-placeholder="inventory.move.targetPlaceholder" placeholder="例如 B-C02-032">
           </label>
           <label>
             <span data-i18n="inventory.move.quantity">挪动数量</span>
@@ -135,19 +283,24 @@
           </label>
           <label>
             <span data-i18n="inventory.move.reason">挪动原因</span>
-            <input id="moveReason" data-i18n-placeholder="inventory.move.reasonPlaceholder" placeholder="地图拖拽 / 整理库位">
+            <input id="moveReason" data-i18n-placeholder="inventory.move.reasonPlaceholder" placeholder="整理库位" value="整理库位">
           </label>
           <button type="button" id="moveBtn" data-i18n="inventory.action.move">挪动到目标库位</button>
+          <div id="adjustmentPanel" hidden>
+            <hr>
+            <h3 data-i18n="inventory.adjust.title">主管数量校正</h3>
+            <label>
+              <span data-i18n="inventory.editor.quantity">校正数量</span>
+              <input id="adjustQty" type="text" inputmode="numeric" pattern="[0-9]*">
+            </label>
+            <label>
+              <span data-i18n="inventory.editor.reason">原因</span>
+              <input id="adjustReason" data-i18n-placeholder="inventory.editor.reasonPlaceholder" placeholder="盘点 / 纠错 / 临时库位用完">
+            </label>
+            <button type="button" id="adjustBtn" data-i18n="inventory.action.adjust">写入数量调整</button>
+          </div>
         </div>
       </aside>
-    </section>
-  </main>
-
-  <main class="inventory-page" id="accessDenied" hidden>
-    <section class="panel">
-      <h2 data-i18n="error.permissionDenied">权限不足</h2>
-      <p class="muted" data-i18n="inventory.accessDenied">需要主管或管理员权限才能编辑库存与库位。</p>
-      <a class="nav-link" href="/workbench" data-i18n="admin.action.backWorkbench">返回工作台</a>
     </section>
   </main>
 
@@ -158,18 +311,485 @@
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[char]));
-    let latestPayload = null;
-    let selectedLocation = null;
+    let latestLocationsPayload = null;
+    let latestMapPayload = null;
+    let selectedCell = null;
+    let selectedMaterialKey = null;
+    let userCanManageInventory = false;
+    let latestReconcilePreview = null;
+    let latestReconcileFileMeta = null;
+    let latestReconcileApplyResult = null;
+    let latestPickRecommendations = null;
 
     function zoneName(locationCode) {
       return String(locationCode || 'LOC').split(/[-_]/)[0] || 'LOC';
     }
 
     function renderSummary(summary) {
-      document.querySelector('#visibleCount').textContent = summary.visible_location_count || 0;
+      const visibleCount = (summary.standard_location_count || 0)
+        + (summary.temporary_location_count || 0)
+        + (summary.upstairs_location_count || 0)
+        + (summary.unresolved_location_count || 0);
+      document.querySelector('#visibleCount').textContent = visibleCount;
       document.querySelector('#restockCount').textContent = summary.restock_required_count || 0;
-      document.querySelector('#retiredCount').textContent = summary.retired_location_count || 0;
+      document.querySelector('#mixedCount').textContent = summary.mixed_location_count || 0;
       document.querySelector('#totalQty').textContent = summary.total_quantity || 0;
+    }
+
+    function defaultReconcileDecision(bucketKey) {
+      const defaults = {
+        matched: 'noop',
+        quantity_mismatch: 'count_review',
+        excel_missing: 'mark_excel_missing',
+        excel_new: 'mark_excel_new',
+      };
+      return defaults[bucketKey] || 'noop';
+    }
+
+    function reconcileDecisionOptions(bucketKey) {
+      const options = {
+        matched: [
+          ['noop', tr('inventory.reconcile.decision.noop')],
+          ['keep_system', tr('inventory.reconcile.decision.keepSystem')],
+        ],
+        quantity_mismatch: [
+          ['use_excel', tr('inventory.reconcile.decision.useExcel')],
+          ['keep_system', tr('inventory.reconcile.decision.keepSystem')],
+          ['count_review', tr('inventory.reconcile.decision.countReview')],
+        ],
+        excel_missing: [
+          ['mark_excel_missing', tr('inventory.reconcile.decision.markExcelMissing')],
+        ],
+        excel_new: [
+          ['mark_excel_new', tr('inventory.reconcile.decision.markExcelNew')],
+        ],
+      };
+      return options[bucketKey] || [['noop', tr('inventory.reconcile.decision.noop')]];
+    }
+
+    function syncReconcileSourceFilename() {
+      const input = document.querySelector('#reconcileSourceFilename');
+      if (!input.value.trim() && latestReconcileFileMeta?.filename) {
+        input.value = latestReconcileFileMeta.filename;
+      }
+    }
+
+    function reconcileRowTitle(row) {
+      return [row.part_key, row.location_code].filter(Boolean).join(' · ') || tr('inventory.reconcile.row');
+    }
+
+    function reconcileRowMeta(row) {
+      const parts = [];
+      if (row.factory_id) parts.push(row.factory_id);
+      if (row.quantity !== undefined) parts.push(`${tr('inventory.reconcile.quantity')}: ${row.quantity}`);
+      if (row.system_quantity !== undefined) parts.push(`system_quantity: ${row.system_quantity}`);
+      if (row.excel_quantity !== undefined) parts.push(`excel_quantity: ${row.excel_quantity}`);
+      if (row.delta !== undefined) parts.push(`delta: ${row.delta}`);
+      return parts.join(' · ');
+    }
+
+    function renderReconcileRow(row, bucketKey, rowIndex = 0) {
+      const tags = {
+        matched: '',
+        quantity_mismatch: `<span class="reconcile-tag mismatch">${esc(tr('inventory.reconcile.bucket.quantityMismatch'))}</span>`,
+        excel_missing: `<span class="reconcile-tag missing">${esc(tr('inventory.reconcile.tag.excelMissing'))}</span>`,
+        excel_new: `<span class="reconcile-tag new">${esc(tr('inventory.reconcile.tag.excelNew'))}</span>`,
+      };
+      const decisionControl = userCanManageInventory ? `
+        <label>
+          <span class="reconcile-meta">${esc(tr('inventory.reconcile.decision.label'))}</span>
+          <select class="reconcile-decision" data-reconcile-decision="${esc(bucketKey)}" data-reconcile-index="${esc(rowIndex)}">
+            ${reconcileDecisionOptions(bucketKey).map(([value, label]) => `
+              <option value="${esc(value)}" ${value === defaultReconcileDecision(bucketKey) ? 'selected' : ''}>${esc(label)}</option>
+            `).join('')}
+          </select>
+        </label>
+      ` : '';
+      return `
+        <div class="reconcile-row" data-reconcile-category="${esc(bucketKey)}">
+          ${tags[bucketKey] || ''}
+          <strong>${esc(reconcileRowTitle(row))}</strong>
+          <span class="reconcile-meta">${esc(reconcileRowMeta(row))}</span>
+          ${decisionControl}
+        </div>
+      `;
+    }
+
+    function renderReconcilePreview(payload) {
+      latestReconcilePreview = payload || null;
+      const result = document.querySelector('#reconcilePreviewResult');
+      if (!payload) {
+        result.hidden = true;
+        document.querySelector('#reconcileSummary').innerHTML = '';
+        document.querySelector('#reconcileBuckets').innerHTML = '';
+        document.querySelector('#reconcileApplyPanel').hidden = true;
+        renderReconcileApplyResult(null);
+        return;
+      }
+      const summaryLabels = {
+        matched_count: tr('inventory.reconcile.summary.matched'),
+        quantity_mismatch_count: tr('inventory.reconcile.summary.quantityMismatch'),
+        excel_missing_count: tr('inventory.reconcile.summary.excelMissing'),
+        excel_new_count: tr('inventory.reconcile.summary.excelNew'),
+      };
+      document.querySelector('#reconcileSummary').innerHTML = Object.entries(summaryLabels).map(([key, label]) => `
+        <div class="reconcile-summary-item">
+          <span>${esc(label)}</span>
+          <strong>${esc(payload.summary?.[key] ?? 0)}</strong>
+        </div>
+      `).join('');
+      const bucketLabels = {
+        matched: tr('inventory.reconcile.bucket.matched'),
+        quantity_mismatch: tr('inventory.reconcile.bucket.quantityMismatch'),
+        excel_missing: tr('inventory.reconcile.bucket.excelMissing'),
+        excel_new: tr('inventory.reconcile.bucket.excelNew'),
+      };
+      document.querySelector('#reconcileBuckets').innerHTML = Object.entries(bucketLabels).map(([bucketKey, label]) => {
+        const rows = payload[bucketKey] || [];
+        return `
+          <section class="reconcile-bucket" data-bucket="${esc(bucketKey)}">
+            <h3><span>${esc(label)}</span><span class="reconcile-tag">${esc(rows.length)}</span></h3>
+            ${rows.length ? rows.map((row, index) => renderReconcileRow(row, bucketKey, index)).join('') : `<p class="muted">${esc(tr('inventory.reconcile.empty'))}</p>`}
+          </section>
+        `;
+      }).join('');
+      const decisionCount = Object.keys(bucketLabels)
+        .reduce((sum, key) => sum + (payload[key] || []).length, 0);
+      const reconcileApplyPanel = document.querySelector('#reconcileApplyPanel');
+      reconcileApplyPanel.hidden = !userCanManageInventory || decisionCount === 0;
+      if (userCanManageInventory && decisionCount > 0) {
+        syncReconcileSourceFilename();
+      }
+      renderReconcileApplyResult(null);
+      result.hidden = false;
+    }
+
+    function reconcileDecisionForRow(bucketKey, index) {
+      return document.querySelector(`[data-reconcile-decision="${bucketKey}"][data-reconcile-index="${index}"]`)?.value
+        || defaultReconcileDecision(bucketKey);
+    }
+
+    function buildReconcileApplyDecisions() {
+      const payload = latestReconcilePreview || {};
+      const bucketKeys = ['matched', 'quantity_mismatch', 'excel_missing', 'excel_new'];
+      return bucketKeys.flatMap((bucketKey) => (payload[bucketKey] || []).map((row, index) => ({
+        category: bucketKey,
+        decision: reconcileDecisionForRow(bucketKey, index),
+        factory_id: row.factory_id,
+        part_key: row.part_key,
+        location_code: row.location_code,
+        system_quantity: row.system_quantity,
+        excel_quantity: row.excel_quantity,
+      })));
+    }
+
+    function renderReconcileApplyResult(payload) {
+      latestReconcileApplyResult = payload || null;
+      const result = document.querySelector('#reconcileApplyResult');
+      if (!payload) {
+        result.hidden = true;
+        document.querySelector('#reconcileApplySummary').innerHTML = '';
+        document.querySelector('#reconcileApplyRows').innerHTML = '';
+        return;
+      }
+      const summary = payload.summary || {};
+      document.querySelector('#reconcileApplySummary').innerHTML = `
+        <span>${esc(tr('inventory.reconcile.apply.summary.applied'))}: <strong>${esc(summary.applied_count || 0)}</strong></span>
+        <span>${esc(tr('inventory.reconcile.apply.summary.auditOnly'))}: <strong>${esc(summary.audit_only_count || 0)}</strong></span>
+        <span>${esc(tr('inventory.reconcile.apply.summary.skipped'))}: <strong>${esc(summary.skipped_count || 0)}</strong></span>
+      `;
+      document.querySelector('#reconcileApplyRows').innerHTML = (payload.results || []).map((row) => `
+        <div class="reconcile-apply-row">
+          <strong>${esc(reconcileRowTitle(row))}</strong>
+          <span class="reconcile-meta">${esc(row.category)} · ${esc(row.decision)} · ${esc(tr(`inventory.reconcile.apply.status.${row.status}`))}</span>
+          ${row.before_qty !== undefined && row.after_qty !== undefined ? `
+            <span class="reconcile-meta">${esc(tr('inventory.reconcile.apply.resultQuantities', {
+              before: row.before_qty,
+              after: row.after_qty,
+            }))}</span>
+          ` : ''}
+        </div>
+      `).join('');
+      result.hidden = false;
+    }
+
+    async function applyReconcileDecisions() {
+      const error = document.querySelector('#reconcileApplyError');
+      error.textContent = '';
+      if (!latestReconcilePreview || !userCanManageInventory) {
+        error.textContent = tr('inventory.reconcile.apply.error.noPreview');
+        return;
+      }
+      const decisions = buildReconcileApplyDecisions();
+      if (!decisions.length) {
+        error.textContent = tr('inventory.reconcile.apply.error.noDecisions');
+        return;
+      }
+      const payload = {
+        idempotency_key: document.querySelector('#reconcileIdempotencyKey').value.trim(),
+        source_filename: document.querySelector('#reconcileSourceFilename').value.trim() || latestReconcileFileMeta?.filename || 'manual',
+        reason: document.querySelector('#reconcileReasonInput').value.trim(),
+        decisions,
+      };
+      if (!payload.idempotency_key) {
+        error.textContent = tr('inventory.reconcile.apply.error.idempotencyKey');
+        return;
+      }
+      if (!payload.reason) {
+        error.textContent = tr('inventory.reconcile.apply.error.reason');
+        return;
+      }
+      try {
+        const response = await AuthUI.fetchJson('/api/inventory/reconcile/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        renderReconcileApplyResult(response);
+        await loadInventory();
+      } catch (requestError) {
+        const message = requestError?.message === 'system quantity changed since preview'
+          ? tr('inventory.reconcile.apply.error.previewExpired')
+          : (requestError?.message || tr('inventory.reconcile.apply.error.failed'));
+        error.textContent = message;
+      }
+    }
+
+    function renderReconcileFileMeta(meta) {
+      latestReconcileFileMeta = meta || null;
+      const target = document.querySelector('#reconcileFileMeta');
+      if (!meta) {
+        target.textContent = '';
+        return;
+      }
+      target.textContent = tr('inventory.reconcile.fileMeta', {
+        filename: meta.filename || '-',
+        count: meta.parsed_row_count ?? 0,
+      });
+      syncReconcileSourceFilename();
+    }
+
+    function parseMissingColumns(detail) {
+      const prefix = 'missing required columns:';
+      const text = String(detail || '');
+      if (!text.startsWith(prefix)) return '';
+      return text.slice(prefix.length).trim();
+    }
+
+    function reconcileFileErrorMessage(detail) {
+      const text = String(detail || '').trim();
+      const missingColumns = parseMissingColumns(text);
+      if (missingColumns) {
+        return tr('inventory.reconcile.error.missingColumns', { columns: missingColumns });
+      }
+      if (text === 'quantity must be an integer') {
+        return tr('inventory.reconcile.error.quantityInteger');
+      }
+      if (text === 'quantity must be >= 0') {
+        return tr('inventory.reconcile.error.quantityNonNegative');
+      }
+      if (text === 'unsupported inventory file type') {
+        return tr('inventory.reconcile.error.unsupportedFileType');
+      }
+      if (!text) {
+        return tr('inventory.reconcile.error.failed');
+      }
+      return text;
+    }
+
+    async function generateReconcilePreview() {
+      const error = document.querySelector('#reconcileError');
+      error.textContent = '';
+      renderReconcileFileMeta(null);
+      let rows;
+      try {
+        const parsed = JSON.parse(document.querySelector('#reconcileRowsInput').value || '[]');
+        rows = Array.isArray(parsed) ? parsed : parsed.rows;
+        if (!Array.isArray(rows)) throw new Error(tr('inventory.reconcile.error.rowsArray'));
+      } catch (_error) {
+        error.textContent = tr('inventory.reconcile.error.invalidJson');
+        renderReconcilePreview(null);
+        return;
+      }
+      try {
+        const payload = await AuthUI.fetchJson('/api/inventory/reconcile/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows }),
+        });
+        renderReconcilePreview(payload);
+      } catch (requestError) {
+        error.textContent = requestError.message || tr('inventory.reconcile.error.failed');
+        renderReconcilePreview(null);
+      }
+    }
+
+    async function generateReconcilePreviewFromFile() {
+      const error = document.querySelector('#reconcileError');
+      error.textContent = '';
+      const input = document.querySelector('#reconcileFileInput');
+      const file = input.files?.[0];
+      if (!file) {
+        error.textContent = tr('inventory.reconcile.error.selectFile');
+        renderReconcilePreview(null);
+        renderReconcileFileMeta(null);
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const payload = await AuthUI.fetchJson('/api/inventory/reconcile/preview-file', {
+          method: 'POST',
+          body: formData,
+        });
+        renderReconcileFileMeta({
+          filename: payload.filename || file.name,
+          parsed_row_count: payload.parsed_row_count ?? 0,
+        });
+        renderReconcilePreview(payload);
+      } catch (requestError) {
+        error.textContent = reconcileFileErrorMessage(requestError?.message || '');
+        renderReconcilePreview(null);
+        renderReconcileFileMeta(null);
+      }
+    }
+
+    function renderPickRecommendations(payload) {
+      latestPickRecommendations = payload || null;
+      const result = document.querySelector('#pickRecommendationResult');
+      if (!payload) {
+        result.hidden = true;
+        document.querySelector('#pickSummary').innerHTML = '';
+        document.querySelector('#pickRecommendationList').innerHTML = '';
+        return;
+      }
+      const shortage = Number(payload.shortage_quantity || 0);
+      document.querySelector('#pickSummary').innerHTML = `
+        <span>${esc(tr('inventory.pick.summary.part'))}: <strong>${esc(payload.part_key || '')}</strong></span>
+        <span>${esc(tr('inventory.pick.summary.requested'))}: <strong>${esc(payload.requested_quantity || 0)}</strong></span>
+        <span>${esc(tr('inventory.pick.summary.available'))}: <strong>${esc(payload.total_available || 0)}</strong></span>
+        ${payload.insufficient ? `<span class="pick-shortage">${esc(tr('inventory.pick.shortage', { quantity: shortage }))}</span>` : ''}
+      `;
+      const rows = payload.recommendations || [];
+      document.querySelector('#pickRecommendationList').innerHTML = rows.length ? rows.map((row, index) => `
+        <div class="pick-row">
+          <span class="pick-order">${esc(index + 1)}</span>
+          <span>
+            <strong>${esc(row.location_code)}</strong>
+            <span class="reconcile-meta">${esc(row.factory_id || '')} · ${esc(row.location_kind === 'temporary' ? tr('inventory.kind.temporary') : tr('inventory.kind.permanent'))} · ${esc(tr('inventory.pick.available'))}: ${esc(row.available_quantity)}</span>
+          </span>
+          <span class="pick-quantity">${esc(row.pick_quantity)}</span>
+        </div>
+      `).join('') : `<p class="muted">${esc(tr('inventory.pick.empty'))}</p>`;
+      result.hidden = false;
+    }
+
+    async function loadPickRecommendations() {
+      const error = document.querySelector('#pickError');
+      error.textContent = '';
+      const partKey = document.querySelector('#pickPartInput').value.trim();
+      const quantity = Number(document.querySelector('#pickQuantityInput').value);
+      if (!partKey || !Number.isInteger(quantity) || quantity <= 0) {
+        error.textContent = tr('inventory.pick.error.input');
+        renderPickRecommendations(null);
+        return;
+      }
+      const params = new URLSearchParams({ part_key: partKey, quantity: String(quantity) });
+      const factory = document.querySelector('#pickFactoryInput').value;
+      if (factory) params.set('factory_id', factory);
+      try {
+        const payload = await AuthUI.fetchJson(`/api/inventory/pick-recommendations?${params.toString()}`);
+        renderPickRecommendations(payload);
+      } catch (requestError) {
+        error.textContent = requestError.message || tr('inventory.pick.error.failed');
+        renderPickRecommendations(null);
+      }
+    }
+
+    function warningBadges(cell, extra = '') {
+      const badges = [];
+      if (cell.mixed_material_warning) badges.push(`<span class="badge warn">${esc(tr('inventory.warning.mixed'))}</span>`);
+      if (cell.restock_required) badges.push(`<span class="badge restock">${esc(tr('inventory.restockRequired'))}</span>`);
+      if (extra) badges.push(extra);
+      return badges.length ? `<span class="badge-row">${badges.join('')}</span>` : '';
+    }
+
+    function isSelectedCell(cell) {
+      return selectedCell?.location_code === cell.location_code;
+    }
+
+    function renderCellButton(cell, className = 'map-cell', extraBadge = '') {
+      return `
+        <button type="button" class="${className}" data-location-code="${esc(cell.location_code)}" aria-selected="${isSelectedCell(cell) ? 'true' : 'false'}">
+          <strong>${esc(cell.location_code)}</strong>
+          <span class="cell-metrics">${esc(cell.total_quantity)} · ${esc(cell.material_count)} ${esc(tr('inventory.cell.materials'))}</span>
+          ${warningBadges(cell, extraBadge)}
+        </button>
+      `;
+    }
+
+    function sortedEntries(object, numeric = false) {
+      return Object.entries(object || {}).sort(([left], [right]) => {
+        if (numeric) return Number(left) - Number(right);
+        return String(left).localeCompare(String(right), undefined, { numeric: true });
+      });
+    }
+
+    function renderMap(payload) {
+      const zoneLabels = { A: tr('inventory.zone.a'), B: tr('inventory.zone.b') };
+      document.querySelector('#locationMap').innerHTML = ['A', 'B'].map((zoneKey) => {
+        const zone = payload?.zones?.[zoneKey] || { columns: {} };
+        const columns = sortedEntries(zone.columns);
+        return `
+          <section class="map-zone" data-zone="${esc(zoneKey)}">
+            <h3>${esc(zoneLabels[zoneKey] || zoneKey)}</h3>
+            ${columns.length ? columns.map(([columnKey, column]) => `
+              <div class="map-column" data-column="${esc(columnKey)}">
+                <div class="map-column-title"><span>${esc(tr('inventory.column', { column: columnKey }))}</span></div>
+                ${sortedEntries(column.racks, true).map(([rackKey, rack]) => `
+                  <div class="rack-row" data-rack="${esc(rackKey)}">
+                    <div class="rack-head">
+                      <span>${esc(tr('inventory.rack', { rack: rack.rack_index ?? rackKey }))}</span>
+                      ${rack.rack_warning ? `<span class="badge warn">${esc(rack.rack_warning_message || tr('inventory.warning.rack'))}</span>` : ''}
+                    </div>
+                    ${sortedEntries(rack.levels, true).map(([levelKey, level]) => `
+                      <div class="depth-grid" data-level="${esc(levelKey)}">
+                        ${sortedEntries(level.depths, true).map(([_depthKey, cell]) => renderCellButton(cell)).join('')}
+                      </div>
+                    `).join('')}
+                  </div>
+                `).join('')}
+              </div>
+            `).join('') : `<p class="muted">${esc(tr('inventory.empty'))}</p>`}
+          </section>
+        `;
+      }).join('');
+      document.querySelectorAll('.map-cell').forEach((cell) => {
+        cell.addEventListener('click', () => selectCellByCode(cell.dataset.locationCode));
+      });
+    }
+
+    function renderBuckets(buckets) {
+      const labels = {
+        temporary: tr('inventory.bucket.temporary'),
+        upstairs: tr('inventory.bucket.upstairs'),
+        unresolved: tr('inventory.bucket.unresolved'),
+      };
+      document.querySelector('#locationBuckets').innerHTML = ['temporary', 'upstairs', 'unresolved'].map((bucketKey) => {
+        const rows = buckets?.[bucketKey] || [];
+        const unresolvedBadge = bucketKey === 'unresolved'
+          ? `<span class="badge unresolved">${esc(tr('inventory.warning.unresolved'))}</span>`
+          : '';
+        return `
+          <section class="bucket-zone" data-bucket="${esc(bucketKey)}">
+            <h3>${esc(labels[bucketKey])}</h3>
+            ${rows.length ? rows.map((cell) => renderCellButton(cell, 'bucket-card', unresolvedBadge)).join('') : `<p class="muted">${esc(tr('inventory.empty'))}</p>`}
+          </section>
+        `;
+      }).join('');
+      document.querySelectorAll('.bucket-card').forEach((cell) => {
+        cell.addEventListener('click', () => selectCellByCode(cell.dataset.locationCode));
+      });
     }
 
     function renderLocations(locations) {
@@ -183,14 +803,22 @@
         if (!zones.has(zone)) zones.set(zone, []);
         zones.get(zone).push(location);
       });
+      const metaLine = (location) => {
+        const parts = [esc(location.part_key)];
+        if (location.factory_id && location.factory_id !== 'factory_a') parts.push(esc(location.factory_id));
+        if (location.location_kind === 'temporary') {
+          parts.push(`<span class="temporary">${esc(tr('inventory.kind.temporary'))}</span>`);
+        }
+        return parts.join(' · ');
+      };
       document.querySelector('#locationGrid').innerHTML = [...zones.entries()].map(([zone, rows]) => `
         <section class="zone">
           <h3>${esc(zone)}</h3>
           ${rows.map((location) => `
-            <button type="button" class="location-card" data-location-id="${esc(location.id)}" aria-selected="${selectedLocation?.id === location.id ? 'true' : 'false'}">
+            <button type="button" class="location-card" data-location-id="${esc(location.id)}" aria-selected="${selectedCell?.location_code === location.location_code && selectedMaterialKey === location.part_key ? 'true' : 'false'}">
               <span>
                 <strong>${esc(location.location_code)}</strong>
-                <span class="meta">${esc(location.part_key)} · ${esc(location.factory_id)} · <span class="${location.location_kind === 'temporary' ? 'temporary' : ''}">${esc(tr(`inventory.kind.${location.location_kind}`))}</span></span>
+                <span class="meta">${metaLine(location)}</span>
                 ${location.restock_required ? `<span class="meta restock">${esc(tr('inventory.restockRequired'))}</span>` : ''}
               </span>
               <span class="qty">${esc(location.quantity)}</span>
@@ -204,13 +832,79 @@
     }
 
     function selectLocation(id) {
-      selectedLocation = (latestPayload?.locations || []).find((row) => Number(row.id) === id) || null;
-      document.querySelector('#selectedInfo').textContent = selectedLocation
-        ? `${selectedLocation.location_code} · ${selectedLocation.part_key} · ${selectedLocation.quantity}`
-        : tr('inventory.editor.empty');
-      document.querySelector('#adjustQty').value = selectedLocation ? selectedLocation.quantity : '';
-      document.querySelector('#moveQty').value = selectedLocation ? '1' : '';
-      renderLocations(latestPayload?.locations || []);
+      const row = (latestLocationsPayload?.locations || []).find((item) => Number(item.id) === id) || null;
+      if (!row) {
+        selectCell(null);
+        return;
+      }
+      selectCell(findCellByCode(row.location_code), row.part_key);
+    }
+
+    function allMapCells() {
+      const zones = latestMapPayload?.zones || {};
+      const standardCells = Object.values(zones).flatMap((zone) => (
+        Object.values(zone.columns || {}).flatMap((column) => (
+          Object.values(column.racks || {}).flatMap((rack) => (
+            Object.values(rack.levels || {}).flatMap((level) => Object.values(level.depths || {}))
+          ))
+        ))
+      ));
+      const bucketCells = Object.values(latestMapPayload?.buckets || {}).flat();
+      return [...standardCells, ...bucketCells];
+    }
+
+    function findCellByCode(locationCode) {
+      return allMapCells().find((cell) => cell.location_code === locationCode) || null;
+    }
+
+    function sourceRowForSelection() {
+      if (!selectedCell) return null;
+      const rows = latestLocationsPayload?.locations || [];
+      const matches = rows.filter((row) => row.location_code === selectedCell.location_code);
+      if (selectedMaterialKey) {
+        return matches.find((row) => row.part_key === selectedMaterialKey) || null;
+      }
+      if (matches.length === 1) return matches[0];
+      return null;
+    }
+
+    function renderSelectedDetails() {
+      if (!selectedCell) {
+        document.querySelector('#selectedInfo').textContent = tr('inventory.editor.empty');
+        document.querySelector('#materialDetails').innerHTML = '';
+        document.querySelector('#adjustQty').value = '';
+        document.querySelector('#moveQty').value = '';
+        return;
+      }
+      const sourceRow = sourceRowForSelection();
+      document.querySelector('#selectedInfo').textContent = `${selectedCell.location_code} · ${selectedCell.total_quantity} · ${selectedCell.material_count} ${tr('inventory.cell.materials')}`;
+      document.querySelector('#materialDetails').innerHTML = (selectedCell.materials || []).map((material) => `
+        <button type="button" class="material-item" data-part-key="${esc(material.part_key)}" aria-selected="${selectedMaterialKey === material.part_key ? 'true' : 'false'}">
+          <span>
+            <strong>${esc(material.part_key)}</strong>
+            <span class="meta">${esc(material.part_name || '')}</span>
+          </span>
+          <strong>${esc(material.quantity)}</strong>
+        </button>
+      `).join('');
+      document.querySelectorAll('.material-item').forEach((item) => {
+        item.addEventListener('click', () => selectCell(selectedCell, item.dataset.partKey));
+      });
+      document.querySelector('#adjustQty').value = sourceRow ? sourceRow.quantity : '';
+      document.querySelector('#moveQty').value = sourceRow ? '1' : '';
+    }
+
+    function selectCell(cell, partKey = null) {
+      selectedCell = cell || null;
+      selectedMaterialKey = partKey || (cell?.materials?.length === 1 ? cell.materials[0].part_key : null);
+      renderSelectedDetails();
+      renderMap(latestMapPayload || {});
+      renderBuckets(latestMapPayload?.buckets || {});
+      renderLocations(latestLocationsPayload?.locations || []);
+    }
+
+    function selectCellByCode(locationCode) {
+      selectCell(findCellByCode(locationCode));
     }
 
     async function loadInventory() {
@@ -220,18 +914,26 @@
       if (factory) params.set('factory_id', factory);
       if (part) params.set('part_key', part);
       params.set('include_hidden', document.querySelector('#hiddenFilter').value);
-      latestPayload = await AuthUI.fetchJson(`/api/inventory/locations?${params.toString()}`);
-      renderSummary(latestPayload.summary || {});
-      renderLocations(latestPayload.locations || []);
-      if (selectedLocation && !(latestPayload.locations || []).some((row) => row.id === selectedLocation.id)) {
-        selectedLocation = null;
-        selectLocation(0);
+      const mapParams = new URLSearchParams();
+      if (factory) mapParams.set('factory_id', factory);
+      mapParams.set('include_hidden', document.querySelector('#hiddenFilter').value);
+      latestLocationsPayload = await AuthUI.fetchJson(`/api/inventory/locations?${params.toString()}`);
+      latestMapPayload = await AuthUI.fetchJson(`/api/inventory/location-map?${mapParams.toString()}`);
+      renderSummary(latestMapPayload.summary || {});
+      renderMap(latestMapPayload);
+      renderBuckets(latestMapPayload.buckets || {});
+      renderLocations(latestLocationsPayload.locations || []);
+      if (selectedCell && !findCellByCode(selectedCell.location_code)) {
+        selectCell(null);
+      } else {
+        renderSelectedDetails();
       }
     }
 
     async function adjustSelected() {
-      if (!selectedLocation) return;
-      await AuthUI.fetchJson(`/api/inventory/locations/${selectedLocation.id}`, {
+      const sourceRow = sourceRowForSelection();
+      if (!sourceRow || !userCanManageInventory) return;
+      await AuthUI.fetchJson(`/api/inventory/locations/${sourceRow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -243,16 +945,20 @@
     }
 
     async function moveSelected() {
-      if (!selectedLocation) return;
+      const sourceRow = sourceRowForSelection();
+      if (!sourceRow) {
+        document.querySelector('#selectedInfo').textContent = tr('inventory.move.selectMaterial');
+        return;
+      }
       await AuthUI.fetchJson('/api/inventory/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source_location_id: selectedLocation.id,
+          source_location_id: sourceRow.id,
           target_location_code: document.querySelector('#moveTarget').value,
           quantity: Number(document.querySelector('#moveQty').value),
           target_location_kind: document.querySelector('#moveKind').value,
-          reason: document.querySelector('#moveReason').value,
+          reason: document.querySelector('#moveReason').value || '整理库位',
         }),
       });
       await loadInventory();
@@ -264,10 +970,9 @@
         AuthUI.redirectToLogin();
         return;
       }
-      if (!AuthUI.hasCapability(user, 'can_manage_inventory')) {
-        document.querySelector('#accessDenied').hidden = false;
-        return;
-      }
+      userCanManageInventory = AuthUI.hasCapability(user, 'can_manage_inventory');
+      document.querySelector('#adjustmentPanel').hidden = !userCanManageInventory;
+      document.querySelector('#reconcileApplyPanel').hidden = !userCanManageInventory || !latestReconcilePreview;
       document.querySelector('#inventoryContent').hidden = false;
       await loadInventory();
     }
@@ -280,6 +985,12 @@
     document.querySelector('#moveBtn').addEventListener('click', () => {
       moveSelected().catch((error) => { document.querySelector('#selectedInfo').textContent = error.message; });
     });
+    document.querySelector('#pickRecommendationBtn').addEventListener('click', loadPickRecommendations);
+    document.querySelector('#reconcilePreviewBtn').addEventListener('click', generateReconcilePreview);
+    document.querySelector('#reconcileFilePreviewBtn').addEventListener('click', generateReconcilePreviewFromFile);
+    document.querySelector('#reconcileApplyBtn').addEventListener('click', () => {
+      applyReconcileDecisions().catch((error) => { document.querySelector('#reconcileApplyError').textContent = error.message; });
+    });
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/login';
@@ -287,9 +998,16 @@
 
     I18n.init().then(bootInventory);
     window.addEventListener('i18n:change', () => {
-      if (latestPayload) {
-        renderSummary(latestPayload.summary || {});
-        renderLocations(latestPayload.locations || []);
+      if (latestMapPayload && latestLocationsPayload) {
+        renderSummary(latestMapPayload.summary || {});
+        renderMap(latestMapPayload);
+        renderBuckets(latestMapPayload.buckets || {});
+        renderLocations(latestLocationsPayload.locations || []);
+        renderSelectedDetails();
+        renderPickRecommendations(latestPickRecommendations);
+        renderReconcilePreview(latestReconcilePreview);
+        renderReconcileFileMeta(latestReconcileFileMeta);
+        renderReconcileApplyResult(latestReconcileApplyResult);
       }
     });
   </script>
