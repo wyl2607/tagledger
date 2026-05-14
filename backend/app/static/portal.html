@@ -296,6 +296,7 @@
 
     async function copyPortalLink() {
       const button = document.querySelector('#copyPortalLinkBtn');
+      const originalText = button.textContent;
       const url = `${window.location.origin}/`;
       try {
         await navigator.clipboard.writeText(url);
@@ -303,6 +304,9 @@
       } catch {
         window.prompt('复制中心入口', url);
       }
+      window.setTimeout(() => {
+        button.textContent = originalText;
+      }, 2000);
     }
 
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
