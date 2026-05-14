@@ -345,6 +345,18 @@ def test_inventory_reconcile_preview_file_reuses_preview_and_is_read_only(
     assert stored.quantity == 4
 
 
+def test_inventory_reconcile_preview_file_rejects_malformed_content(
+    authenticated_client: TestClient,
+) -> None:
+    response = authenticated_client.post(
+        "/api/inventory/reconcile/preview-file",
+        files={"file": ("inventory.csv", b"\xff\xfe\x00not-valid-utf8")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid inventory file"
+
+
 def test_inventory_pick_recommendations_require_login(client: TestClient) -> None:
     response = client.get(
         "/api/inventory/pick-recommendations",

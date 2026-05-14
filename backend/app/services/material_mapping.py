@@ -174,7 +174,9 @@ def search_material_catalog(query: str = "", limit: int | None = None) -> list[M
                 item.product_name,
                 item.carton_size,
             )
-            code_hit = any(compact_query in normalize_material_code(value) for value in code_values)
+            code_hit = bool(compact_query) and any(
+                compact_query in normalize_material_code(value) for value in code_values
+            )
             text_hit = any(text_query in value.lower() for value in text_values if value)
             if code_hit or text_hit:
                 filtered.append(item)

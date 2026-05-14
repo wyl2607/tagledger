@@ -45,6 +45,13 @@ def _login_operator(
     client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
 
 
+def _login_user(client: TestClient, session: Session, user) -> None:
+    token, _ = create_session(session, user, ip_address="testclient", user_agent="pytest")
+    client.cookies.set(SESSION_COOKIE, token)
+    client.cookies.set(CSRF_COOKIE, "pytest-csrf-token")
+    client.headers.update({CSRF_HEADER: "pytest-csrf-token"})
+
+
 def _seed_location(
     session: Session,
     *,
@@ -421,6 +428,57 @@ def test_inventory_reconcile_apply_rejects_duplicate_idempotency_key(
         )
         == 1
     )
+
+
+def test_inventory_reconcile_apply_rejects_duplicate_idempotency_key_across_users(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122216",
+        location_code="A-A01-011",
+        quantity=5,
+    )
+    payload = {
+        "idempotency_key": "stocktake-adjust-cross-user",
+        "source_filename": "stocktake.csv",
+        "reason": "daily stocktake",
+        "decisions": [
+            {
+                "category": "quantity_mismatch",
+                "decision": "use_excel",
+                "part_key": "CPXS000122216",
+                "location_code": "A-A01-011",
+                "excel_quantity": 7,
+                "system_quantity": 5,
+            }
+        ],
+    }
+    first = client.post("/api/inventory/reconcile/apply", json=payload)
+    second_user = create_user(
+        session,
+        username="inventory-reconcile-supervisor-two",
+        display_name="Inventory Reconcile Supervisor Two",
+        password="inventory-reconcile-supervisor-two-pass",
+        role="supervisor",
+    )
+    _login_user(client, session, second_user)
+
+    second = client.post("/api/inventory/reconcile/apply", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["detail"] == "duplicate reconcile apply request"
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122216")
+    ).one()
+    assert location.quantity == 7
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122216")
+    ).all()
+    assert len(movements) == 1
 
 
 def test_inventory_reconcile_apply_requires_preview_system_quantity(
@@ -1027,6 +1085,49 @@ def test_inventory_move_allows_variance_and_records_adjustment(
     assert adjust.operator_id == "inventory-variance-operator"
 
 
+def test_inventory_move_rejects_cross_factory_operator_source(
+    client: TestClient,
+    session: Session,
+) -> None:
+    operator = create_user(
+        session,
+        username="inventory-factory-a-operator",
+        display_name="Factory A Operator",
+        password="inventory-factory-a-operator-pass",
+        role="operator",
+    )
+    operator.factory_id = "factory_a"
+    session.add(operator)
+    session.commit()
+    _login_user(client, session, operator)
+    source = _seed_location(
+        session,
+        factory_id="factory_b",
+        part_key="CPXS000122041",
+        location_code="B-41",
+        quantity=5,
+        location_kind="permanent",
+    )
+
+    response = client.post(
+        "/api/inventory/move",
+        json={
+            "source_location_id": source.id,
+            "target_location_code": "B-42",
+            "quantity": 3,
+            "target_location_kind": "permanent",
+            "reason": "cross factory attempt",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "source location is outside your factory"
+    stored = session.get(InventoryLocation, source.id)
+    assert stored is not None
+    assert stored.quantity == 5
+    assert session.exec(select(InventoryMovement)).all() == []
+
+
 def test_inventory_move_rejects_same_location(
     client: TestClient,
     session: Session,
@@ -1212,6 +1313,33 @@ def test_outbound_inbound_idempotency_key_rejects_changed_payload(
         select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122010")
     ).one()
     assert location.quantity == 3
+
+
+def test_outbound_inbound_rejects_overlong_idempotency_key(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+
+    response = client.post(
+        "/api/outbound/inventory/inbound",
+        json={
+            "part_key": "CPXS000122099",
+            "location_code": "QA-IN-99",
+            "quantity": 3,
+            "reason": "purchase_inbound_test",
+            "idempotency_key": "x" * 121,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "idempotency_key must be <= 120 characters"
+    assert (
+        session.exec(
+            select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122099")
+        ).first()
+        is None
+    )
 
 
 def test_outbound_inbound_blank_idempotency_key_is_treated_as_missing(

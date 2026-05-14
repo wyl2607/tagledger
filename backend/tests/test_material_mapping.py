@@ -6,6 +6,7 @@ from backend.app.services.material_mapping import (
     find_material_matches,
     load_material_matches,
     normalize_material_code,
+    search_material_catalog,
 )
 
 
@@ -133,6 +134,25 @@ def test_search_material_catalog_defaults_to_all_rows(tmp_path: Path, monkeypatc
     assert len(material_mapping.search_material_catalog()) == 35
     assert material_mapping.search_material_catalog("SKU-034")[0].sku == "SKU-034"
     assert material_mapping.search_material_catalog("类型A")[0].material_code == "MAT-034"
+
+
+def test_search_material_catalog_ignores_punctuation_only_code_query(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "mapping.xlsx"
+    write_mapping(path)
+
+    from backend.app.services import material_mapping
+
+    material_mapping.clear_material_mapping_cache()
+
+    class FakeSettings:
+        material_mapping_file = path
+
+    monkeypatch.setattr(material_mapping, "get_settings", lambda: FakeSettings())
+
+    assert search_material_catalog("-") == []
 
 
 def test_load_material_matches_skips_unknown_headers(tmp_path: Path) -> None:

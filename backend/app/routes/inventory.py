@@ -7,6 +7,7 @@ from backend.app.database import get_session
 from backend.app.models import User
 from backend.app.services.inventory_excel import parse_inventory_file_rows
 from backend.app.services.inventory_service import (
+    InventoryPermissionError,
     adjust_inventory_location,
     apply_inventory_reconcile,
     list_inventory_locations,
@@ -151,6 +152,8 @@ def post_inventory_move(
             reason=payload.reason,
             operator=user,
         )
+    except InventoryPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except RuntimeError as exc:
         status_code = 404 if "not found" in str(exc) else 409
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
@@ -210,3 +213,5 @@ async def post_inventory_reconcile_preview_file(
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (UnicodeDecodeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="invalid inventory file") from exc

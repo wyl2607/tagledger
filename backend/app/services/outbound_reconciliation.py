@@ -1132,7 +1132,11 @@ def _apply_inventory_delta(
 
 def _normalize_idempotency_key(value: str | None) -> str | None:
     key = (value or "").strip()
-    return key[:120] if key else None
+    if not key:
+        return None
+    if len(key) > 120:
+        raise RuntimeError("idempotency_key must be <= 120 characters")
+    return key
 
 
 def _inbound_request_signature(

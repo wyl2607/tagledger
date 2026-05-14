@@ -18,6 +18,10 @@ HIDDEN_LOCATION_STATUSES = {"retired", "disabled"}
 PENDING_LOCATION_STATUSES = {"pending_restock", "pending_replacement"}
 
 
+class InventoryPermissionError(RuntimeError):
+    pass
+
+
 def normalize_factory_id(value: str) -> str:
     normalized = (value or "").strip().lower()
     if normalized not in FACTORIES:
@@ -291,6 +295,8 @@ def move_inventory_quantity(
     source = session.get(InventoryLocation, source_location_id)
     if source is None:
         raise RuntimeError("source location not found")
+    if operator.factory_id != source.factory_id:
+        raise InventoryPermissionError("source location is outside your factory")
     move_qty = int(quantity)
     if move_qty <= 0:
         raise RuntimeError("quantity must be > 0")
@@ -597,13 +603,11 @@ def _reconcile_item_key(
 def _reject_duplicate_reconcile_apply(
     *,
     session: Session,
-    operator: User,
     item_key: str,
 ) -> None:
     existing_audit = session.exec(
         select(AuditLog).where(
             AuditLog.action == "inventory.reconcile.apply",
-            AuditLog.actor_username == operator.username,
             AuditLog.target_id == item_key,
         )
     ).first()
@@ -660,7 +664,7 @@ def apply_inventory_reconcile(
             part_key=part_key,
             location_code=location_code,
         )
-        _reject_duplicate_reconcile_apply(session=session, operator=operator, item_key=item_key)
+        _reject_duplicate_reconcile_apply(session=session, item_key=item_key)
 
         if category == "matched":
             if decision not in {"noop", "keep_system"}:
