@@ -22,7 +22,8 @@ check_contains "backend/app/static/portal.html" 'href="/workbench"'
 check_contains "backend/app/static/portal.html" 'href="/inbound"'
 check_contains "backend/app/static/portal.html" "手机访问"
 check_contains "backend/app/static/portal.html" "loadRuntimeStatus"
-check_contains "backend/app/static/portal.html" "copyPortalLink"
+check_contains "backend/app/static/portal.html" "copyEntryLink"
+check_contains "backend/app/static/portal.html" 'data-copy-path="/mobile"'
 check_contains "backend/app/static/portal.html" "navigator.clipboard.writeText"
 check_contains "backend/app/static/portal.html" "window.setTimeout"
 check_contains "backend/app/static/portal.html" "settings.pairing_enabled"
