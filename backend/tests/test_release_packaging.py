@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -167,10 +168,16 @@ def test_public_docs_do_not_include_private_local_paths_or_tokens() -> None:
         Path(path).read_text(encoding="utf-8") for path in ("README.md", "docs/WINDOWS_DEPLOY.md")
     )
 
-    assert "/Users/" + "yumei" not in public_text
-    assert "192." + "168." not in public_text
-    assert "sk-" not in public_text
-    assert "OPENAI_API_KEY" not in public_text
+    forbidden_patterns = (
+        r"/Users/[A-Za-z0-9._-]+",
+        r"/home/[A-Za-z0-9._-]+",
+        r"C:\\Users\\[A-Za-z0-9._-]+",
+        r"192\.168\.",
+        r"sk-",
+        r"OPENAI_API_KEY",
+    )
+    for pattern in forbidden_patterns:
+        assert re.search(pattern, public_text) is None
 
 
 def test_windows_fleet_files_and_safety_guards_present() -> None:
@@ -242,9 +249,14 @@ def test_windows_fleet_assets_do_not_embed_private_local_paths() -> None:
         )
     )
 
-    assert "/Users/" + "yumei" not in fleet_blob
-    assert "192." + "168." not in fleet_blob
-    assert "C:\\Users\\vitec" not in fleet_blob
+    forbidden_patterns = (
+        r"/Users/[A-Za-z0-9._-]+",
+        r"/home/[A-Za-z0-9._-]+",
+        r"C:\\Users\\[A-Za-z0-9._-]+",
+        r"192\.168\.",
+    )
+    for pattern in forbidden_patterns:
+        assert re.search(pattern, fleet_blob) is None
 
 
 def test_seed_user_account_does_not_embed_site_passwords() -> None:

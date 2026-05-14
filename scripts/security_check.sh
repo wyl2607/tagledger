@@ -13,7 +13,7 @@ if matches=$(git ls-files | grep -E "$forbidden_paths"); then
   exit 1
 fi
 
-forbidden_content='(/Users/yumei|192\.168\.|/home/vitech|C:\\Users\\)'
+forbidden_content='(/Users/[A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+|C:\\Users\\[A-Za-z0-9._-]+|192\.168\.)'
 if matches=$(git ls-files -z | grep -z -v '^scripts/security_check\.sh$' | xargs -0 rg -n --hidden --glob '!*.png' --glob '!*.jpg' --glob '!*.jpeg' --glob '!*.webp' --glob '!*.pdf' "$forbidden_content"); then
   echo "ERROR: tracked forbidden local/private references:" >&2
   echo "$matches" >&2

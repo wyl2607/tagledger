@@ -14,7 +14,6 @@ class PairingTokenInvalid(Exception):
 
 PAIR_TOKEN_TTL_SECONDS = 600  # 10 minutes
 RATE_WINDOW_SECONDS = 60  # failures counted within last 60s
-BLOCK_SECONDS = 600  # blocked for 10 minutes after threshold
 
 _pair_token: str | None = None
 _pair_token_issued_at: float = 0.0
@@ -59,6 +58,7 @@ def redeem(token: str, ip: str) -> str:
     settings = get_settings()
     now = time.time()
     limit = settings.pairing_rate_limit_per_min
+    block_seconds = max(int(settings.pairing_block_minutes), 1) * 60
 
     blocked_at = _blocked_until.get(ip, 0.0)
     if blocked_at > now:
@@ -76,7 +76,7 @@ def redeem(token: str, ip: str) -> str:
     if current is None or token != current:
         recent.append(now)
         if len(recent) >= limit:
-            _blocked_until[ip] = now + BLOCK_SECONDS
+            _blocked_until[ip] = now + block_seconds
         raise PairingTokenInvalid("invalid token")
 
     _pair_token = None  # single-use

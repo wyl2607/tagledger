@@ -48,6 +48,7 @@ python3 ~/tools/automation/workspace-guides/skill-chains/chain-gates/grouped_com
 - `backend/app/config.py`
 - `backend/app/main.py`
 - `backend/app/ocr/**`
+- `backend/app/pairing.py`
 - `backend/app/routes/**`
 - `backend/app/services/**`
 - `backend/app/static/*.html`

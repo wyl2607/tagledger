@@ -133,6 +133,39 @@ class TestPairingRedeem:
             )
             assert resp.status_code == 429
 
+    def test_block_window_uses_configured_minutes(self, monkeypatch):
+        import backend.app.middleware.lan_guard as lg
+        import backend.app.pairing as pm
+        from backend.app.config import get_settings
+
+        monkeypatch.setattr(lg, "_get_remote_ip", lambda _r: "10.9.8.8")
+        monkeypatch.setattr(get_settings(), "pairing_rate_limit_per_min", 2)
+        monkeypatch.setattr(get_settings(), "pairing_block_minutes", 1)
+
+        with TestClient(app) as c:
+            first = c.post(
+                "/api/pairing/redeem",
+                json={"token": "bad-token"},
+                headers=_headers(),
+            )
+            second = c.post(
+                "/api/pairing/redeem",
+                json={"token": "bad-token"},
+                headers=_headers(),
+            )
+            blocked = c.post(
+                "/api/pairing/redeem",
+                json={"token": "bad-token"},
+                headers=_headers(),
+            )
+
+        assert first.status_code == 401
+        assert second.status_code == 401
+        assert blocked.status_code == 429
+        assert blocked.json()["detail"] == "rate limited"
+        now = pm.time.time()
+        assert pm._blocked_until["10.9.8.8"] == pytest.approx(now + 60, abs=1)
+
 
 class TestPairingEnforcement:
     def test_non_loopback_no_cookie_returns_403(self, monkeypatch):
