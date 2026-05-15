@@ -500,6 +500,8 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "window.location.host" in portal.text
     assert "refreshRuntimeStatusBtn" in portal.text
     assert "刷新状态" in portal.text
+    assert "refreshButton.disabled = true" in portal.text
+    assert "刷新中" in portal.text
     assert "现场直连" in portal.text
     assert "进入页面" in portal.text
     assert "复制链接" in portal.text

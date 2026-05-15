@@ -300,6 +300,10 @@
       const entryAddress = document.querySelector('#entryAddress');
       const pairingStatus = document.querySelector('#pairingStatus');
       const lanGuardStatus = document.querySelector('#lanGuardStatus');
+      const refreshButton = document.querySelector('#refreshRuntimeStatusBtn');
+      const refreshLabel = refreshButton.querySelector('strong');
+      refreshButton.disabled = true;
+      refreshLabel.textContent = '刷新中';
       try {
         const settings = await fetch('/runtime/status').then((response) => response.json());
         serviceStatus.textContent = '运行中';
@@ -311,6 +315,9 @@
         entryAddress.textContent = window.location.host || '未知';
         pairingStatus.textContent = '未知';
         lanGuardStatus.textContent = '未知';
+      } finally {
+        refreshButton.disabled = false;
+        refreshLabel.textContent = '刷新状态';
       }
     }
 
