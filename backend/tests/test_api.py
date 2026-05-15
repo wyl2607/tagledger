@@ -508,6 +508,8 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "copyCurrentEntryBtn" in portal.text
     assert 'data-copy-current="true"' in portal.text
     assert "entryAddress" in portal.text
+    assert "runtimeShareOrigin = window.location.origin" in portal.text
+    assert "runtimeShareOrigin = settings.lan_url || window.location.origin" in portal.text
     assert (
         "feedbackTarget = button.dataset.copyCurrent ? button.querySelector('strong') : button"
         in portal.text
@@ -546,9 +548,10 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "复制全部入口" in portal.text
     assert 'data-copy-all="true"' in portal.text
     assert "已复制全部入口" in portal.text
-    assert "`物料目录 ${window.location.origin}/materials`" in portal.text
-    assert "`采购入库 ${window.location.origin}/inbound`" in portal.text
-    assert "`历史记录 ${window.location.origin}/history`" in portal.text
+    assert "`物料目录 ${runtimeShareOrigin}/materials`" in portal.text
+    assert "`采购入库 ${runtimeShareOrigin}/inbound`" in portal.text
+    assert "`历史记录 ${runtimeShareOrigin}/history`" in portal.text
+    assert "`${runtimeShareOrigin}${button.dataset.copyPath || '/'}`" in portal.text
     assert "物料目录" in portal.text
     assert 'href="/materials"' in portal.text
     assert "查 SKU、BYD 料号和箱规" in portal.text

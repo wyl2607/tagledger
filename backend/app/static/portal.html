@@ -284,6 +284,8 @@
 
   <script src="/static/auth-ui.js"></script>
   <script>
+    let runtimeShareOrigin = window.location.origin;
+
     async function loadAccount() {
       const loginLink = document.querySelector('#loginLink');
       const logoutBtn = document.querySelector('#logoutBtn');
@@ -319,6 +321,7 @@
         const settings = await fetch('/runtime/status').then((response) => response.json());
         serviceStatus.textContent = '运行中';
         entryAddress.textContent = window.location.host;
+        runtimeShareOrigin = settings.lan_url || window.location.origin;
         pairingStatus.textContent = settings.pairing_enabled ? '需要配对' : '现场直连';
         lanGuardStatus.textContent = settings.lan_guard_enabled ? '已开启' : '已关闭';
         runtimeUpdatedAt.textContent = new Date().toLocaleTimeString('zh-CN', {
@@ -346,15 +349,15 @@
         : (
             button.dataset.copyAll
               ? [
-                  `中心入口 ${window.location.origin}/`,
-                  `手机捡货 ${window.location.origin}/mobile`,
-                  `出库核对 ${window.location.origin}/outbound`,
-                  `角色工作台 ${window.location.origin}/workbench`,
-                  `物料目录 ${window.location.origin}/materials`,
-                  `采购入库 ${window.location.origin}/inbound`,
-                  `历史记录 ${window.location.origin}/history`,
+                  `中心入口 ${runtimeShareOrigin}/`,
+                  `手机捡货 ${runtimeShareOrigin}/mobile`,
+                  `出库核对 ${runtimeShareOrigin}/outbound`,
+                  `角色工作台 ${runtimeShareOrigin}/workbench`,
+                  `物料目录 ${runtimeShareOrigin}/materials`,
+                  `采购入库 ${runtimeShareOrigin}/inbound`,
+                  `历史记录 ${runtimeShareOrigin}/history`,
                 ].join('\n')
-              : `${window.location.origin}${button.dataset.copyPath || '/'}`
+              : `${runtimeShareOrigin}${button.dataset.copyPath || '/'}`
           );
       try {
         await navigator.clipboard.writeText(url);
