@@ -507,6 +507,9 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "复制给主管打开出库核对" in portal.text
     assert "复制角色工作台" in portal.text
     assert 'data-copy-path="/workbench"' in portal.text
+    assert "复制全部入口" in portal.text
+    assert 'data-copy-all="true"' in portal.text
+    assert "已复制全部入口" in portal.text
     assert "navigator.clipboard.writeText" in portal.text
     assert "window.setTimeout" in portal.text
     assert "/runtime/status" in portal.text
