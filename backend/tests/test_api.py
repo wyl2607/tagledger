@@ -528,6 +528,9 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "复制全部入口" in portal.text
     assert 'data-copy-all="true"' in portal.text
     assert "已复制全部入口" in portal.text
+    assert "物料目录" in portal.text
+    assert 'href="/materials"' in portal.text
+    assert "查 SKU、BYD 料号和箱规" in portal.text
     assert "navigator.clipboard.writeText" in portal.text
     assert "window.setTimeout" in portal.text
     assert "/runtime/status" in portal.text
@@ -565,6 +568,7 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'href="/mobile"' in portal
     assert 'href="/outbound"' in portal
     assert 'href="/inbound"' in portal
+    assert 'href="/materials"' in portal
     assert "loadRuntimeStatus" in portal
     assert "copyEntryLink" in portal
     assert "originalText" in portal
