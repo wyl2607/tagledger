@@ -192,7 +192,9 @@
     <section class="status-strip" aria-label="系统状态">
       <div class="status-tile"><span>服务</span><strong id="serviceStatus">运行中</strong></div>
       <div class="status-tile"><span>当前账号</span><strong id="accountStatus">未登录</strong></div>
-      <div class="status-tile"><span>当前入口</span><strong id="entryAddress">读取中</strong></div>
+      <button class="status-tile" id="copyCurrentEntryBtn" data-copy-current="true" data-copy-done="已复制当前入口" type="button" title="复制当前打开的入口地址" aria-label="复制当前打开的入口地址">
+        <span>当前入口</span><strong id="entryAddress">读取中</strong>
+      </button>
       <div class="status-tile"><span>手机访问</span><strong id="pairingStatus">读取中</strong></div>
       <div class="status-tile"><span>内网保护</span><strong id="lanGuardStatus">读取中</strong></div>
       <div class="status-tile"><span>最后刷新</span><strong id="runtimeUpdatedAt">未刷新</strong></div>
@@ -331,14 +333,18 @@
     async function copyEntryLink(event) {
       const button = event.currentTarget;
       const originalText = button.textContent;
-      const url = button.dataset.copyAll
-        ? [
-            `中心入口 ${window.location.origin}/`,
-            `手机捡货 ${window.location.origin}/mobile`,
-            `出库核对 ${window.location.origin}/outbound`,
-            `角色工作台 ${window.location.origin}/workbench`,
-          ].join('\n')
-        : `${window.location.origin}${button.dataset.copyPath || '/'}`;
+      const url = button.dataset.copyCurrent
+        ? window.location.href
+        : (
+            button.dataset.copyAll
+              ? [
+                  `中心入口 ${window.location.origin}/`,
+                  `手机捡货 ${window.location.origin}/mobile`,
+                  `出库核对 ${window.location.origin}/outbound`,
+                  `角色工作台 ${window.location.origin}/workbench`,
+                ].join('\n')
+              : `${window.location.origin}${button.dataset.copyPath || '/'}`
+          );
       try {
         await navigator.clipboard.writeText(url);
         button.textContent = button.dataset.copyDone || '已复制';
@@ -355,7 +361,7 @@
       window.location.href = '/';
     });
     document.querySelector('#refreshRuntimeStatusBtn').addEventListener('click', loadRuntimeStatus);
-    document.querySelectorAll('[data-copy-path], [data-copy-all]').forEach((button) => {
+    document.querySelectorAll('[data-copy-path], [data-copy-all], [data-copy-current]').forEach((button) => {
       button.addEventListener('click', copyEntryLink);
     });
 
