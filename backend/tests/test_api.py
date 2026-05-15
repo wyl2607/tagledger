@@ -499,8 +499,10 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "复制中心入口" in portal.text
     assert "复制手机捡货" in portal.text
     assert 'data-copy-path="/mobile"' in portal.text
+    assert "复制给发货员打开手机捡货" in portal.text
     assert "复制出库核对" in portal.text
     assert 'data-copy-path="/outbound"' in portal.text
+    assert "复制给主管打开出库核对" in portal.text
     assert "复制角色工作台" in portal.text
     assert 'data-copy-path="/workbench"' in portal.text
     assert "navigator.clipboard.writeText" in portal.text
