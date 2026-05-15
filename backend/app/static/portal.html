@@ -57,13 +57,20 @@
     .portal-actions {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 10px;
+      gap: 8px;
       padding: 16px;
       border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #111827;
       box-shadow: var(--shadow);
     }
+    .portal-action-label {
+      margin-top: 4px;
+      color: rgba(255,255,255,.72);
+      font-size: 14px;
+      font-weight: 950;
+    }
+    .portal-action-label:first-child { margin-top: 0; }
     .portal-actions .nav-button {
       min-height: 66px;
       justify-content: flex-start;
@@ -169,9 +176,11 @@
         </div>
       </div>
       <div class="portal-actions">
+        <div class="portal-action-label">进入页面</div>
         <a class="nav-button primary-entry" href="/mobile">手机捡货</a>
         <a class="nav-button" href="/outbound">出库核对</a>
         <a class="nav-button" href="/workbench">角色工作台</a>
+        <div class="portal-action-label">复制链接</div>
         <button class="nav-button" data-copy-path="/" data-copy-done="已复制中心入口" type="button" title="复制给同事打开中心入口" aria-label="复制给同事打开中心入口">复制中心入口</button>
         <button class="nav-button" data-copy-path="/mobile" data-copy-done="已复制手机捡货" type="button" title="复制给发货员打开手机捡货" aria-label="复制给发货员打开手机捡货">复制手机捡货</button>
         <button class="nav-button" data-copy-path="/outbound" data-copy-done="已复制出库核对" type="button" title="复制给主管打开出库核对" aria-label="复制给主管打开出库核对">复制出库核对</button>
