@@ -525,9 +525,13 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "复制给主管打开出库核对" in portal.text
     assert "复制角色工作台" in portal.text
     assert 'data-copy-path="/workbench"' in portal.text
+    assert "复制物料目录" in portal.text
+    assert 'data-copy-path="/materials"' in portal.text
+    assert "已复制物料目录" in portal.text
     assert "复制全部入口" in portal.text
     assert 'data-copy-all="true"' in portal.text
     assert "已复制全部入口" in portal.text
+    assert "`物料目录 ${window.location.origin}/materials`" in portal.text
     assert "物料目录" in portal.text
     assert 'href="/materials"' in portal.text
     assert "查 SKU、BYD 料号和箱规" in portal.text
