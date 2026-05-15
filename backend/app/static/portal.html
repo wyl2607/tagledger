@@ -332,7 +332,8 @@
 
     async function copyEntryLink(event) {
       const button = event.currentTarget;
-      const originalText = button.textContent;
+      const feedbackTarget = button.dataset.copyCurrent ? button.querySelector('strong') : button;
+      const originalText = feedbackTarget.textContent;
       const url = button.dataset.copyCurrent
         ? window.location.href
         : (
@@ -347,12 +348,12 @@
           );
       try {
         await navigator.clipboard.writeText(url);
-        button.textContent = button.dataset.copyDone || '已复制';
+        feedbackTarget.textContent = button.dataset.copyDone || '已复制';
       } catch {
         window.prompt(originalText, url);
       }
       window.setTimeout(() => {
-        button.textContent = originalText;
+        feedbackTarget.textContent = originalText;
       }, 2000);
     }
 

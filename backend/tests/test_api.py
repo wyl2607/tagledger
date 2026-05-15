@@ -499,6 +499,10 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "copyCurrentEntryBtn" in portal.text
     assert 'data-copy-current="true"' in portal.text
     assert "entryAddress" in portal.text
+    assert (
+        "feedbackTarget = button.dataset.copyCurrent ? button.querySelector('strong') : button"
+        in portal.text
+    )
     assert "window.location.href" in portal.text
     assert "window.location.host" in portal.text
     assert "repeat(auto-fit, minmax(150px, 1fr))" in portal.text
