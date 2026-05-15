@@ -196,6 +196,9 @@
       <div class="status-tile"><span>手机访问</span><strong id="pairingStatus">读取中</strong></div>
       <div class="status-tile"><span>内网保护</span><strong id="lanGuardStatus">读取中</strong></div>
       <div class="status-tile"><span>今日主线</span><strong>96 单捡货</strong></div>
+      <button class="status-tile" id="refreshRuntimeStatusBtn" type="button">
+        <span>状态</span><strong>刷新状态</strong>
+      </button>
     </section>
 
     <section class="tool-section">
@@ -337,6 +340,7 @@
       await AuthUI.logout();
       window.location.href = '/';
     });
+    document.querySelector('#refreshRuntimeStatusBtn').addEventListener('click', loadRuntimeStatus);
     document.querySelectorAll('[data-copy-path], [data-copy-all]').forEach((button) => {
       button.addEventListener('click', copyEntryLink);
     });
