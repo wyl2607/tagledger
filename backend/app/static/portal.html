@@ -186,6 +186,7 @@
         <button class="nav-button" data-copy-path="/outbound" data-copy-done="已复制出库核对" type="button" title="复制给主管打开出库核对" aria-label="复制给主管打开出库核对">复制出库核对</button>
         <button class="nav-button" data-copy-path="/workbench" data-copy-done="已复制角色工作台" type="button" title="复制给同事打开角色工作台" aria-label="复制给同事打开角色工作台">复制角色工作台</button>
         <button class="nav-button" data-copy-path="/materials" data-copy-done="已复制物料目录" type="button" title="复制给同事打开物料目录" aria-label="复制给同事打开物料目录">复制物料目录</button>
+        <button class="nav-button" data-copy-path="/inbound" data-copy-done="已复制采购入库" type="button" title="复制给入库同事打开采购入库" aria-label="复制给入库同事打开采购入库">复制采购入库</button>
         <button class="nav-button" data-copy-all="true" data-copy-done="已复制全部入口" type="button" title="复制全部常用入口给现场群" aria-label="复制全部常用入口给现场群">复制全部入口</button>
       </div>
     </section>
@@ -349,6 +350,7 @@
                   `出库核对 ${window.location.origin}/outbound`,
                   `角色工作台 ${window.location.origin}/workbench`,
                   `物料目录 ${window.location.origin}/materials`,
+                  `采购入库 ${window.location.origin}/inbound`,
                 ].join('\n')
               : `${window.location.origin}${button.dataset.copyPath || '/'}`
           );
