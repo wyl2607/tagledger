@@ -87,7 +87,13 @@ def test_database_url_normalization_supports_alembic() -> None:
     )
 
 
-def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestClient) -> None:
+def test_runtime_status_exposes_mobile_test_switches(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.app import main as main_module
+
+    monkeypatch.setattr(main_module.lan_guard, "_first_lan_ipv4", lambda: "203.0.113.9")
+
     response = authenticated_client.get("/runtime/status")
 
     assert response.status_code == 200
@@ -100,6 +106,9 @@ def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestC
     assert isinstance(payload["pairing_enabled"], bool)
     assert payload["mobile_url"].endswith("/mobile")
     assert payload["history_url"].endswith("/history")
+    assert payload["lan_url"] == "http://203.0.113.9:8000"
+    assert payload["lan_mobile_url"] == "http://203.0.113.9:8000/mobile"
+    assert payload["lan_history_url"] == "http://203.0.113.9:8000/history"
 
 
 def test_startup_restore_skips_submission_queue_when_saas_disabled(
