@@ -135,9 +135,9 @@ uploaded → ocr_done → confirmed → submitted
 - [ ] 收口 `/workbench` 导航和角色模块，减少旧 OCR demo 入口权重
 - [ ] 用真实现场账号和发货单验证 `/setup`、`/login`、`/workbench`、`/mobile`、`/outbound`、`/transfers`、`/admin`
 - [ ] 用真实库存数据验证 `/inventory` 库位地图、库位调拨、Excel 对账 preview、CSV/XLSX 文件 preview 和拣货推荐
-- [ ] 把 `/api/inventory/reconcile/preview-file` 接到 `/inventory` 文件上传 UI
-- [ ] 将拣货推荐接入出库单/检货单流程
-- [ ] 设计 Excel 对账 apply 流程，要求人工确认和流水审计，不能自动覆盖系统库存
+- [x] 把 `/api/inventory/reconcile/preview-file` 接到 `/inventory` 文件上传 UI
+- [x] 将拣货推荐接入出库单/检货单流程
+- [x] 设计 Excel 对账 apply 流程，要求人工确认和流水审计，不能自动覆盖系统库存
 - [ ] 建立待整理库位、混放库位、盘点差异和补货提醒的现场处理闭环
 - [ ] 人工核对 5 条 SaaS dry-run 截图
 - [ ] 替换 `config/saas_selectors.yaml` 为真实 SaaS URL 和 selector
