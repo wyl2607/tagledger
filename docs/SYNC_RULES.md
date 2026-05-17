@@ -1,16 +1,19 @@
 # TagLedger Git Sync Rules
 
-This document defines the only supported sync path for TagLedger development across Mac, GitHub, Windows, and servers.
+This document defines the only supported sync path for TagLedger development across Mac, the `coco` Mac mini, GitHub, Windows, and servers.
 
 ## Source Of Truth
 
 - Center remote: `https://github.com/wyl2607/tagledger.git`
+- Tailscale Mac Mini Mirror: remote name `coco`, default URL `coco:tagledger.git`.
 - Visibility: private GitHub repository.
 - Default branch: `main`.
 - Current UI work branch: `ui/mobile-history-v1`.
 - Current desktop beta development branch: `codex/desktop-m4-macos-launcher`.
 
-The GitHub remote is the source of truth for code sync. Local databases, uploaded images, screenshots, logs, OCR scratch files, browser storage state, and private requirement notes are never synced through Git.
+The GitHub remote is the source of truth for code sync. `origin` remains GitHub so CI, PRs, and release review keep one canonical public target. The `coco` remote uses Tailscale SSH as the local development mirror between this development zone and the Mac mini; it is a speed and availability mirror, not a replacement for GitHub review.
+
+Local databases, uploaded images, screenshots, logs, OCR scratch files, browser storage state, and private requirement notes are never synced through Git.
 
 For the current desktop beta line, the active development baseline is the clean Mac checkout on `codex/desktop-m4-macos-launcher`. Treat the Windows machine as a real build and smoke-test host only until the branch is pushed and reviewed. Do not continue coding from a Windows worktree that was populated by rsync or contains verification scripts, screenshots, installers, or other dirty runtime artifacts.
 
@@ -65,6 +68,40 @@ git push origin ui/mobile-history-v1
 ```
 
 Use explicit `git add <intended-files>`. Do not use broad staging when local runtime files exist.
+
+Configure the default local sync remotes once per checkout:
+
+```bash
+scripts/configure_sync_remotes.sh --apply
+```
+
+The default configuration keeps `origin` on GitHub and adds a `coco` remote over Tailscale:
+
+```text
+origin -> https://github.com/wyl2607/tagledger.git
+coco   -> coco:tagledger.git
+```
+
+If the Mac mini bare repository lives elsewhere, override the URL without editing the script:
+
+```bash
+COCO_REMOTE_URL=coco:tagledger.git scripts/configure_sync_remotes.sh --apply
+```
+
+After local validation, synchronize intentionally:
+
+```bash
+git push origin <branch>
+git push coco <branch>
+```
+
+Pull intentionally from the reviewed source of truth unless you are recovering a local-only Mac mini branch:
+
+```bash
+git pull --ff-only origin <branch>
+```
+
+Do not use file-copy sync as the development baseline. The `coco` path must stay Git-based over the Tailscale SSH address so branch history, forbidden-file checks, and review gates remain meaningful.
 
 For the desktop beta line, continue implementation and commits on the Mac branch:
 
