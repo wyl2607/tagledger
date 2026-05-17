@@ -54,6 +54,11 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ "$COCO_REMOTE_NAME" == "origin" ]]; then
+  echo "ERROR: COCO_REMOTE_NAME must not be 'origin'; it would overwrite the GitHub remote" >&2
+  exit 2
+fi
+
 run() {
   printf '+'
   printf ' %q' "$@"
