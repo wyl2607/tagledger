@@ -643,6 +643,26 @@
       return value === null || value === undefined || value === '' ? fallback : String(value);
     }
 
+    function renderInventoryImpact(payload) {
+      const location = payload?.inventory_location || null;
+      const movement = payload?.inventory_movement || null;
+      if (!location && !movement) return '';
+      const locationCode = location?.location_code || movement?.location_code || selectedLocationForPayload(payload);
+      const afterQty = location?.quantity_on_hand ?? location?.quantity ?? movement?.after_qty;
+      const beforeQty = movement?.before_qty;
+      const deltaQty = movement?.quantity_delta;
+      const stockText = beforeQty === undefined || beforeQty === null
+        ? displayValue(afterQty, 0)
+        : `${displayValue(beforeQty, 0)} -> ${displayValue(afterQty, 0)}`;
+      const deltaText = deltaQty === undefined || deltaQty === null
+        ? ''
+        : ` (${displayValue(deltaQty, 0)})`;
+      return `
+        <span>${escapeHtml(tr('outbound.column.location'))}: ${escapeHtml(displayValue(locationCode))}</span>
+        <span>${escapeHtml(tr('inventory.pick.available'))}: ${escapeHtml(stockText)}${escapeHtml(deltaText)}</span>
+      `;
+    }
+
     function selectedLocationForPayload(payload) {
       if (selectedOutboundLocation) return selectedOutboundLocation;
       const explicit = String(payload?.location_code || '').trim().toUpperCase();
@@ -1581,6 +1601,7 @@
             </div>
             <div class="scan-result-meta">
               <span>${escapeHtml(tr('outbound.scan.currentOrder', { order: orderNo }))}</span>
+              ${renderInventoryImpact(payload)}
               ${otherOrders ? `<span>${escapeHtml(tr('outbound.scan.otherOrderList', { orders: otherOrders }))}</span>` : ''}
             </div>
             <div class="scan-result-actions">

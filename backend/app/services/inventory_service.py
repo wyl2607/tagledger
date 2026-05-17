@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
+from io import StringIO
 
 from sqlmodel import Session, select
 
@@ -16,6 +18,18 @@ LOCATION_KIND_ALIASES = {"long_term": "permanent"}
 LOCATION_KINDS = {"permanent", "temporary"}
 HIDDEN_LOCATION_STATUSES = {"retired", "disabled"}
 PENDING_LOCATION_STATUSES = {"pending_restock", "pending_replacement"}
+INVENTORY_CSV_FIELDS = [
+    "factory_id",
+    "part_key",
+    "part_name",
+    "location_code",
+    "quantity",
+    "status",
+    "location_kind",
+    "zero_stock",
+    "updated_at",
+]
+DANGEROUS_CSV_PREFIXES = {"=", "+", "-", "@"}
 
 
 class InventoryPermissionError(RuntimeError):
@@ -95,6 +109,44 @@ def location_payload(location: InventoryLocation) -> dict[str, object]:
         "restock_required": visible and kind == "permanent" and quantity <= 0,
         "updated_at": location.updated_at.isoformat() if location.updated_at else None,
     }
+
+
+def _safe_inventory_csv_cell(value: object) -> object:
+    if not isinstance(value, str) or not value:
+        return value
+    stripped = value.lstrip(" \t\r\n")
+    if stripped and stripped[0] in DANGEROUS_CSV_PREFIXES:
+        return f"'{value}"
+    return value
+
+
+def export_inventory_locations_csv(*, session: Session) -> str:
+    statement = select(InventoryLocation).order_by(
+        InventoryLocation.factory_id.asc(),
+        InventoryLocation.part_key.asc(),
+        InventoryLocation.location_code.asc(),
+        InventoryLocation.id.asc(),
+    )
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=INVENTORY_CSV_FIELDS)
+    writer.writeheader()
+    for location in session.exec(statement).all():
+        quantity = int(location.quantity or 0)
+        row = {
+            "factory_id": location.factory_id,
+            "part_key": location.part_key,
+            "part_name": location.part_name or "",
+            "location_code": location.location_code,
+            "quantity": quantity,
+            "status": location.status,
+            "location_kind": normalize_location_kind(location.location_kind),
+            "zero_stock": "TRUE" if quantity <= 0 else "FALSE",
+            "updated_at": location.updated_at.isoformat() if location.updated_at else "",
+        }
+        writer.writerow(
+            {field: _safe_inventory_csv_cell(row[field]) for field in INVENTORY_CSV_FIELDS}
+        )
+    return buffer.getvalue()
 
 
 def list_inventory_locations(

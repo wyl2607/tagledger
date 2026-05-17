@@ -269,6 +269,8 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "buildReconcileApplyDecisions" in response.text
     assert "reconcileApplyPanel.hidden = !userCanManageInventory" in response.text
     assert "inventory.reconcile.apply.permission" in response.text
+    assert 'id="exportInventoryBtn" hidden' in response.text
+    assert "/api/inventory/export.csv" in response.text
     assert 'id="pickPartInput"' in response.text
     assert 'id="pickQuantityInput"' in response.text
     assert 'id="pickRecommendationBtn"' in response.text

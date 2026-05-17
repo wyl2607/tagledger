@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
@@ -10,6 +10,7 @@ from backend.app.services.inventory_service import (
     InventoryPermissionError,
     adjust_inventory_location,
     apply_inventory_reconcile,
+    export_inventory_locations_csv,
     list_inventory_locations,
     move_inventory_quantity,
     preview_inventory_reconcile,
@@ -114,6 +115,19 @@ def get_inventory_pick_recommendations(
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/export.csv")
+def get_inventory_export_csv(
+    _: User = Depends(require_supervisor),
+    session: Session = Depends(get_session),
+) -> Response:
+    csv_text = export_inventory_locations_csv(session=session)
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=tagledger-inventory-current.csv"},
+    )
 
 
 @router.patch("/locations/{location_id}")

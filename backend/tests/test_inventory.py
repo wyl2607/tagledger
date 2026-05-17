@@ -1,3 +1,6 @@
+import csv
+from io import StringIO
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -585,6 +588,136 @@ def test_inventory_reconcile_apply_audits_non_destructive_decisions(
     assert "stocktake-audit-only-001" in (audits[0].detail_json or "")
     assert "excel_missing" in (audits[0].detail_json or "")
     assert "excel_new" in (audits[1].detail_json or "")
+
+
+def test_inventory_export_csv_requires_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _seed_location(
+        session,
+        part_key="CPXS000122220",
+        location_code="A-A01-020",
+        quantity=3,
+    )
+
+    assert client.get("/api/inventory/export.csv").status_code == 401
+
+    _login_operator(client, session, username="inventory-export-operator")
+    operator_response = client.get("/api/inventory/export.csv")
+
+    assert operator_response.status_code == 403
+
+
+def test_inventory_export_csv_contains_current_system_inventory(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        factory_id="factory_b",
+        part_key="CPXS000122221",
+        part_name="=Formula Risk",
+        location_code="B-B02-021",
+        quantity=5,
+        location_kind="permanent",
+    )
+    retired = _seed_location(
+        session,
+        factory_id="factory_a",
+        part_key="CPXS000122222",
+        part_name="Temporary Empty",
+        location_code="TMP-22",
+        quantity=0,
+        location_kind="temporary",
+    )
+    retired.status = "retired"
+    session.add(retired)
+    session.commit()
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    response = client.get("/api/inventory/export.csv")
+
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "tagledger-inventory-current.csv" in response.headers["content-disposition"]
+    reader = csv.DictReader(StringIO(response.text))
+    assert reader.fieldnames == [
+        "factory_id",
+        "part_key",
+        "part_name",
+        "location_code",
+        "quantity",
+        "status",
+        "location_kind",
+        "zero_stock",
+        "updated_at",
+    ]
+    rows = list(reader)
+    assert [(row["factory_id"], row["part_key"], row["location_code"]) for row in rows] == [
+        ("factory_a", "CPXS000122222", "TMP-22"),
+        ("factory_b", "CPXS000122221", "B-B02-021"),
+    ]
+    assert rows[0]["status"] == "retired"
+    assert rows[0]["location_kind"] == "temporary"
+    assert rows[0]["zero_stock"] == "TRUE"
+    assert rows[1]["part_name"] == "'=Formula Risk"
+    assert rows[1]["quantity"] == "5"
+    assert rows[1]["updated_at"]
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
+
+
+def test_inventory_export_csv_reflects_reconcile_apply_result(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122223",
+        location_code="A-A01-023",
+        quantity=5,
+    )
+    apply_response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-export-result",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122223",
+                    "location_code": "A-A01-023",
+                    "excel_quantity": 7,
+                    "system_quantity": 5,
+                }
+            ],
+        },
+    )
+    assert apply_response.status_code == 200
+
+    response = client.get("/api/inventory/export.csv")
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(StringIO(response.text)))
+    assert rows == [
+        {
+            "factory_id": "factory_a",
+            "part_key": "CPXS000122223",
+            "part_name": "",
+            "location_code": "A-A01-023",
+            "quantity": "7",
+            "status": "active",
+            "location_kind": "permanent",
+            "zero_stock": "FALSE",
+            "updated_at": rows[0]["updated_at"],
+        }
+    ]
 
 
 def test_inventory_csv_file_rows_parse_required_columns() -> None:
