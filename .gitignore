@@ -39,6 +39,8 @@ dist/
 # Local runtime/private artifacts
 data/
 !data/.gitkeep
+tagledger-uvicorn.log
+tagledger.pid
 *.xlsx
 *.xls
 dist/release/*.zip

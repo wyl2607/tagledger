@@ -87,7 +87,13 @@ def test_database_url_normalization_supports_alembic() -> None:
     )
 
 
-def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestClient) -> None:
+def test_runtime_status_exposes_mobile_test_switches(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.app import main as main_module
+
+    monkeypatch.setattr(main_module.lan_guard, "_first_lan_ipv4", lambda: "203.0.113.9")
+
     response = authenticated_client.get("/runtime/status")
 
     assert response.status_code == 200
@@ -100,6 +106,9 @@ def test_runtime_status_exposes_mobile_test_switches(authenticated_client: TestC
     assert isinstance(payload["pairing_enabled"], bool)
     assert payload["mobile_url"].endswith("/mobile")
     assert payload["history_url"].endswith("/history")
+    assert payload["lan_url"] == "http://203.0.113.9"
+    assert payload["lan_mobile_url"] == "http://203.0.113.9/mobile"
+    assert payload["lan_history_url"] == "http://203.0.113.9/history"
 
 
 def test_startup_restore_skips_submission_queue_when_saas_disabled(
@@ -260,6 +269,8 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "buildReconcileApplyDecisions" in response.text
     assert "reconcileApplyPanel.hidden = !userCanManageInventory" in response.text
     assert "inventory.reconcile.apply.permission" in response.text
+    assert 'id="exportInventoryBtn" hidden' in response.text
+    assert "/api/inventory/export.csv" in response.text
     assert 'id="pickPartInput"' in response.text
     assert 'id="pickQuantityInput"' in response.text
     assert 'id="pickRecommendationBtn"' in response.text
@@ -495,7 +506,59 @@ def test_auth_pages_are_linked_from_static_routes(authenticated_client: TestClie
     assert "/outbound" in portal.text
     assert "采购入库" in portal.text
     assert "手机访问" in portal.text
+    assert "当前入口" in portal.text
+    assert "copyCurrentEntryBtn" in portal.text
+    assert 'data-copy-current="true"' in portal.text
+    assert "entryAddress" in portal.text
+    assert "runtimeShareOrigin = window.location.origin" in portal.text
+    assert "runtimeShareOrigin = settings.lan_url || window.location.origin" in portal.text
+    assert (
+        "feedbackTarget = button.dataset.copyCurrent ? button.querySelector('strong') : button"
+        in portal.text
+    )
+    assert "window.location.href" in portal.text
+    assert "window.location.host" in portal.text
+    assert "repeat(auto-fit, minmax(150px, 1fr))" in portal.text
+    assert "refreshRuntimeStatusBtn" in portal.text
+    assert "刷新状态" in portal.text
+    assert "refreshButton.disabled = true" in portal.text
+    assert "刷新中" in portal.text
+    assert "最后刷新" in portal.text
+    assert "runtimeUpdatedAt" in portal.text
+    assert "toLocaleTimeString" in portal.text
     assert "现场直连" in portal.text
+    assert "进入页面" in portal.text
+    assert "复制链接" in portal.text
+    assert "复制中心入口" in portal.text
+    assert "复制手机捡货" in portal.text
+    assert 'data-copy-path="/mobile"' in portal.text
+    assert "复制给发货员打开手机捡货" in portal.text
+    assert "复制出库核对" in portal.text
+    assert 'data-copy-path="/outbound"' in portal.text
+    assert "复制给主管打开出库核对" in portal.text
+    assert "复制角色工作台" in portal.text
+    assert 'data-copy-path="/workbench"' in portal.text
+    assert "复制物料目录" in portal.text
+    assert 'data-copy-path="/materials"' in portal.text
+    assert "已复制物料目录" in portal.text
+    assert "复制采购入库" in portal.text
+    assert 'data-copy-path="/inbound"' in portal.text
+    assert "已复制采购入库" in portal.text
+    assert "复制历史记录" in portal.text
+    assert 'data-copy-path="/history"' in portal.text
+    assert "已复制历史记录" in portal.text
+    assert "复制全部入口" in portal.text
+    assert 'data-copy-all="true"' in portal.text
+    assert "已复制全部入口" in portal.text
+    assert "`物料目录 ${runtimeShareOrigin}/materials`" in portal.text
+    assert "`采购入库 ${runtimeShareOrigin}/inbound`" in portal.text
+    assert "`历史记录 ${runtimeShareOrigin}/history`" in portal.text
+    assert "`${runtimeShareOrigin}${button.dataset.copyPath || '/'}`" in portal.text
+    assert "物料目录" in portal.text
+    assert 'href="/materials"' in portal.text
+    assert "查 SKU、BYD 料号和箱规" in portal.text
+    assert "navigator.clipboard.writeText" in portal.text
+    assert "window.setTimeout" in portal.text
     assert "/runtime/status" in portal.text
     assert response.status_code == 200
     assert "/api/workbench" in response.text
@@ -531,7 +594,10 @@ def test_static_role_ui_contracts_are_explicit() -> None:
     assert 'href="/mobile"' in portal
     assert 'href="/outbound"' in portal
     assert 'href="/inbound"' in portal
+    assert 'href="/materials"' in portal
     assert "loadRuntimeStatus" in portal
+    assert "copyEntryLink" in portal
+    assert "originalText" in portal
     assert "settings.pairing_enabled" in portal
     assert "settings.lan_guard_enabled" in portal
     assert 'data-state="planned"' in portal

@@ -11,6 +11,7 @@
     .inventory-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
     .inventory-head h1 { font-size: 34px; }
     .inventory-head p { max-width: 820px; margin-top: 8px; font-weight: 800; }
+    .head-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
     .filters, .panel { padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
     .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
     .filters label, .form-grid label { display: grid; gap: 5px; color: var(--muted); font-weight: 900; }
@@ -127,7 +128,10 @@
         <h1 data-i18n="inventory.title">库存与库位</h1>
         <p class="muted" data-i18n="inventory.subtitle">把库存总账和厂区库位图放到一个入口：临时库位用完自动隐藏，永久库位用完保留补货提示，所有修改都会写入流水。</p>
       </div>
-      <button type="button" id="refreshBtn" data-i18n="inventory.action.refresh">刷新库存</button>
+      <div class="head-actions">
+        <button type="button" id="exportInventoryBtn" hidden data-i18n="history.button.export">导出 CSV</button>
+        <button type="button" id="refreshBtn" data-i18n="inventory.action.refresh">刷新库存</button>
+      </div>
     </section>
 
     <section class="filters">
@@ -930,6 +934,10 @@
       }
     }
 
+    function exportInventoryCsv() {
+      window.location.href = '/api/inventory/export.csv';
+    }
+
     async function adjustSelected() {
       const sourceRow = sourceRowForSelection();
       if (!sourceRow || !userCanManageInventory) return;
@@ -972,12 +980,14 @@
       }
       userCanManageInventory = AuthUI.hasCapability(user, 'can_manage_inventory');
       document.querySelector('#adjustmentPanel').hidden = !userCanManageInventory;
+      document.querySelector('#exportInventoryBtn').hidden = !userCanManageInventory;
       document.querySelector('#reconcileApplyPanel').hidden = !userCanManageInventory || !latestReconcilePreview;
       document.querySelector('#inventoryContent').hidden = false;
       await loadInventory();
     }
 
     document.querySelector('#refreshBtn').addEventListener('click', loadInventory);
+    document.querySelector('#exportInventoryBtn').addEventListener('click', exportInventoryCsv);
     document.querySelector('#applyFilterBtn').addEventListener('click', loadInventory);
     document.querySelector('#adjustBtn').addEventListener('click', () => {
       adjustSelected().catch((error) => { document.querySelector('#selectedInfo').textContent = error.message; });

@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from backend.app.config import get_settings
 from backend.app.database import create_db_and_tables, get_session
+from backend.app.middleware import lan_guard
 from backend.app.middleware.lan_guard import LanGuardMiddleware, PairingMiddleware
 from backend.app.routes import (
     auth,
@@ -91,6 +92,12 @@ def health() -> dict[str, str]:
 def runtime_status(request: Request) -> dict[str, bool | str]:
     settings = get_settings()
     base_url = str(request.base_url).rstrip("/")
+    lan_ip = lan_guard._first_lan_ipv4()
+    if lan_ip:
+        port = f":{request.url.port}" if request.url.port else ""
+        lan_url = f"{request.url.scheme}://{lan_ip}{port}"
+    else:
+        lan_url = base_url
     return {
         "ocr_provider": settings.ocr_provider,
         "enable_barcode": settings.enable_barcode,
@@ -100,6 +107,9 @@ def runtime_status(request: Request) -> dict[str, bool | str]:
         "pairing_enabled": settings.pairing_enabled,
         "mobile_url": f"{base_url}/mobile",
         "history_url": f"{base_url}/history",
+        "lan_url": lan_url,
+        "lan_mobile_url": f"{lan_url}/mobile",
+        "lan_history_url": f"{lan_url}/history",
     }
 
 

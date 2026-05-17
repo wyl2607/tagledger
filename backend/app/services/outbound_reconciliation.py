@@ -916,6 +916,7 @@ def _bootstrap_inventory_if_missing(
     operator_id: str,
     reason: str,
     seed_quantity: int,
+    commit: bool = True,
 ) -> InventoryLocation | None:
     normalized_part = compact_part_code(part_key)
     normalized_location = _normalize_location_code(location_code)
@@ -932,22 +933,30 @@ def _bootstrap_inventory_if_missing(
         status="active",
         zero_stock=quantity == 0,
     )
-    session.add(row)
-    session.commit()
-    session.refresh(row)
-    _record_inventory_movement(
-        session,
-        movement_type="bootstrap",
-        part_key=normalized_part,
-        location_code=normalized_location,
-        order_no=None,
-        scan_id=None,
-        quantity_delta=quantity,
-        before_qty=0,
-        after_qty=quantity,
-        operator_id=operator_id,
-        reason=reason,
-    )
+    try:
+        session.add(row)
+        session.flush()
+        movement = _record_inventory_movement(
+            session,
+            movement_type="bootstrap",
+            part_key=normalized_part,
+            location_code=normalized_location,
+            order_no=None,
+            scan_id=None,
+            quantity_delta=quantity,
+            before_qty=0,
+            after_qty=quantity,
+            operator_id=operator_id,
+            reason=reason,
+            commit=False,
+        )
+        if commit:
+            session.commit()
+            session.refresh(row)
+            session.refresh(movement)
+    except Exception:
+        session.rollback()
+        raise
     return row
 
 
@@ -1010,6 +1019,20 @@ def _movement_payload(movement: InventoryMovement) -> dict[str, object]:
         "reason": movement.reason,
         "created_at": movement.created_at.isoformat() if movement.created_at else None,
     }
+
+
+def _is_outbound_record_idempotency_conflict(exc: IntegrityError) -> bool:
+    original = getattr(exc, "orig", None)
+    diag = getattr(original, "diag", None)
+    constraint_name = str(getattr(diag, "constraint_name", "") or "")
+    if constraint_name == "ux_outbound_scans_record":
+        return True
+    message = f"{original} {exc}"
+    return "ux_outbound_scans_record" in message or (
+        "outbound_scans.order_no" in message
+        and "outbound_scans.part_code" in message
+        and "outbound_scans.record_id" in message
+    )
 
 
 def _record_inventory_movement(
@@ -1877,16 +1900,17 @@ def register_outbound_scan(
         }
     inventory_location = None
     inventory_movement = None
-    if selected_location:
-        _bootstrap_inventory_if_missing(
-            session,
-            part_key=matched_key,
-            location_code=selected_location,
-            operator_id=operator_id,
-            reason="legacy_bootstrap_from_order_requirement",
-            seed_quantity=max(required_qty - before_scanned, quantity),
-        )
-        try:
+    try:
+        if selected_location:
+            _bootstrap_inventory_if_missing(
+                session,
+                part_key=matched_key,
+                location_code=selected_location,
+                operator_id=operator_id,
+                reason="legacy_bootstrap_from_order_requirement",
+                seed_quantity=max(required_qty - before_scanned, quantity),
+                commit=False,
+            )
             inventory_location, inventory_movement = _apply_inventory_delta(
                 session,
                 movement_type="outbound",
@@ -1896,36 +1920,31 @@ def register_outbound_scan(
                 operator_id=operator_id,
                 reason="outbound_scan",
                 order_no=selected_order,
+                commit=False,
             )
-        except RuntimeError as exc:
-            message = str(exc)
-            if "disabled" in message:
-                return {
-                    **query_payload,
-                    "scan_saved": False,
-                    "location_disabled": True,
-                    "location_code": selected_location,
-                    "matched_part": matched_row,
-                    "order_status": outbound_order_status(selected_order, session),
-                }
-            raise
-    scan = OutboundScan(
-        order_no=selected_order,
-        part_code=matched_key,
-        location_code=selected_location,
-        source_code=code.strip(),
-        matched_code=str(matched_row["part_code"]),
-        quantity=quantity,
-        status="active",
-        operator_id=(operator_id.strip() or "self")[:80],
-        record_id=record_id,
-        verification_record_id=verification_record_id,
-    )
-    session.add(scan)
-    try:
+
+        scan = OutboundScan(
+            order_no=selected_order,
+            part_code=matched_key,
+            location_code=selected_location,
+            source_code=code.strip(),
+            matched_code=str(matched_row["part_code"]),
+            quantity=quantity,
+            status="active",
+            operator_id=(operator_id.strip() or "self")[:80],
+            record_id=record_id,
+            verification_record_id=verification_record_id,
+        )
+        session.add(scan)
+        session.flush()
+        if inventory_movement is not None:
+            inventory_movement.scan_id = scan.id
+            session.add(inventory_movement)
         session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         session.rollback()
+        if not _is_outbound_record_idempotency_conflict(exc):
+            raise RuntimeError("outbound scan integrity error") from exc
         return {
             **query_payload,
             "scan_saved": False,
@@ -1933,12 +1952,27 @@ def register_outbound_scan(
             "matched_part": matched_row,
             "order_status": outbound_order_status(selected_order, session),
         }
+    except RuntimeError as exc:
+        session.rollback()
+        message = str(exc)
+        if selected_location and "disabled" in message:
+            return {
+                **query_payload,
+                "scan_saved": False,
+                "location_disabled": True,
+                "location_code": selected_location,
+                "matched_part": matched_row,
+                "order_status": outbound_order_status(selected_order, session),
+            }
+        raise
+    except Exception:
+        session.rollback()
+        raise
     session.refresh(scan)
     if inventory_movement is not None:
-        inventory_movement.scan_id = scan.id
-        session.add(inventory_movement)
-        session.commit()
         session.refresh(inventory_movement)
+    if inventory_location is not None:
+        session.refresh(inventory_location)
     status = outbound_order_status(selected_order, session)
     snapshot = save_outbound_progress_snapshot(
         order_no=selected_order,

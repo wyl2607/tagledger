@@ -57,13 +57,20 @@
     .portal-actions {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 10px;
+      gap: 8px;
       padding: 16px;
       border: 1px solid #d6d9de;
       border-radius: 8px;
       background: #111827;
       box-shadow: var(--shadow);
     }
+    .portal-action-label {
+      margin-top: 4px;
+      color: rgba(255,255,255,.72);
+      font-size: 14px;
+      font-weight: 950;
+    }
+    .portal-action-label:first-child { margin-top: 0; }
     .portal-actions .nav-button {
       min-height: 66px;
       justify-content: flex-start;
@@ -79,7 +86,7 @@
     }
     .status-strip {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
       margin-bottom: 18px;
     }
@@ -169,18 +176,35 @@
         </div>
       </div>
       <div class="portal-actions">
+        <div class="portal-action-label">进入页面</div>
         <a class="nav-button primary-entry" href="/mobile">手机捡货</a>
         <a class="nav-button" href="/outbound">出库核对</a>
         <a class="nav-button" href="/workbench">角色工作台</a>
+        <div class="portal-action-label">复制链接</div>
+        <button class="nav-button" data-copy-path="/" data-copy-done="已复制中心入口" type="button" title="复制给同事打开中心入口" aria-label="复制给同事打开中心入口">复制中心入口</button>
+        <button class="nav-button" data-copy-path="/mobile" data-copy-done="已复制手机捡货" type="button" title="复制给发货员打开手机捡货" aria-label="复制给发货员打开手机捡货">复制手机捡货</button>
+        <button class="nav-button" data-copy-path="/outbound" data-copy-done="已复制出库核对" type="button" title="复制给主管打开出库核对" aria-label="复制给主管打开出库核对">复制出库核对</button>
+        <button class="nav-button" data-copy-path="/workbench" data-copy-done="已复制角色工作台" type="button" title="复制给同事打开角色工作台" aria-label="复制给同事打开角色工作台">复制角色工作台</button>
+        <button class="nav-button" data-copy-path="/materials" data-copy-done="已复制物料目录" type="button" title="复制给同事打开物料目录" aria-label="复制给同事打开物料目录">复制物料目录</button>
+        <button class="nav-button" data-copy-path="/inbound" data-copy-done="已复制采购入库" type="button" title="复制给入库同事打开采购入库" aria-label="复制给入库同事打开采购入库">复制采购入库</button>
+        <button class="nav-button" data-copy-path="/history" data-copy-done="已复制历史记录" type="button" title="复制给主管查看历史记录" aria-label="复制给主管查看历史记录">复制历史记录</button>
+        <button class="nav-button" data-copy-all="true" data-copy-done="已复制全部入口" type="button" title="复制全部常用入口给现场群" aria-label="复制全部常用入口给现场群">复制全部入口</button>
       </div>
     </section>
 
     <section class="status-strip" aria-label="系统状态">
       <div class="status-tile"><span>服务</span><strong id="serviceStatus">运行中</strong></div>
       <div class="status-tile"><span>当前账号</span><strong id="accountStatus">未登录</strong></div>
+      <button class="status-tile" id="copyCurrentEntryBtn" data-copy-current="true" data-copy-done="已复制当前入口" type="button" title="复制当前打开的入口地址" aria-label="复制当前打开的入口地址">
+        <span>当前入口</span><strong id="entryAddress">读取中</strong>
+      </button>
       <div class="status-tile"><span>手机访问</span><strong id="pairingStatus">读取中</strong></div>
       <div class="status-tile"><span>内网保护</span><strong id="lanGuardStatus">读取中</strong></div>
+      <div class="status-tile"><span>最后刷新</span><strong id="runtimeUpdatedAt">未刷新</strong></div>
       <div class="status-tile"><span>今日主线</span><strong>96 单捡货</strong></div>
+      <button class="status-tile" id="refreshRuntimeStatusBtn" type="button">
+        <span>状态</span><strong>刷新状态</strong>
+      </button>
     </section>
 
     <section class="tool-section">
@@ -228,6 +252,10 @@
           <small>可用</small>
           <div><strong>历史记录</strong><span>查看已确认和最近结果。</span></div>
         </a>
+        <a class="tool-card" data-state="ready" href="/materials">
+          <small>可用</small>
+          <div><strong>物料目录</strong><span>查 SKU、BYD 料号和箱规。</span></div>
+        </a>
       </div>
     </section>
 
@@ -256,6 +284,8 @@
 
   <script src="/static/auth-ui.js"></script>
   <script>
+    let runtimeShareOrigin = window.location.origin;
+
     async function loadAccount() {
       const loginLink = document.querySelector('#loginLink');
       const logoutBtn = document.querySelector('#logoutBtn');
@@ -279,23 +309,74 @@
 
     async function loadRuntimeStatus() {
       const serviceStatus = document.querySelector('#serviceStatus');
+      const entryAddress = document.querySelector('#entryAddress');
       const pairingStatus = document.querySelector('#pairingStatus');
       const lanGuardStatus = document.querySelector('#lanGuardStatus');
+      const runtimeUpdatedAt = document.querySelector('#runtimeUpdatedAt');
+      const refreshButton = document.querySelector('#refreshRuntimeStatusBtn');
+      const refreshLabel = refreshButton.querySelector('strong');
+      refreshButton.disabled = true;
+      refreshLabel.textContent = '刷新中';
       try {
         const settings = await fetch('/runtime/status').then((response) => response.json());
         serviceStatus.textContent = '运行中';
+        entryAddress.textContent = window.location.host;
+        runtimeShareOrigin = settings.lan_url || window.location.origin;
         pairingStatus.textContent = settings.pairing_enabled ? '需要配对' : '现场直连';
         lanGuardStatus.textContent = settings.lan_guard_enabled ? '已开启' : '已关闭';
+        runtimeUpdatedAt.textContent = new Date().toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
       } catch {
         serviceStatus.textContent = '需检查';
+        entryAddress.textContent = window.location.host || '未知';
         pairingStatus.textContent = '未知';
         lanGuardStatus.textContent = '未知';
+        runtimeUpdatedAt.textContent = '失败';
+      } finally {
+        refreshButton.disabled = false;
+        refreshLabel.textContent = '刷新状态';
       }
+    }
+
+    async function copyEntryLink(event) {
+      const button = event.currentTarget;
+      const feedbackTarget = button.dataset.copyCurrent ? button.querySelector('strong') : button;
+      const originalText = feedbackTarget.textContent;
+      const url = button.dataset.copyCurrent
+        ? window.location.href
+        : (
+            button.dataset.copyAll
+              ? [
+                  `中心入口 ${runtimeShareOrigin}/`,
+                  `手机捡货 ${runtimeShareOrigin}/mobile`,
+                  `出库核对 ${runtimeShareOrigin}/outbound`,
+                  `角色工作台 ${runtimeShareOrigin}/workbench`,
+                  `物料目录 ${runtimeShareOrigin}/materials`,
+                  `采购入库 ${runtimeShareOrigin}/inbound`,
+                  `历史记录 ${runtimeShareOrigin}/history`,
+                ].join('\n')
+              : `${runtimeShareOrigin}${button.dataset.copyPath || '/'}`
+          );
+      try {
+        await navigator.clipboard.writeText(url);
+        feedbackTarget.textContent = button.dataset.copyDone || '已复制';
+      } catch {
+        window.prompt(originalText, url);
+      }
+      window.setTimeout(() => {
+        feedbackTarget.textContent = originalText;
+      }, 2000);
     }
 
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await AuthUI.logout();
       window.location.href = '/';
+    });
+    document.querySelector('#refreshRuntimeStatusBtn').addEventListener('click', loadRuntimeStatus);
+    document.querySelectorAll('[data-copy-path], [data-copy-all], [data-copy-current]').forEach((button) => {
+      button.addEventListener('click', copyEntryLink);
     });
 
     loadAccount();

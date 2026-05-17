@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from sqlalchemy import Index, text
 from sqlmodel import Field, SQLModel
 
 
@@ -138,6 +139,17 @@ class SignoffAssistSession(SQLModel, table=True):
 
 class OutboundScan(SQLModel, table=True):
     __tablename__ = "outbound_scans"
+    __table_args__ = (
+        Index(
+            "ux_outbound_scans_record",
+            "order_no",
+            "part_code",
+            "record_id",
+            unique=True,
+            sqlite_where=text("record_id IS NOT NULL AND status = 'active'"),
+            postgresql_where=text("record_id IS NOT NULL AND status = 'active'"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     factory_id: str = Field(default="factory_a", index=True)

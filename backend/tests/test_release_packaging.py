@@ -267,3 +267,28 @@ def test_seed_user_account_does_not_embed_site_passwords() -> None:
     assert "Picker2026" not in script
     assert "remote_seed_picker96" not in script
     assert "SO202605060078" not in script
+
+
+def test_tailscale_coco_sync_defaults_are_documented_and_scripted() -> None:
+    sync_script = Path("scripts/configure_sync_remotes.sh").read_text(encoding="utf-8")
+    sync_rules = Path("docs/SYNC_RULES.md").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert (
+        'GITHUB_REMOTE_URL="${GITHUB_REMOTE_URL:-https://github.com/wyl2607/tagledger.git}"'
+        in sync_script
+    )
+    assert 'COCO_REMOTE_NAME="${COCO_REMOTE_NAME:-coco}"' in sync_script
+    assert 'COCO_REMOTE_URL="${COCO_REMOTE_URL:-coco:tagledger.git}"' in sync_script
+    assert "git remote set-url origin" in sync_script
+    assert "run git remote add" in sync_script
+    assert "DRY_RUN=0" in sync_script
+    assert "git fetch" not in sync_script
+    assert "git push" not in sync_script
+    assert "rsync" not in sync_script
+
+    assert "Tailscale Mac Mini Mirror" in sync_rules
+    assert "`origin` remains GitHub" in sync_rules
+    assert "`coco` remote uses Tailscale SSH" in sync_rules
+    assert "COCO_REMOTE_URL=coco:tagledger.git" in sync_rules
+    assert "scripts/configure_sync_remotes.sh" in readme

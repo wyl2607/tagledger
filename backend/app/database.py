@@ -14,6 +14,60 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 
+OUTBOUND_SCAN_RECORD_INDEX_SQL = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_outbound_scans_record "
+    "ON outbound_scans(order_no, part_code, record_id) "
+    "WHERE record_id IS NOT NULL AND status = 'active'"
+)
+OUTBOUND_SCAN_RECORD_INDEX_COLUMNS = {"id", "order_no", "part_code", "record_id", "status"}
+
+
+def _deduplicate_outbound_scan_records(conn, columns: set[str]) -> None:
+    if not OUTBOUND_SCAN_RECORD_INDEX_COLUMNS.issubset(columns):
+        return
+    assignments = ["status = 'voided'"]
+    if "void_reason" in columns:
+        assignments.append(
+            "void_reason = COALESCE("
+            "NULLIF(void_reason, ''), "
+            "'duplicate active record_id before idempotency index'"
+            ")"
+        )
+    if "voided_by" in columns:
+        assignments.append("voided_by = COALESCE(NULLIF(voided_by, ''), 'system')")
+    if "voided_at" in columns:
+        assignments.append("voided_at = COALESCE(voided_at, CURRENT_TIMESTAMP)")
+    conn.execute(
+        text(
+            f"""
+            UPDATE outbound_scans
+            SET {", ".join(assignments)}
+            WHERE id IN (
+                SELECT duplicate_scan.id
+                FROM outbound_scans AS duplicate_scan
+                WHERE duplicate_scan.record_id IS NOT NULL
+                  AND duplicate_scan.status = 'active'
+                  AND duplicate_scan.id NOT IN (
+                    SELECT MIN(active_scan.id)
+                    FROM outbound_scans AS active_scan
+                    WHERE active_scan.record_id IS NOT NULL
+                      AND active_scan.status = 'active'
+                    GROUP BY active_scan.order_no,
+                             active_scan.part_code,
+                             active_scan.record_id
+                  )
+            )
+            """
+        )
+    )
+
+
+def _ensure_outbound_scan_record_index(conn, columns: set[str]) -> None:
+    if not OUTBOUND_SCAN_RECORD_INDEX_COLUMNS.issubset(columns):
+        return
+    _deduplicate_outbound_scan_records(conn, columns)
+    conn.execute(text(OUTBOUND_SCAN_RECORD_INDEX_SQL))
+
 
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
@@ -87,6 +141,11 @@ def create_db_and_tables() -> None:
                     "WHERE idempotency_key IS NOT NULL"
                 )
             )
+        outbound_scan_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(outbound_scans)")).fetchall()
+        }
+        if outbound_scan_columns:
+            _ensure_outbound_scan_record_index(conn, outbound_scan_columns)
 
 
 def get_session() -> Generator[Session, None, None]:

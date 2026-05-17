@@ -163,7 +163,13 @@ Tesseract、PATH、防火墙、局域网访问和常见错误处理见 `docs/WIN
 
 ## Git 同步规则
 
-中心仓库是私有 GitHub 仓库 `https://github.com/wyl2607/tagledger.git`。Mac、Windows 和服务器之间只通过这个 remote 同步代码；本地数据库、上传图片、日志、截图、`.omx/` 和 private docs 不进 Git。
+中心仓库是私有 GitHub 仓库 `https://github.com/wyl2607/tagledger.git`。本地开发区和 `coco` Mac mini 可以额外配置一个 Tailscale 内网 Git remote 作为镜像，但 `origin` 仍指向 GitHub，PR、CI 和发布评审仍以 GitHub 为准。本地数据库、上传图片、日志、截图、`.omx/` 和 private docs 不进 Git。
+
+首次配置同步 remote：
+
+```bash
+scripts/configure_sync_remotes.sh --apply
+```
 
 同步规则见 `docs/SYNC_RULES.md`。推送前至少运行：
 

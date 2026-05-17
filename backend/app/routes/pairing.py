@@ -21,17 +21,17 @@ def _loopback_only(request: Request) -> JSONResponse | None:
 
 
 def _get_lan_url(request: Request) -> str:
-    port = request.url.port or "8000"
+    port_suffix = f":{request.url.port}" if request.url.port else ""
     lan_ip = lan_guard._first_lan_ipv4()
     token = get_pair_token()
     if token and lan_ip:
-        return f"http://{lan_ip}:{port}/pair?t={token}"
-    host = request.headers.get("host", f"localhost:{port}")
+        return f"http://{lan_ip}{port_suffix}/pair?t={token}"
+    host = request.headers.get("host", f"localhost{port_suffix}")
     if ":" in host and not host.startswith("["):
         host_only = host.rsplit(":", 1)[0]
     else:
         host_only = host
-    return f"http://{host_only}:{port}/pair"
+    return f"http://{host_only}{port_suffix}/pair"
 
 
 @router.get("/status")
