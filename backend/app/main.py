@@ -94,7 +94,7 @@ def runtime_status(request: Request) -> dict[str, bool | str]:
     base_url = str(request.base_url).rstrip("/")
     lan_ip = lan_guard._first_lan_ipv4()
     if lan_ip:
-        port = f":{request.url.port or 8000}"
+        port = f":{request.url.port}" if request.url.port else ""
         lan_url = f"{request.url.scheme}://{lan_ip}{port}"
     else:
         lan_url = base_url

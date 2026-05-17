@@ -106,9 +106,9 @@ def test_runtime_status_exposes_mobile_test_switches(
     assert isinstance(payload["pairing_enabled"], bool)
     assert payload["mobile_url"].endswith("/mobile")
     assert payload["history_url"].endswith("/history")
-    assert payload["lan_url"] == "http://203.0.113.9:8000"
-    assert payload["lan_mobile_url"] == "http://203.0.113.9:8000/mobile"
-    assert payload["lan_history_url"] == "http://203.0.113.9:8000/history"
+    assert payload["lan_url"] == "http://203.0.113.9"
+    assert payload["lan_mobile_url"] == "http://203.0.113.9/mobile"
+    assert payload["lan_history_url"] == "http://203.0.113.9/history"
 
 
 def test_startup_restore_skips_submission_queue_when_saas_disabled(
