@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>页面地图 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f3f4f6; }
+    .map-shell { max-width: 1100px; margin: 0 auto; padding: 18px 24px 48px; }
+    .map-head { margin-bottom: 18px; }
+    .map-head h1 { margin: 0; font-size: 34px; }
+    .map-head p { margin: 8px 0 0; color: #374151; font-weight: 850; line-height: 1.4; }
+    .map-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 22px; }
+    .root-node {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 18px; border: 1px solid #d6d9de; border-radius: 8px;
+      background: #111827; color: #fff; box-shadow: var(--shadow); text-decoration: none;
+    }
+    .root-node:hover { border-color: var(--orange); }
+    .root-node .root-mark {
+      width: 44px; height: 44px; display: grid; place-items: center;
+      border-radius: 8px; background: var(--orange); font-size: 18px; font-weight: 950;
+    }
+    .root-node strong { display: block; font-size: 22px; }
+    .root-node span { display: block; color: rgba(255,255,255,.72); font-weight: 850; }
+    .map-side { margin-top: 30px; }
+    .map-side:first-of-type { margin-top: 0; }
+    .side-title {
+      margin: 0 0 12px; font-size: 24px; padding: 6px 0 10px;
+      border-bottom: 2px solid #111827;
+    }
+    .map-group { margin-top: 20px; }
+    .map-group h3 {
+      margin: 0 0 10px; font-size: 18px; padding-left: 12px;
+      border-left: 4px solid var(--orange);
+    }
+    .map-rows { display: grid; gap: 10px; }
+    .map-node {
+      display: grid; grid-template-columns: 28px minmax(0,1fr) auto;
+      align-items: center; gap: 12px;
+      padding: 14px 16px; border: 1px solid #d6d9de; border-radius: 8px;
+      background: #fff; box-shadow: var(--shadow); text-decoration: none; color: #111827;
+    }
+    .map-node:hover, .map-node:focus-visible { border-color: var(--orange); background: #fff8f3; outline: 0; }
+    .map-node .branch { color: #9ca3af; font-size: 18px; font-weight: 950; text-align: center; }
+    .map-node .node-main strong { display: block; font-size: 19px; }
+    .map-node .node-main span { display: block; margin-top: 2px; color: #475569; font-weight: 850; font-size: 14px; }
+    .map-node .node-meta { text-align: right; }
+    .map-node .node-path { display: block; font-weight: 950; color: #111827; }
+    .map-node .node-file { display: block; margin-top: 2px; color: #6b7280; font-size: 13px; font-weight: 850; }
+    @media (max-width: 720px) {
+      .map-node { grid-template-columns: 24px minmax(0,1fr); }
+      .map-node .node-meta { display: none; }
+    }
+  </style>
+</head>
+<body data-page="sitemap">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo">TL</span>
+        <span><strong>TagLedger</strong><span>页面地图</span></span>
+      </a>
+      <div class="nav-actions">
+        <a class="nav-link" href="/">返回中心入口</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="map-shell">
+    <section class="map-head">
+      <h1>页面地图</h1>
+      <p>页面按使用对象分两侧:现场工人侧和后台管理侧。点任意节点进入对应页面;右上角可导出结构为 JSON,便于以后管理。</p>
+    </section>
+
+    <div class="map-toolbar">
+      <button class="nav-button" id="exportJsonBtn" type="button">导出 JSON</button>
+      <button class="nav-button" id="copyTreeBtn" type="button">复制文字树</button>
+    </div>
+
+    <div id="mapBody"></div>
+  </main>
+
+  <script>
+    const SITE_MAP = {
+      sides: [
+        {
+          side: '现场工人侧',
+          root: { path: '/', title: '工人中心入口', file: 'portal.html', desc: '官方入口,工人账号日常作业从这里进' },
+          groups: [
+            {
+              group: '登录 / 接入',
+              children: [
+                { path: '/login', title: '登录', file: 'login.html', desc: '账号登录入口' },
+                { path: '/pair', title: '手机配对', file: 'pair.html', desc: '手机扫码接入局域网' },
+              ],
+            },
+            {
+              group: '现场作业',
+              children: [
+                { path: '/workbench', title: '角色工作台', file: 'home.html', desc: '按权限显示可用页面' },
+                { path: '/mobile', title: '手机捡货', file: 'mobile.html', desc: '现场扫码、拍照、录入' },
+                { path: '/inbound', title: '采购入库', file: 'inbound.html', desc: '按物料、库位、数量入库' },
+                { path: '/outbound', title: '出库核对', file: 'outbound.html', desc: '看进度、差异、剩余' },
+                { path: '/capture', title: '桌面 OCR 录入', file: 'demo.html', desc: '旧标签拍照 / OCR demo' },
+              ],
+            },
+            {
+              group: '记录 / 签核',
+              children: [
+                { path: '/signoff', title: '退货签核', file: 'signoff.html', desc: '处理候选单和配对' },
+                { path: '/history', title: '历史记录', file: 'history.html', desc: '已确认和最近结果' },
+              ],
+            },
+          ],
+        },
+        {
+          side: '后台管理侧',
+          root: { path: '/manage', title: '管理中心入口', file: 'manage.html', desc: '后台管理入口,系统、账号、数据维护从这里进' },
+          groups: [
+            {
+              group: '系统 / 账号',
+              children: [
+                { path: '/setup', title: '初始化向导', file: 'setup.html', desc: '首次部署创建管理员' },
+                { path: '/admin', title: '账号与权限', file: 'admin.html', desc: '账号创建 / 分配 / 重置' },
+              ],
+            },
+            {
+              group: '数据维护',
+              children: [
+                { path: '/materials', title: '物料目录', file: 'material-catalog.html', desc: '维护 SKU、料号、箱规' },
+                { path: '/inventory', title: '库存与库位', file: 'inventory.html', desc: '看库存、库位与补货' },
+                { path: '/transfers', title: '跨场子调拨', file: 'transfers.html', desc: '看 / 记三场调拨' },
+              ],
+            },
+            {
+              group: '统计 / 总览',
+              children: [
+                { path: '/dashboard', title: '全局统计', file: 'dashboard.html', desc: '录入 / OCR / 出库指标' },
+                { path: '/sitemap', title: '页面地图', file: 'sitemap.html', desc: '查看页面父子关系并导出' },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    function esc(value) {
+      return String(value).replace(/[&<>"]/g, (ch) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]
+      ));
+    }
+
+    function renderMap() {
+      const body = document.querySelector('#mapBody');
+      body.innerHTML = SITE_MAP.sides.map((side) => `
+        <section class="map-side">
+          <h2 class="side-title">${esc(side.side)}</h2>
+          <a class="root-node" href="${esc(side.root.path)}">
+            <span class="root-mark">${esc(side.root.path)}</span>
+            <span><strong>${esc(side.root.title)}</strong><span>${esc(side.root.file)} · ${esc(side.root.desc)}</span></span>
+          </a>
+          ${side.groups.map((group) => `
+            <section class="map-group">
+              <h3>${esc(group.group)}</h3>
+              <div class="map-rows">
+                ${group.children.map((node) => `
+                  <a class="map-node" href="${esc(node.path)}">
+                    <span class="branch">└</span>
+                    <span class="node-main">
+                      <strong>${esc(node.title)}</strong>
+                      <span>${esc(node.desc)}</span>
+                    </span>
+                    <span class="node-meta">
+                      <span class="node-path">${esc(node.path)}</span>
+                      <span class="node-file">${esc(node.file)}</span>
+                    </span>
+                  </a>
+                `).join('')}
+              </div>
+            </section>
+          `).join('')}
+        </section>
+      `).join('');
+    }
+
+    function buildTextTree() {
+      const lines = [];
+      SITE_MAP.sides.forEach((side) => {
+        lines.push(`【${side.side}】`);
+        lines.push(`${side.root.path}  ${side.root.title}  (${side.root.file})`);
+        side.groups.forEach((group) => {
+          lines.push(`├─ ${group.group}`);
+          group.children.forEach((node) => {
+            lines.push(`│   └─ ${node.path}  ${node.title}  (${node.file})`);
+          });
+        });
+        lines.push('');
+      });
+      return lines.join('\n').trimEnd();
+    }
+
+    async function copyText(text, button) {
+      const original = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = '已复制';
+      } catch {
+        window.prompt('复制下面内容', text);
+      }
+      window.setTimeout(() => { button.textContent = original; }, 2000);
+    }
+
+    document.querySelector('#exportJsonBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(SITE_MAP, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'tagledger-sitemap.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.querySelector('#copyTreeBtn').addEventListener('click', (event) => {
+      copyText(buildTextTree(), event.currentTarget);
+    });
+
+    renderMap();
+  </script>
+</body>
+</html>
