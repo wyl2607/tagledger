@@ -7,247 +7,27 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, select
 
-from backend.app.models import AuditLog, InventoryLocation, InventoryMovement, User
-from backend.app.services.material_mapping import normalize_material_code
+from backend.app.models import AuditLog, InventoryMovement, User
 
-FACTORIES = ("factory_a", "factory_b", "factory_c")
-
-
-def _to_utc(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
-
-
-def _normalize_factory_id(value: str) -> str:
-    normalized = (value or "").strip().lower()
-    if normalized not in FACTORIES:
-        raise RuntimeError(f"unsupported factory_id: {value}")
-    return normalized
-
-
-def _normalize_part_key(value: str) -> str:
-    normalized = normalize_material_code(value or "")
-    if not normalized:
-        raise RuntimeError("part_key is required")
-    return normalized
-
-
-def _normalize_reason(value: str) -> str:
-    reason = (value or "").strip()
-    if not reason:
-        raise RuntimeError("reason is required")
-    return reason[:200]
-
-
-def _normalize_idempotency_key(value: str | None) -> str | None:
-    key = (value or "").strip()
-    return key[:120] if key else None
-
-
-def _transfer_request_signature(
-    *,
-    source_factory: str,
-    target_factory: str,
-    part_key: str,
-    quantity: int,
-    reason: str,
-) -> str:
-    return json.dumps(
-        {
-            "source_factory": source_factory,
-            "target_factory": target_factory,
-            "part_key": part_key,
-            "quantity": quantity,
-            "reason": reason,
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def _find_existing_transfer_id(
-    session: Session,
-    *,
-    operator: User,
-    idempotency_key: str,
-    request_signature: str,
-) -> str | None:
-    rows = session.exec(
-        select(AuditLog)
-        .where(
-            AuditLog.action == "inventory.transfer",
-            AuditLog.actor_username == operator.username,
-            AuditLog.success == True,  # noqa: E712
-        )
-        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-        .limit(200)
-    ).all()
-    for row in rows:
-        try:
-            detail = json.loads(row.detail_json or "{}")
-        except json.JSONDecodeError:
-            continue
-        if detail.get("idempotency_key") == idempotency_key:
-            if detail.get("request_signature") != request_signature:
-                raise RuntimeError("idempotency_key reused with different transfer payload")
-            transfer_id = str(detail.get("transfer_id") or row.target_id or "")
-            return transfer_id or None
-    return None
-
-
-def _transfer_payload_from_existing(
-    *,
-    session: Session,
-    transfer_id: str,
-) -> dict[str, object] | None:
-    movements = session.exec(
-        select(InventoryMovement)
-        .where(InventoryMovement.transfer_id == transfer_id)
-        .order_by(InventoryMovement.movement_type.desc(), InventoryMovement.id.asc())
-    ).all()
-    if len(movements) < 2:
-        return None
-    out_movement = next((row for row in movements if row.movement_type == "transfer_out"), None)
-    in_movement = next((row for row in movements if row.movement_type == "transfer_in"), None)
-    if out_movement is None or in_movement is None:
-        return None
-    return {
-        "created": False,
-        "transfer_id": transfer_id,
-        "source_factory": out_movement.factory_id,
-        "target_factory": in_movement.factory_id,
-        "part_key": out_movement.part_key,
-        "quantity": abs(int(out_movement.quantity_delta)),
-        "source_location": {
-            "factory_id": out_movement.factory_id,
-            "location_code": out_movement.location_code,
-            "quantity": int(out_movement.after_qty),
-            "status": None,
-        },
-        "target_location": {
-            "factory_id": in_movement.factory_id,
-            "location_code": in_movement.location_code,
-            "quantity": int(in_movement.after_qty),
-            "status": None,
-        },
-        "movements": [
-            {
-                "id": row.id,
-                "factory_id": row.factory_id,
-                "movement_type": row.movement_type,
-                "part_key": row.part_key,
-                "location_code": row.location_code,
-                "transfer_id": row.transfer_id,
-                "quantity_delta": row.quantity_delta,
-                "before_qty": row.before_qty,
-                "after_qty": row.after_qty,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            }
-            for row in (out_movement, in_movement)
-        ],
-        "audit_log_id": None,
-    }
-
-
-def _pick_source_location(
-    session: Session,
-    *,
-    factory_id: str,
-    part_key: str,
-    quantity: int,
-) -> InventoryLocation:
-    rows = session.exec(
-        select(InventoryLocation)
-        .where(
-            InventoryLocation.factory_id == factory_id,
-            InventoryLocation.part_key == part_key,
-        )
-        .order_by(InventoryLocation.quantity.desc(), InventoryLocation.location_code.asc())
-    ).all()
-    for row in rows:
-        if row.status == "disabled":
-            continue
-        if int(row.quantity) >= quantity:
-            return row
-    raise RuntimeError(f"insufficient inventory for transfer: {factory_id} {part_key}")
-
-
-def _resolve_target_location(
-    session: Session,
-    *,
-    factory_id: str,
-    part_key: str,
-    fallback_location_code: str,
-) -> InventoryLocation:
-    row = session.exec(
-        select(InventoryLocation)
-        .where(
-            InventoryLocation.factory_id == factory_id,
-            InventoryLocation.part_key == part_key,
-        )
-        .order_by(InventoryLocation.quantity.desc(), InventoryLocation.location_code.asc())
-    ).first()
-    if row is not None:
-        return row
-
-    existing_codes = {
-        str(code)
-        for code in session.exec(
-            select(InventoryLocation.location_code).where(InventoryLocation.part_key == part_key)
-        ).all()
-        if code
-    }
-    fallback = (fallback_location_code or "").strip() or "LOC"
-    base = f"{fallback}-{factory_id}"
-    candidate = base
-    suffix = 2
-    while candidate in existing_codes:
-        candidate = f"{base}-{suffix}"
-        suffix += 1
-        if suffix > 1000:
-            raise RuntimeError(f"failed to allocate target location code for {part_key}")
-
-    row = InventoryLocation(
-        factory_id=factory_id,
-        part_key=part_key,
-        location_code=candidate,
-        quantity=0,
-        status="active",
-        zero_stock=True,
-    )
-    session.add(row)
-    session.flush()
-    return row
-
-
-def _update_location_after_change(location: InventoryLocation) -> None:
-    quantity = int(location.quantity)
-    kind = (location.location_kind or "permanent").strip().lower()
-    location.zero_stock = quantity <= 0
-    if location.status == "disabled":
-        return
-    if quantity <= 0 and kind == "temporary":
-        location.status = "retired"
-    elif quantity <= 0:
-        location.status = "zero_stock"
-    elif location.status in {"zero_stock", "retired"}:
-        location.status = "active"
-
-
-def _apply_target_inbound(
-    *,
-    target_location: InventoryLocation,
-    quantity: int,
-) -> tuple[int, int]:
-    before_qty = int(target_location.quantity)
-    target_location.quantity = before_qty + quantity
-    _update_location_after_change(target_location)
-    target_location.updated_at = datetime.now(UTC)
-    return before_qty, int(target_location.quantity)
+from .idempotency import (
+    _find_existing_transfer_id,
+    _transfer_payload_from_existing,
+    _transfer_request_signature,
+)
+from .locations import (
+    _apply_target_inbound,
+    _pick_source_location,
+    _resolve_target_location,
+    _update_location_after_change,
+)
+from .normalize import (
+    FACTORIES,
+    _normalize_factory_id,
+    _normalize_idempotency_key,
+    _normalize_part_key,
+    _normalize_reason,
+    _to_utc,
+)
 
 
 def create_transfer(
