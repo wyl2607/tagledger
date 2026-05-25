@@ -241,6 +241,22 @@ def admin_page() -> FileResponse:
     return FileResponse(admin_path)
 
 
+@app.get("/manage", include_in_schema=False)
+def manage_page() -> FileResponse:
+    manage_path = STATIC_DIR / "manage.html"
+    if not manage_path.exists():
+        raise HTTPException(status_code=404, detail="manage page not found")
+    return FileResponse(manage_path)
+
+
+@app.get("/sitemap", include_in_schema=False)
+def sitemap_page() -> FileResponse:
+    sitemap_path = STATIC_DIR / "sitemap.html"
+    if not sitemap_path.exists():
+        raise HTTPException(status_code=404, detail="sitemap page not found")
+    return FileResponse(sitemap_path)
+
+
 app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(confirm.router)

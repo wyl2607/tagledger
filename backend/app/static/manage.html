@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理中心 · TagLedger</title>
+  <link rel="stylesheet" href="/static/ui.css">
+  <style>
+    body { background: #f3f4f6; }
+    .manage-shell { max-width: 1100px; margin: 0 auto; padding: 18px 24px 48px; }
+    .manage-head {
+      padding: 24px 26px; margin-bottom: 20px;
+      border: 1px solid #d6d9de; border-radius: 8px; background: #111827; color: #fff;
+      box-shadow: var(--shadow);
+    }
+    .manage-head .kicker { color: rgba(255,255,255,.7); font-size: 14px; font-weight: 950; }
+    .manage-head h1 { margin: 6px 0 0; font-size: 34px; }
+    .manage-head p { margin: 10px 0 0; color: rgba(255,255,255,.82); font-weight: 850; line-height: 1.4; }
+    .manage-head .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .manage-head .links a {
+      display: inline-flex; align-items: center; padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,.2); border-radius: 999px;
+      color: #fff; text-decoration: none; font-weight: 950;
+    }
+    .manage-head .links a:hover { border-color: var(--orange); }
+    .manage-section { margin-top: 22px; }
+    .manage-section h2 { margin: 0 0 12px; font-size: 20px; padding-left: 12px; border-left: 4px solid var(--orange); }
+    .tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .tool-card {
+      min-height: 130px; display: grid; align-content: space-between; gap: 12px;
+      padding: 18px; border: 1px solid #d6d9de; border-radius: 8px; background: #fff;
+      box-shadow: var(--shadow); text-decoration: none; color: #111827;
+    }
+    .tool-card:hover, .tool-card:focus-visible { border-color: var(--orange); background: #fff8f3; outline: 0; }
+    .tool-card strong { display: block; font-size: 22px; line-height: 1.14; }
+    .tool-card span { display: block; margin-top: 6px; color: #475569; font-weight: 850; line-height: 1.3; }
+    .tool-card small { width: max-content; padding: 4px 9px; border-radius: 999px; background: #eef6ff; color: var(--info); font-size: 13px; font-weight: 950; }
+    @media (max-width: 920px) { .tool-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-page="manage">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/manage">
+        <span class="logo">TL</span>
+        <span><strong>TagLedger</strong><span>管理中心</span></span>
+      </a>
+      <div class="nav-actions">
+        <span id="userBadge" class="pill">读取账号中</span>
+        <a id="loginLink" class="nav-link" href="/login">登录</a>
+        <button id="logoutBtn" class="secondary mini" type="button" hidden>退出</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="manage-shell">
+    <section class="manage-head">
+      <div class="kicker">后台管理入口</div>
+      <h1>管理中心</h1>
+      <p>系统配置、账号权限、数据维护和统计都在这里。现场工人日常作业请走工人入口。</p>
+      <div class="links">
+        <a href="/">工人入口 /</a>
+        <a href="/sitemap">页面地图</a>
+      </div>
+    </section>
+
+    <section class="manage-section">
+      <h2>系统 / 账号</h2>
+      <div class="tool-grid">
+        <a class="tool-card" href="/setup">
+          <small>部署</small>
+          <div><strong>初始化向导</strong><span>首次部署创建管理员。</span></div>
+        </a>
+        <a class="tool-card" href="/admin">
+          <small>可用</small>
+          <div><strong>账号与权限</strong><span>账号创建 / 分配 / 重置。</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="manage-section">
+      <h2>数据维护</h2>
+      <div class="tool-grid">
+        <a class="tool-card" href="/materials">
+          <small>可用</small>
+          <div><strong>物料目录</strong><span>维护 SKU、料号、箱规。</span></div>
+        </a>
+        <a class="tool-card" href="/inventory">
+          <small>开发中</small>
+          <div><strong>库存与库位</strong><span>看库存、库位与补货。</span></div>
+        </a>
+        <a class="tool-card" href="/transfers">
+          <small>开发中</small>
+          <div><strong>跨场子调拨</strong><span>看 / 记三场调拨。</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="manage-section">
+      <h2>统计 / 总览</h2>
+      <div class="tool-grid">
+        <a class="tool-card" href="/dashboard">
+          <small>开发中</small>
+          <div><strong>全局统计</strong><span>录入 / OCR / 出库指标。</span></div>
+        </a>
+        <a class="tool-card" href="/sitemap">
+          <small>可用</small>
+          <div><strong>页面地图</strong><span>查看页面父子关系并导出。</span></div>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/auth-ui.js"></script>
+  <script>
+    async function loadAccount() {
+      const loginLink = document.querySelector('#loginLink');
+      const logoutBtn = document.querySelector('#logoutBtn');
+      const userBadge = document.querySelector('#userBadge');
+      const payload = await fetch('/api/auth/me').then((response) => response.json()).catch(() => ({ user: null }));
+      const user = payload.user;
+      if (!user) {
+        userBadge.textContent = '未登录';
+        loginLink.hidden = false;
+        logoutBtn.hidden = true;
+        return;
+      }
+      userBadge.textContent = `${user.display_name || user.username} · ${user.role}`;
+      loginLink.hidden = true;
+      logoutBtn.hidden = false;
+    }
+
+    document.querySelector('#logoutBtn').addEventListener('click', async () => {
+      await AuthUI.logout();
+      window.location.href = '/';
+    });
+
+    loadAccount();
+  </script>
+</body>
+</html>
