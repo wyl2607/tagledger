@@ -138,6 +138,7 @@ uploaded → ocr_done → confirmed → submitted
 - [x] 把 `/api/inventory/reconcile/preview-file` 接到 `/inventory` 文件上传 UI
 - [x] 将拣货推荐接入出库单/检货单流程
 - [x] 设计 Excel 对账 apply 流程，要求人工确认和流水审计，不能自动覆盖系统库存
+- [x] 支持把确认后的系统结果导出给人工回填共享 Excel，并记录导入 snapshot 元数据以便追踪最近一次 Excel 值。
 - [ ] 建立待整理库位、混放库位、盘点差异和补货提醒的现场处理闭环
 - [ ] 人工核对 5 条 SaaS dry-run 截图
 - [ ] 替换 `config/saas_selectors.yaml` 为真实 SaaS URL 和 selector
