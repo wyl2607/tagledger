@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 
 from backend.app.models import (
     OutboundScan,
+    OutboundScanEventLedger,
 )
 
 from ._helpers import (
@@ -33,6 +34,42 @@ from .query import (
     candidate_part_codes,
     query_outbound,
 )
+
+
+def _record_scan_event_ledger(
+    *,
+    order_no: str,
+    part_code: str,
+    location_code: str | None,
+    source_code: str,
+    matched_code: str,
+    quantity: int,
+    outcome: str,
+    operator_id: str,
+    record_id: int | None,
+    scan_id: int | None,
+    verification_record_id: int | None,
+    session: Session,
+    commit: bool = True,
+) -> OutboundScanEventLedger:
+    row = OutboundScanEventLedger(
+        order_no=order_no,
+        part_code=part_code,
+        location_code=location_code,
+        source_code=source_code.strip(),
+        matched_code=matched_code,
+        quantity=quantity,
+        outcome=outcome,
+        operator_id=(operator_id.strip() or "self")[:80],
+        record_id=record_id,
+        scan_id=scan_id,
+        verification_record_id=verification_record_id,
+    )
+    session.add(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    return row
 
 
 def register_outbound_scan(
@@ -99,11 +136,25 @@ def register_outbound_scan(
         existing_statement = select(OutboundScan).where(
             OutboundScan.order_no == selected_order,
             OutboundScan.part_code == matched_key,
-            OutboundScan.location_code == selected_location,
             OutboundScan.record_id == record_id,
             OutboundScan.status == "active",
         )
-        if session.exec(existing_statement).first() is not None:
+        existing_scan = session.exec(existing_statement).first()
+        if existing_scan is not None:
+            _record_scan_event_ledger(
+                order_no=selected_order,
+                part_code=matched_key,
+                location_code=selected_location,
+                source_code=code,
+                matched_code=str(matched_row["part_code"]),
+                quantity=quantity,
+                outcome="idempotent_duplicate",
+                operator_id=operator_id,
+                record_id=record_id,
+                scan_id=existing_scan.id,
+                verification_record_id=verification_record_id,
+                session=session,
+            )
             return {
                 **query_payload,
                 "scan_saved": False,
@@ -198,11 +249,48 @@ def register_outbound_scan(
         if inventory_movement is not None:
             inventory_movement.scan_id = scan.id
             session.add(inventory_movement)
+        ledger_row = _record_scan_event_ledger(
+            order_no=selected_order,
+            part_code=matched_key,
+            location_code=selected_location,
+            source_code=code,
+            matched_code=str(matched_row["part_code"]),
+            quantity=quantity,
+            outcome="accepted",
+            operator_id=operator_id,
+            record_id=record_id,
+            scan_id=scan.id,
+            verification_record_id=verification_record_id,
+            session=session,
+            commit=False,
+        )
         session.commit()
     except IntegrityError as exc:
         session.rollback()
         if not _is_outbound_record_idempotency_conflict(exc):
             raise RuntimeError("outbound scan integrity error") from exc
+        existing_scan = session.exec(
+            select(OutboundScan).where(
+                OutboundScan.order_no == selected_order,
+                OutboundScan.part_code == matched_key,
+                OutboundScan.record_id == record_id,
+                OutboundScan.status == "active",
+            )
+        ).first()
+        _record_scan_event_ledger(
+            order_no=selected_order,
+            part_code=matched_key,
+            location_code=selected_location,
+            source_code=code,
+            matched_code=str(matched_row["part_code"]),
+            quantity=quantity,
+            outcome="idempotent_duplicate",
+            operator_id=operator_id,
+            record_id=record_id,
+            scan_id=existing_scan.id if existing_scan is not None else None,
+            verification_record_id=verification_record_id,
+            session=session,
+        )
         return {
             **query_payload,
             "scan_saved": False,
@@ -231,6 +319,7 @@ def register_outbound_scan(
         session.refresh(inventory_movement)
     if inventory_location is not None:
         session.refresh(inventory_location)
+    session.refresh(ledger_row)
     status = outbound_order_status(selected_order, session)
     snapshot = save_outbound_progress_snapshot(
         order_no=selected_order,
@@ -253,6 +342,7 @@ def register_outbound_scan(
         "matched_part": matched_row,
         "scan_id": scan.id,
         "scan": _scan_to_payload(scan),
+        "ledger_event_id": ledger_row.id,
         "inventory_location": _inventory_location_payload(inventory_location)
         if inventory_location is not None
         else None,

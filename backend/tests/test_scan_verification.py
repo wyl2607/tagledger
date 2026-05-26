@@ -3,7 +3,11 @@ from openpyxl import Workbook
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from backend.app.models import InventoryLocation, InventoryMovement, OutboundScan
+from backend.app.models import (
+    InventoryLocation,
+    InventoryMovement,
+    OutboundScan,
+)
 from backend.app.services.auth_service import (
     CSRF_COOKIE,
     CSRF_HEADER,
@@ -231,6 +235,71 @@ def test_repeated_record_scan_does_not_decrement_inventory_twice(
         )
         == 1
     )
+
+
+def test_repeated_record_scan_records_accepted_and_duplicate_ledger_rows(
+    tmp_path, monkeypatch, session
+) -> None:
+    from backend.app import models
+
+    path = tmp_path / "outbound.xlsx"
+    _prepare_workbook(path, quantity=2)
+    _patch_outbound_settings(monkeypatch, path, tmp_path)
+    session.add(
+        InventoryLocation(
+            part_key="CPXS000122001",
+            location_code="A-B03-011",
+            quantity=2,
+            status="active",
+            zero_stock=False,
+        )
+    )
+    session.commit()
+
+    first = register_outbound_scan(
+        order_no="SO202604210135",
+        code="C.P.XS.000122001",
+        operator_id="phone-a",
+        session=session,
+        quantity=1,
+        location_code="A-B03-011",
+        record_id=202,
+    )
+    second = register_outbound_scan(
+        order_no="SO202604210135",
+        code="C.P.XS.000122001",
+        operator_id="phone-a",
+        session=session,
+        quantity=1,
+        location_code="A-B03-011",
+        record_id=202,
+    )
+
+    assert first["scan_saved"] is True
+    assert second["scan_saved"] is False
+    assert second["already_recorded"] is True
+
+    rows = session.exec(
+        select(models.OutboundScanEventLedger)
+        .where(models.OutboundScanEventLedger.record_id == 202)
+        .order_by(models.OutboundScanEventLedger.id)
+    ).all()
+    assert [(row.outcome, row.scan_id, row.quantity) for row in rows] == [
+        ("accepted", first["scan_id"], 1),
+        ("idempotent_duplicate", first["scan_id"], 1),
+    ]
+    assert {row.order_no for row in rows} == {"SO202604210135"}
+    assert {row.part_code for row in rows} == {"CPXS000122001"}
+    assert {row.location_code for row in rows} == {"A-B03-011"}
+
+    location = session.exec(
+        select(InventoryLocation).where(InventoryLocation.part_key == "CPXS000122001")
+    ).one()
+    assert location.quantity == 1
+    movements = session.exec(
+        select(InventoryMovement).where(InventoryMovement.part_key == "CPXS000122001")
+    ).all()
+    assert len(movements) == 1
 
 
 def test_record_id_unique_index_prevents_second_location_double_decrement(

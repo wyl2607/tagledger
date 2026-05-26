@@ -171,6 +171,25 @@ class OutboundScan(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class OutboundScanEventLedger(SQLModel, table=True):
+    __tablename__ = "outbound_scan_event_ledger"
+
+    id: int | None = Field(default=None, primary_key=True)
+    factory_id: str = Field(default="factory_a", index=True)
+    order_no: str = Field(index=True)
+    part_code: str = Field(index=True)
+    location_code: str | None = Field(default=None, index=True)
+    source_code: str
+    matched_code: str
+    quantity: int = Field(default=1)
+    outcome: str = Field(index=True)
+    operator_id: str = Field(default="self", index=True)
+    record_id: int | None = Field(default=None, index=True)
+    scan_id: int | None = Field(default=None, index=True)
+    verification_record_id: int | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class OutboundProgressSnapshot(SQLModel, table=True):
     __tablename__ = "outbound_progress_snapshots"
 
