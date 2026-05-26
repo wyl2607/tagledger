@@ -247,9 +247,17 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert 'id="reconcilePreviewBtn"' in response.text
     assert "/api/inventory/reconcile/preview" in response.text
     assert 'id="reconcileFileInput"' in response.text
+    assert 'id="reconcileRecordSnapshotControl" hidden' in response.text
+    assert 'id="reconcileRecordSnapshotInput"' in response.text
     assert 'id="reconcileFilePreviewBtn"' in response.text
+    assert 'id="reconcileExportFileBtn" hidden' in response.text
     assert "/api/inventory/reconcile/preview-file" in response.text
+    assert "record_snapshot" in response.text
+    assert "inventory.reconcile.snapshot.recorded" in response.text
+    assert "inventory.reconcile.snapshot.duplicate" in response.text
+    assert "/api/inventory/reconcile/export-file" in response.text
     assert "generateReconcilePreviewFromFile" in response.text
+    assert "exportReconcileFile" in response.text
     assert "renderReconcileFileMeta" in response.text
     assert "reconcileFileErrorMessage" in response.text
     assert "renderReconcilePreview" in response.text
@@ -268,6 +276,8 @@ def test_inventory_page_serves_html(authenticated_client: TestClient) -> None:
     assert "/api/inventory/reconcile/apply" in response.text
     assert "buildReconcileApplyDecisions" in response.text
     assert "reconcileApplyPanel.hidden = !userCanManageInventory" in response.text
+    assert "reconcileExportFileBtn').hidden = !userCanManageInventory" in response.text
+    assert "reconcileRecordSnapshotControl').hidden = !userCanManageInventory" in response.text
     assert "inventory.reconcile.apply.permission" in response.text
     assert 'id="exportInventoryBtn" hidden' in response.text
     assert "/api/inventory/export.csv" in response.text

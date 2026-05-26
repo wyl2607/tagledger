@@ -42,7 +42,10 @@ from .queries import (
 )
 from .reconcile import (
     apply_inventory_reconcile,
+    inventory_file_hash,
+    latest_inventory_reconcile_snapshot_item,
     preview_inventory_reconcile,
+    record_inventory_reconcile_snapshot,
 )
 
 __all__ = [
@@ -74,5 +77,8 @@ __all__ = [
     "move_inventory_quantity",
     # reconcile
     "apply_inventory_reconcile",
+    "inventory_file_hash",
+    "latest_inventory_reconcile_snapshot_item",
     "preview_inventory_reconcile",
+    "record_inventory_reconcile_snapshot",
 ]

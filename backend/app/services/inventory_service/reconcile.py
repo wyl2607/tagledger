@@ -6,7 +6,14 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
-from backend.app.models import AuditLog, InventoryLocation, InventoryMovement, User
+from backend.app.models import (
+    AuditLog,
+    InventoryLocation,
+    InventoryMovement,
+    InventoryReconcileSnapshot,
+    InventoryReconcileSnapshotItem,
+    User,
+)
 
 from .normalize import (
     apply_location_visibility_rules,
@@ -16,6 +23,8 @@ from .normalize import (
     normalize_part_key,
     normalize_reason,
 )
+
+RECONCILE_CATEGORIES = ("matched", "quantity_mismatch", "excel_missing", "excel_new")
 
 
 def preview_inventory_reconcile(
@@ -135,6 +144,155 @@ def preview_inventory_reconcile(
     }
 
 
+def inventory_file_hash(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _snapshot_payload(
+    snapshot: InventoryReconcileSnapshot,
+    *,
+    recorded: bool,
+    duplicate: bool,
+) -> dict[str, object]:
+    return {
+        "id": snapshot.id,
+        "recorded": recorded,
+        "duplicate": duplicate,
+        "filename": snapshot.filename,
+        "file_hash": snapshot.file_hash,
+        "uploaded_by": snapshot.uploaded_by,
+        "parsed_row_count": snapshot.parsed_row_count,
+        "created_at": snapshot.created_at.isoformat() if snapshot.created_at else None,
+        "summary": json.loads(snapshot.summary_json or "{}"),
+    }
+
+
+def _snapshot_item_payload(
+    item: InventoryReconcileSnapshotItem,
+    snapshot: InventoryReconcileSnapshot,
+) -> dict[str, object]:
+    return {
+        "found": True,
+        "snapshot_id": snapshot.id,
+        "filename": snapshot.filename,
+        "file_hash": snapshot.file_hash,
+        "uploaded_by": snapshot.uploaded_by,
+        "parsed_row_count": snapshot.parsed_row_count,
+        "created_at": snapshot.created_at.isoformat() if snapshot.created_at else None,
+        "factory_id": item.factory_id,
+        "part_key": item.part_key,
+        "location_code": item.location_code,
+        "system_quantity": item.system_quantity,
+        "excel_quantity": item.excel_quantity,
+        "category": item.category,
+        "processing_status": item.processing_status,
+    }
+
+
+def _iter_reconcile_snapshot_items(
+    preview_result: dict[str, object],
+) -> list[tuple[str, dict[str, object]]]:
+    items: list[tuple[str, dict[str, object]]] = []
+    for category in RECONCILE_CATEGORIES:
+        for row in preview_result.get(category) or []:
+            if isinstance(row, dict):
+                items.append((category, row))
+    return items
+
+
+def record_inventory_reconcile_snapshot(
+    *,
+    session: Session,
+    filename: str,
+    file_hash: str,
+    parsed_row_count: int,
+    preview_result: dict[str, object],
+    operator: User,
+) -> dict[str, object]:
+    existing = session.exec(
+        select(InventoryReconcileSnapshot).where(InventoryReconcileSnapshot.file_hash == file_hash)
+    ).first()
+    if existing is not None:
+        return _snapshot_payload(existing, recorded=False, duplicate=True)
+
+    source_filename = (filename or "inventory-snapshot").strip()[:240] or "inventory-snapshot"
+    now = datetime.now(UTC)
+    summary = (
+        preview_result.get("summary") if isinstance(preview_result.get("summary"), dict) else {}
+    )
+    snapshot = InventoryReconcileSnapshot(
+        filename=source_filename,
+        file_hash=file_hash,
+        uploaded_by=operator.username,
+        uploaded_by_user_id=operator.id,
+        parsed_row_count=int(parsed_row_count),
+        summary_json=json.dumps(summary, ensure_ascii=False, sort_keys=True),
+        created_at=now,
+    )
+    session.add(snapshot)
+    session.flush()
+
+    for category, row in _iter_reconcile_snapshot_items(preview_result):
+        processing_status = "matched" if category == "matched" else "open"
+        item = InventoryReconcileSnapshotItem(
+            snapshot_id=snapshot.id or 0,
+            factory_id=str(row.get("factory_id") or "factory_a"),
+            part_key=str(row.get("part_key") or ""),
+            location_code=str(row.get("location_code") or ""),
+            system_quantity=(
+                int(row["system_quantity"]) if row.get("system_quantity") is not None else None
+            ),
+            excel_quantity=(
+                int(row["excel_quantity"]) if row.get("excel_quantity") is not None else None
+            ),
+            category=category,
+            processing_status=processing_status,
+            created_at=now,
+        )
+        session.add(item)
+
+    session.commit()
+    session.refresh(snapshot)
+    return _snapshot_payload(snapshot, recorded=True, duplicate=False)
+
+
+def latest_inventory_reconcile_snapshot_item(
+    *,
+    session: Session,
+    factory_id: str | None,
+    part_key: str,
+    location_code: str,
+) -> dict[str, object]:
+    normalized_factory = normalize_factory_id(factory_id) if factory_id else "factory_a"
+    normalized_part = normalize_part_key(part_key)
+    normalized_location = normalize_location_code(location_code)
+    item = session.exec(
+        select(InventoryReconcileSnapshotItem)
+        .where(
+            InventoryReconcileSnapshotItem.factory_id == normalized_factory,
+            InventoryReconcileSnapshotItem.part_key == normalized_part,
+            InventoryReconcileSnapshotItem.location_code == normalized_location,
+        )
+        .order_by(InventoryReconcileSnapshotItem.id.desc())
+    ).first()
+    if item is None:
+        return {
+            "found": False,
+            "factory_id": normalized_factory,
+            "part_key": normalized_part,
+            "location_code": normalized_location,
+        }
+    snapshot = session.get(InventoryReconcileSnapshot, item.snapshot_id)
+    if snapshot is None:
+        return {
+            "found": False,
+            "factory_id": normalized_factory,
+            "part_key": normalized_part,
+            "location_code": normalized_location,
+        }
+    return _snapshot_item_payload(item, snapshot)
+
+
 def _reconcile_audit_detail(
     *,
     category: str,
@@ -175,13 +333,16 @@ def _find_reconcile_location(
     part_key: str,
     location_code: str,
 ) -> InventoryLocation | None:
-    return session.exec(
+    rows = session.exec(
         select(InventoryLocation).where(
             InventoryLocation.factory_id == factory_id,
             InventoryLocation.part_key == part_key,
             InventoryLocation.location_code == location_code,
         )
-    ).first()
+    ).all()
+    if len(rows) > 1:
+        raise RuntimeError("duplicate inventory locations for reconcile key")
+    return rows[0] if rows else None
 
 
 def _reconcile_item_key(

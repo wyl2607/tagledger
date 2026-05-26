@@ -1,11 +1,18 @@
 import csv
-from io import StringIO
+from io import BytesIO, StringIO
 
 import pytest
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from sqlmodel import Session, select
 
-from backend.app.models import AuditLog, InventoryLocation, InventoryMovement
+from backend.app.models import (
+    AuditLog,
+    InventoryLocation,
+    InventoryMovement,
+    InventoryReconcileSnapshot,
+    InventoryReconcileSnapshotItem,
+)
 from backend.app.services import outbound_reconciliation
 from backend.app.services.auth_service import (
     CSRF_COOKIE,
@@ -79,6 +86,17 @@ def _seed_location(
     session.commit()
     session.refresh(row)
     return row
+
+
+def _inventory_xlsx_upload(rows: list[list[object]]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["factory_id", "part_key", "location_code", "quantity"])
+    for row in rows:
+        sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def test_inventory_accepts_legacy_long_term_locations(
@@ -384,6 +402,51 @@ def test_inventory_reconcile_apply_updates_confirmed_mismatch_and_audits(
     assert audit.target_type == "inventory_reconcile"
     assert "stocktake.csv" in (audit.detail_json or "")
     assert "stocktake-adjust-001" in (audit.detail_json or "")
+
+
+def test_inventory_reconcile_apply_rejects_duplicate_inventory_locations(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122217",
+        location_code="A-A01-017",
+        quantity=3,
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122217",
+        location_code="A-A01-017",
+        quantity=2,
+    )
+    movement_count_before = len(session.exec(select(InventoryMovement)).all())
+    audit_count_before = len(session.exec(select(AuditLog)).all())
+
+    response = client.post(
+        "/api/inventory/reconcile/apply",
+        json={
+            "idempotency_key": "stocktake-duplicate-location",
+            "source_filename": "stocktake.csv",
+            "reason": "daily stocktake",
+            "decisions": [
+                {
+                    "category": "quantity_mismatch",
+                    "decision": "use_excel",
+                    "part_key": "CPXS000122217",
+                    "location_code": "A-A01-017",
+                    "excel_quantity": 8,
+                    "system_quantity": 5,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "duplicate inventory locations for reconcile key"
+    assert len(session.exec(select(InventoryMovement)).all()) == movement_count_before
+    assert len(session.exec(select(AuditLog)).all()) == audit_count_before
 
 
 def test_inventory_reconcile_apply_rejects_duplicate_idempotency_key(
@@ -790,6 +853,180 @@ def test_inventory_file_rows_accept_zero_quantity() -> None:
             "quantity": 0,
         }
     ]
+
+
+def test_inventory_reconcile_preview_file_records_snapshot_metadata_and_latest_lookup(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122306",
+        location_code="A-A01-016",
+        quantity=5,
+    )
+    _seed_location(
+        session,
+        part_key="CPXS000122307",
+        location_code="A-A01-017",
+        quantity=3,
+    )
+    upload = _inventory_xlsx_upload(
+        [
+            ["factory_a", "CPXS000122306", "A-A01-016", 8],
+            ["factory_a", "CPXS000122308", "TMP-08", 2],
+        ]
+    )
+    counts_before = (
+        len(session.exec(select(InventoryLocation)).all()),
+        len(session.exec(select(InventoryMovement)).all()),
+        len(session.exec(select(AuditLog)).all()),
+    )
+
+    response = client.post(
+        "/api/inventory/reconcile/preview-file?record_snapshot=true",
+        files={
+            "file": (
+                "stocktake.xlsx",
+                upload,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "matched_count": 0,
+        "quantity_mismatch_count": 1,
+        "excel_missing_count": 1,
+        "excel_new_count": 1,
+    }
+    assert payload["snapshot"]["recorded"] is True
+    assert payload["snapshot"]["duplicate"] is False
+    assert payload["snapshot"]["filename"] == "stocktake.xlsx"
+    assert payload["snapshot"]["parsed_row_count"] == 2
+    assert payload["snapshot"]["uploaded_by"] == "inventory-supervisor"
+    assert len(payload["snapshot"]["file_hash"]) == 64
+    assert len(session.exec(select(InventoryReconcileSnapshot)).all()) == 1
+    assert len(session.exec(select(InventoryReconcileSnapshotItem)).all()) == 3
+    counts_after = (
+        len(session.exec(select(InventoryLocation)).all()),
+        len(session.exec(select(InventoryMovement)).all()),
+        len(session.exec(select(AuditLog)).all()),
+    )
+    assert counts_after == counts_before
+
+    latest = client.get(
+        "/api/inventory/reconcile/latest",
+        params={
+            "factory_id": "factory_a",
+            "part_key": "C.P.XS.000122306",
+            "location_code": "a-a01-016",
+        },
+    )
+
+    assert latest.status_code == 200
+    latest_payload = latest.json()
+    assert latest_payload["found"] is True
+    assert latest_payload["filename"] == "stocktake.xlsx"
+    assert latest_payload["part_key"] == "CPXS000122306"
+    assert latest_payload["location_code"] == "A-A01-016"
+    assert latest_payload["system_quantity"] == 5
+    assert latest_payload["excel_quantity"] == 8
+    assert latest_payload["category"] == "quantity_mismatch"
+
+
+def test_inventory_reconcile_preview_file_duplicate_hash_returns_existing_snapshot(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_supervisor(client, session)
+    _seed_location(
+        session,
+        part_key="CPXS000122309",
+        location_code="A-A01-019",
+        quantity=5,
+    )
+    upload = _inventory_xlsx_upload([["factory_a", "CPXS000122309", "A-A01-019", 5]])
+
+    first = client.post(
+        "/api/inventory/reconcile/preview-file?record_snapshot=true",
+        files={
+            "file": (
+                "stocktake-duplicate.xlsx",
+                upload,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    second = client.post(
+        "/api/inventory/reconcile/preview-file?record_snapshot=true",
+        files={
+            "file": (
+                "stocktake-duplicate.xlsx",
+                upload,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["snapshot"]["recorded"] is True
+    assert second.json()["snapshot"]["recorded"] is False
+    assert second.json()["snapshot"]["duplicate"] is True
+    assert second.json()["snapshot"]["id"] == first.json()["snapshot"]["id"]
+    assert len(session.exec(select(InventoryReconcileSnapshot)).all()) == 1
+    assert len(session.exec(select(InventoryReconcileSnapshotItem)).all()) == 1
+
+
+def test_inventory_reconcile_preview_file_record_snapshot_requires_supervisor(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-snapshot-operator")
+    upload = _inventory_xlsx_upload([["factory_a", "CPXS000122310", "TMP-10", 1]])
+
+    response = client.post(
+        "/api/inventory/reconcile/preview-file?record_snapshot=true",
+        files={
+            "file": (
+                "operator-stocktake.xlsx",
+                upload,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 403
+    assert len(session.exec(select(InventoryReconcileSnapshot)).all()) == 0
+    assert len(session.exec(select(InventoryReconcileSnapshotItem)).all()) == 0
+
+
+def test_inventory_reconcile_latest_returns_empty_payload_when_missing(
+    client: TestClient,
+    session: Session,
+) -> None:
+    _login_operator(client, session, username="inventory-latest-operator")
+
+    response = client.get(
+        "/api/inventory/reconcile/latest",
+        params={
+            "factory_id": "factory_a",
+            "part_key": "CPXS000122311",
+            "location_code": "TMP-11",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "found": False,
+        "factory_id": "factory_a",
+        "part_key": "CPXS000122311",
+        "location_code": "TMP-11",
+    }
 
 
 def test_pick_recommendations_prioritize_temporary_then_smallest_quantity_then_sort_key(

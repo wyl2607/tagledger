@@ -866,5 +866,11 @@
   "materials.column.description": "Beschreibung",
   "materials.column.type": "Typ",
   "materials.column.name": "Produktname",
-  "materials.column.carton": "Kartongröße"
+  "materials.column.carton": "Kartongröße",
+  "inventory.reconcile.action.exportFile": "Ausgefüllte XLSX exportieren",
+  "inventory.reconcile.snapshot.record": "Diesen Excel-Snapshot erfassen",
+  "inventory.reconcile.snapshot.recorded": "Snapshot #{id} erfasst",
+  "inventory.reconcile.snapshot.duplicate": "Doppelte Datei, Snapshot #{id} wird verwendet",
+  "inventory.reconcile.error.exportForbidden": "Keine Berechtigung. Der Export erfordert Supervisor- oder Administratorrechte.",
+  "inventory.reconcile.error.exportFailed": "Export fehlgeschlagen. Bitte die hochgeladene Datei prüfen."
 }

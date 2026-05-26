@@ -120,7 +120,7 @@
 - [x] apply 必须写入流水或审计记录，保留操作者、原因、来源文件名、差异前后数量。
 - [x] apply 权限建议先限制为 supervisor/admin；operator 只能查看 preview 和发起问题标记。
 - [x] 2026-05-14 `/inventory` 对账 apply UI/API gate 通过：主管可从 preview 选择决策并调用 `/api/inventory/reconcile/apply`；默认数量差异进入盘点复核审计，只有手动选择“采用 Excel 数量”才写库存流水。
-- [ ] 支持把确认后的系统结果导出给人工回填共享 Excel，避免两套来源继续漂移。
+- [x] 支持把确认后的系统结果导出给人工回填共享 Excel，避免两套来源继续漂移。
 
 ### P2: 库位整理和盘点闭环
 
