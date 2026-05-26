@@ -5,7 +5,7 @@ Classify the `goal/l1-tagledger` dirty tree for WMS MVP Slice 0 before any produ
 ## Inputs read
 
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`.
-- WMS charter: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`.
+- WMS charter: `WMS charter`.
 - Read-only git evidence from `/Volumes/Mac扩容/workspace-sync/dev-roots/tagledger`: `status`, `log origin/main..HEAD`, `diff --stat`, `diff --name-status`, and per-commit `--name-status`.
 
 ## Findings
@@ -48,7 +48,7 @@ Debug noise / drop candidates:
 - `backend/app/main.py:116` through `backend/app/main.py:207` define the static route surface for portal, mobile, history, outbound, inventory, inbound, and materials.
 - `backend/app/static/portal.html:178` through `backend/app/static/portal.html:191` show the copy-link buttons targeted by most portal commits.
 - `backend/app/routes/inventory.py:185` through `backend/app/routes/inventory.py:218` expose reconcile preview/apply endpoints, matching the WMS charter’s Excel coexistence constraint.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:153` through `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:160` requires dirty-tree classification before product edits.
+- `WMS charter:153` through `WMS charter:160` requires dirty-tree classification before product edits.
 
 ## Open questions
 

@@ -5,7 +5,7 @@ Recommend one first Slice 1 task from cycle 12 or cycle 13, then draft a bounded
 ## Inputs read
 
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, and `docs/SYNC_RULES.md`.
-- Mandatory charter: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`.
+- Mandatory charter: `WMS charter`.
 - Prior Slice 0 notes: `docs/wms/slice-0/cycle-12-first-slice-candidate-style-system.md` and `docs/wms/slice-0/cycle-13-first-slice-candidate-event-ledger-tests.md`.
 - Current inventory and outbound surfaces: `backend/app/models.py`, `backend/app/routes/inventory.py`, `backend/app/routes/outbound.py`, `backend/app/services/inventory_service/movements.py`, `backend/app/services/outbound_reconciliation/inventory.py`, `backend/tests/test_inventory.py`, and `backend/tests/test_transfers.py`.
 - Read-only evidence commands: `git status --short`, `git log --oneline -5`, `rg --files`, `nl -ba`, and `ai-trace.sh find "tagledger wms slice 0 cycle"`.
@@ -61,10 +61,10 @@ Cycle 13 should be the first Slice 1 task. It is narrower and safer than cycle 1
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:73` defines inventory ledger events as source of truth and current stock as a derived view.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:171` starts Phase 2 event-ledger hardening and requires explicit receive, move, adjust, count, pick, pack, ship, hold, return, and scrap semantics.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:213` says the first TagLedger code slice should be either style-system consolidation or inventory event-ledger tests, whichever has least dirty-tree overlap.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:247` requires event-ledger acceptance evidence for receiving, move, adjustment, and reconciliation events with actor, timestamp, before/after data, and reason.
+- `WMS charter:73` defines inventory ledger events as source of truth and current stock as a derived view.
+- `WMS charter:171` starts Phase 2 event-ledger hardening and requires explicit receive, move, adjust, count, pick, pack, ship, hold, return, and scrap semantics.
+- `WMS charter:213` says the first TagLedger code slice should be either style-system consolidation or inventory event-ledger tests, whichever has least dirty-tree overlap.
+- `WMS charter:247` requires event-ledger acceptance evidence for receiving, move, adjustment, and reconciliation events with actor, timestamp, before/after data, and reason.
 - `AGENTS.md:44` through `AGENTS.md:65` define Group 1 allowed files and forbid mixing i18n, docs, scripts, or release/deploy changes into feature/API/UI/test work.
 - `README.md:6` describes TagLedger as a local factory LAN web workbench; `README.md:17` and `README.md:18` identify `/mobile` and `/outbound` as active workflow surfaces.
 - `REQUIREMENTS.md:46` requires all quantity changes, location moves, and count differences to be traceable through movements or audit records.

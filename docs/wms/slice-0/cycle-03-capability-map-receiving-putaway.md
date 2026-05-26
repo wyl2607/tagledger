@@ -4,7 +4,7 @@ Capability map for TagLedger receiving and putaway against the Industrial WMS De
 
 ## Inputs read
 
-Read the mandatory charter at `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`, plus `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, and current TagLedger source/tests under `backend/app`, `backend/tests`, and `docs/wms/slice-0`. Also ran read-only `git status --short`, `git ls-files`, and `ai-trace.sh find "tagledger receiving putaway wms"`; the trace search returned no matching entries.
+Read the mandatory charter at `WMS charter`, plus `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, and current TagLedger source/tests under `backend/app`, `backend/tests`, and `docs/wms/slice-0`. Also ran read-only `git status --short`, `git ls-files`, and `ai-trace.sh find "tagledger receiving putaway wms"`; the trace search returned no matching entries.
 
 ## Findings
 

@@ -4,7 +4,7 @@ Slice 0 acceptance criteria for Excel coexistence and Local gates: preview-first
 
 ## Inputs read
 
-- Charter: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`
+- Charter: `WMS charter`
 - Repo docs: `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`
 - Code/tests: inventory route, reconcile service, models, related tests
 - Read-only evidence: `git status --short`, `git ls-files`, `ai-trace`
@@ -30,7 +30,7 @@ Local gates acceptance criteria:
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:19`, `:248`, `:249` require Excel coexistence and gates.
+- `WMS charter:19`, `:248`, `:249` require Excel coexistence and gates.
 - `REQUIREMENTS.md:77`-`:90` require preview-first coexistence, four classes, read-only preview, human apply, and snapshots.
 - `backend/app/routes/inventory.py:185`, `:200`, `:220`, `:245` expose preview, apply, export-file, and preview-file.
 - `backend/app/services/inventory_service/reconcile.py:30`, `:203`, `:377`, `:482`, `:495` cover classify, snapshot, apply, movement, audit.

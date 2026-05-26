@@ -11,7 +11,7 @@ uncommitted work.
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/SYNC_RULES.md`, and
   `REQUIREMENTS.md`.
 - Mandatory charter:
-  `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`.
+  `WMS charter`.
 - Current static UI sources under `backend/app/static/`, including
   `ui.css`, HTML templates, `auth-ui.js`, and `i18n.js`.
 - Read-only git evidence: `git status --short`, `git ls-files`, and route/file

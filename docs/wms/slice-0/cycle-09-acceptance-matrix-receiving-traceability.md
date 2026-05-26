@@ -4,7 +4,7 @@ Slice 0 acceptance criteria for the charter's first two matrix rows: Receiving a
 
 ## Inputs read
 
-Read `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, the mandatory charter at `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`, current backend routes/models/services/tests, `git status --short`, and `ai-trace` search for `tagledger receiving traceability` (no matching trace output).
+Read `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, the mandatory charter at `WMS charter`, current backend routes/models/services/tests, `git status --short`, and `ai-trace` search for `tagledger receiving traceability` (no matching trace output).
 
 ## Findings
 

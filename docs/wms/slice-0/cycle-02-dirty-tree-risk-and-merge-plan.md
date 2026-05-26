@@ -5,7 +5,7 @@ Merge/discard plan for the cycle 01 dirty-tree classification. The classified st
 ## Inputs read
 
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`.
-- Charter: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`.
+- Charter: `WMS charter`.
 - Cycle 01 file: `docs/wms/slice-0/cycle-01-dirty-tree-by-purpose.md`.
 - Read-only git evidence: `git status --short`, current branch/log, and `git show --name-status` for the relevant integrated main commits.
 - Current source citations from `backend/app/main.py`, `backend/app/static/portal.html`, and `backend/app/routes/inventory.py`.
@@ -36,7 +36,7 @@ Docs-only candidate: `ff655b6` requirements checkbox updates can land only if th
 - `backend/app/main.py:116` through `backend/app/main.py:207` define the portal, mobile, history, outbound, inventory, inbound, and materials route surface.
 - `backend/app/static/portal.html:178` through `backend/app/static/portal.html:191` show the current portal entry and copy-link controls.
 - `backend/app/routes/inventory.py:185` through `backend/app/routes/inventory.py:218` expose reconcile preview/apply endpoints.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:153` through `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:160` require dirty-tree classification before product edits and identifying the first safe slice.
+- `WMS charter:153` through `WMS charter:160` require dirty-tree classification before product edits and identifying the first safe slice.
 
 ## Open questions
 

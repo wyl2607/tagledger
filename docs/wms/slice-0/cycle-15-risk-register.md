@@ -4,7 +4,7 @@ Risk register for executing Slice 1 through mini relay, assuming the first packe
 
 ## Inputs read
 
-- Charter: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`.
+- Charter: `WMS charter`.
 - Repo controls: `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`.
 - Prior packet: cycle 14 task packet.
 - Sources/tests: inventory models, routes, services, and `backend/tests/test_inventory.py`.
@@ -30,8 +30,8 @@ Risk register for executing Slice 1 through mini relay, assuming the first packe
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:73` defines ledger events as source of truth.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:137` covers mini relay preference and bounded fallback.
+- `WMS charter:73` defines ledger events as source of truth.
+- `WMS charter:137` covers mini relay preference and bounded fallback.
 - `AGENTS.md:44` through `AGENTS.md:65` define Group 1 paths and forbidden surfaces.
 - `REQUIREMENTS.md:46` requires quantity/move traceability.
 - `REQUIREMENTS.md:72` through `REQUIREMENTS.md:75` require over-quantity move discrepancy handling.

@@ -4,7 +4,7 @@ Assess whether inventory event-ledger tests should be the first Slice 1 candidat
 
 ## Inputs read
 
-Read required control documents: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, and `docs/SYNC_RULES.md`. Also inspected current Slice 0 notes, inventory models, inventory routes, inventory service movement/reconcile code, outbound inventory helpers, and tests in `backend/tests/test_inventory.py`, `backend/tests/test_inventory_reconcile_export.py`, `backend/tests/test_transfers.py`, and `backend/tests/test_outbound_reconciliation.py`. Ran read-only `git status`, `git diff`, `git ls-files`, and `ai-trace.sh find "tagledger inventory event ledger tests"`; the trace search returned no matching entries.
+Read required control documents: `WMS charter`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, and `docs/SYNC_RULES.md`. Also inspected current Slice 0 notes, inventory models, inventory routes, inventory service movement/reconcile code, outbound inventory helpers, and tests in `backend/tests/test_inventory.py`, `backend/tests/test_inventory_reconcile_export.py`, `backend/tests/test_transfers.py`, and `backend/tests/test_outbound_reconciliation.py`. Ran read-only `git status`, `git diff`, `git ls-files`, and `ai-trace.sh find "tagledger inventory event ledger tests"`; the trace search returned no matching entries.
 
 ## Findings
 
@@ -26,8 +26,8 @@ Validation for this slice should be: `ruff check backend scripts`; `PATH=.venv/b
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:73` says inventory ledger events are the source of truth and current stock is derived.
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:247` requires receiving, move, adjustment, and reconciliation events with actor, timestamp, before/after data, and reason.
+- `WMS charter:73` says inventory ledger events are the source of truth and current stock is derived.
+- `WMS charter:247` requires receiving, move, adjustment, and reconciliation events with actor, timestamp, before/after data, and reason.
 - `AGENTS.md:44` and `AGENTS.md:55` allow Group 1 feature/API/service/test files; `AGENTS.md:57` through `AGENTS.md:65` forbid mixing i18n, docs, scripts, and release/deploy changes.
 - `REQUIREMENTS.md:46` requires all quantity changes, moves, and count differences to be traceable; `REQUIREMENTS.md:73` defines correction-before-move for over-quantity moves.
 - `backend/app/models.py:196` defines `InventoryLocation`; `backend/app/models.py:204` stores current quantity.

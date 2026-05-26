@@ -4,7 +4,7 @@ Slice 0 summary and handoff for TagLedger WMS MVP: findings, chosen Slice 1 pack
 
 ## Inputs read
 
-- Charter: `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`.
+- Charter: `WMS charter`.
 - Repo controls: `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`.
 - Slice 0 outputs: `cycle-01`-`02` dirty tree/merge plan, `cycle-03`-`08` capability maps, `cycle-09`-`11` acceptance matrices, `cycle-12`-`13` first-slice candidates, `cycle-14` packet, `cycle-15` risks.
 - Current inventory models, routes, services, README, requirements. Checks: `git status --short`, `git ls-files`, `rg`, `nl -ba`, ai-trace.
@@ -23,7 +23,7 @@ TOP-3 follow-up slices: 1. Receiving/LPN traceability with bounded box identity 
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:71`, `:73`, `:156`, `:213`, `:247` cover LPN identity, ledger truth, dirty-tree classification, first-slice choice, and ledger acceptance.
+- `WMS charter:71`, `:73`, `:156`, `:213`, `:247` cover LPN identity, ledger truth, dirty-tree classification, first-slice choice, and ledger acceptance.
 - `AGENTS.md:20`, `:26`, `:44`-`65` block runtime artifacts, require grouped commits, and define Group 1.
 - `README.md:6`, `:15`-`18` frame the LAN workbench and surfaces.
 - `REQUIREMENTS.md:46`, `:72`-`75`, `:86` require traceability, over-quantity, read-only Excel preview.

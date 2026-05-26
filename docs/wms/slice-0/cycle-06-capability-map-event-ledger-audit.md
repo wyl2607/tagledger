@@ -4,7 +4,7 @@ Map current event-ledger and audit coverage against the charter goal that invent
 
 ## Inputs read
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`
+- `WMS charter`
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`
 - `backend/app/models.py`
 - `backend/app/routes/inventory.py`, `backend/app/routes/outbound.py`
@@ -30,7 +30,7 @@ Gaps:
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:73` sets ledger events as source of truth; `:75` requires audit trails; `:247` requires actor, timestamp, before/after, and audit reason.
+- `WMS charter:73` sets ledger events as source of truth; `:75` requires audit trails; `:247` requires actor, timestamp, before/after, and audit reason.
 - `REQUIREMENTS.md:73` requires `manual_adjust`, `manual_move_out`, and `manual_move_in`; `:86` requires read-only preview; `:90` requires snapshot metadata.
 - `backend/app/models.py:196` defines mutable inventory rows; `:213` defines `InventoryMovement`; `:233` defines reconcile snapshots; `:301` defines `AuditLog`.
 - `backend/app/services/inventory_service/movements.py:42` emits `manual_adjust`; `:143` and `:156` emit move pairs; `:169` emits move audit.

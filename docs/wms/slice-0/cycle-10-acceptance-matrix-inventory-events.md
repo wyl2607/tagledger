@@ -4,7 +4,7 @@ Verifiable Slice 0 acceptance criteria for inventory/location truth and event le
 
 ## Inputs read
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`
+- `WMS charter`
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`
 - Current inventory models, routes, services, UI, and tests under `backend/app/**` and `backend/tests/**`
 - Prior Slice 0 notes: `docs/wms/slice-0/cycle-04-capability-map-inventory-locations.md` and `cycle-06-capability-map-event-ledger-audit.md`
@@ -67,7 +67,7 @@ Expected event payload schema for API/test assertions:
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:73` requires ledger events as source of truth; `:88` requires item/location queries and permanent empty locations; `:247` requires actor, timestamp, before/after data, and audit reason.
+- `WMS charter:73` requires ledger events as source of truth; `:88` requires item/location queries and permanent empty locations; `:247` requires actor, timestamp, before/after data, and audit reason.
 - `REQUIREMENTS.md:39` defines inventory by material, location, and quantity; `:45` says zero is valid; `:46` requires traceability; `:72` documents correction-before-move.
 - `backend/app/models.py:196` defines `InventoryLocation`; `backend/app/models.py:213` defines `InventoryMovement`; `backend/app/models.py:301` defines `AuditLog`.
 - `backend/app/routes/inventory.py:74` exposes item/location listing; `:93` exposes the location map; `:162` exposes move; `:200` exposes reconcile apply; `:283` exposes latest snapshot lookup.

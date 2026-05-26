@@ -4,7 +4,7 @@ Map TagLedger mobile UX, auth, `/workbench` routing, and role-aware guards again
 
 ## Inputs read
 
-Read `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, auth/workbench/mobile sources, and prior Slice 0 notes. Also ran read-only `git status --short`, `rg`, `nl`, `sed`, `ls`, and `ai-trace.sh find "tagledger mobile auth roles workbench"`; no trace hits.
+Read `WMS charter`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, auth/workbench/mobile sources, and prior Slice 0 notes. Also ran read-only `git status --short`, `rg`, `nl`, `sed`, `ls`, and `ai-trace.sh find "tagledger mobile auth roles workbench"`; no trace hits.
 
 ## Findings
 

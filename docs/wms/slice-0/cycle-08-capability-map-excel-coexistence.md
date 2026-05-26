@@ -4,7 +4,7 @@ Assess current Excel import preview, snapshot, apply, and reconciled export cove
 
 ## Inputs read
 
-Read repository guidance and product inputs before writing: `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/SYNC_RULES.md`, `REQUIREMENTS.md`, and `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`. Also checked `ai-trace` for TagLedger Excel/reconcile notes. Source inspection covered inventory routes, inventory services, Excel parser/export helpers, inventory UI, models, and focused tests.
+Read repository guidance and product inputs before writing: `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/SYNC_RULES.md`, `REQUIREMENTS.md`, and `WMS charter`. Also checked `ai-trace` for TagLedger Excel/reconcile notes. Source inspection covered inventory routes, inventory services, Excel parser/export helpers, inventory UI, models, and focused tests.
 
 ## Findings
 

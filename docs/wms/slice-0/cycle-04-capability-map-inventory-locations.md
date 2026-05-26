@@ -4,7 +4,7 @@ Map current inventory/location capabilities against Phase 2 event-ledger hardeni
 
 ## Inputs read
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`
+- `WMS charter`
 - `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`
 - Inventory/outbound models, routes, services, and tests
 
@@ -22,7 +22,7 @@ Capability summary: location visibility and Excel coexistence are relatively mat
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:73` requires ledger events as truth and current stock as derived view.
+- `WMS charter:73` requires ledger events as truth and current stock as derived view.
 - `REQUIREMENTS.md:39` defines inventory/location scope; `REQUIREMENTS.md:45` makes zero valid; `REQUIREMENTS.md:46` requires traceable changes.
 - `REQUIREMENTS.md:72` documents correction-before-move for over-quantity moves.
 - `backend/app/models.py:196` defines `InventoryLocation`; `backend/app/models.py:204` stores current `quantity`; `backend/app/models.py:213` defines `InventoryMovement`; `backend/app/models.py:224` through `backend/app/models.py:230` store delta, before/after, operator, reason, timestamp.

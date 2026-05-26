@@ -4,7 +4,7 @@ Map TagLedger outbound, pick, pack, and dispatch capabilities against the WMS ch
 
 ## Inputs read
 
-Read `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, current route/template sources for `/outbound`, `/mobile`, `/transfers`, inventory pick recommendations, and existing Slice 0 docs. Also ran read-only `git status --short`, `git ls-files`, and `ai-trace.sh find "tagledger outbound mobile transfers WMS Phase 4"`; the trace search returned no matching entries.
+Read `WMS charter`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `REQUIREMENTS.md`, `docs/SYNC_RULES.md`, current route/template sources for `/outbound`, `/mobile`, `/transfers`, inventory pick recommendations, and existing Slice 0 docs. Also ran read-only `git status --short`, `git ls-files`, and `ai-trace.sh find "tagledger outbound mobile transfers WMS Phase 4"`; the trace search returned no matching entries.
 
 ## Findings
 
@@ -22,7 +22,7 @@ Phase 4 gap summary: keep existing outbound scan/order reconciliation as a usefu
 
 ## Evidence / citations (path:line list)
 
-- `/Users/yilinwang/tagledger-slice0-loop/wms-charter.md:151` defines Phase 4 outbound pick, pack, stage, dispatch goals.
+- `WMS charter:151` defines Phase 4 outbound pick, pack, stage, dispatch goals.
 - `backend/app/main.py:146` serves `/mobile`; `backend/app/main.py:170` serves `/outbound`; `backend/app/main.py:178` serves `/transfers`.
 - `backend/app/routes/outbound.py:44` defines `/api/outbound`; `backend/app/routes/outbound.py:112` scopes non-supervisors to assigned orders.
 - `backend/app/routes/outbound.py:149` returns outbound summary; `backend/app/routes/outbound.py:168` returns order choices; `backend/app/routes/outbound.py:305` queries part/SKU/order membership.
