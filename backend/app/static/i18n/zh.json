@@ -866,5 +866,11 @@
   "materials.column.description": "描述",
   "materials.column.type": "类型",
   "materials.column.name": "品名",
-  "materials.column.carton": "箱规尺寸"
+  "materials.column.carton": "箱规尺寸",
+  "inventory.reconcile.action.exportFile": "导出回填 XLSX",
+  "inventory.reconcile.snapshot.record": "记录本次 Excel snapshot",
+  "inventory.reconcile.snapshot.recorded": "snapshot #{id} 已记录",
+  "inventory.reconcile.snapshot.duplicate": "重复文件，沿用 snapshot #{id}",
+  "inventory.reconcile.error.exportForbidden": "无权限，导出需主管或管理员。",
+  "inventory.reconcile.error.exportFailed": "导出失败，请检查上传文件。"
 }
