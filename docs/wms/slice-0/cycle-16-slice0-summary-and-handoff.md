@@ -37,3 +37,7 @@ TOP-3 follow-up slices: 1. Receiving/LPN traceability with bounded box identity 
 - Should Slice 1 implement over-quantity move handling now or freeze the current rejection?
 - Should Slice 1 validation include auth/API smoke tests beyond cycle 14's focused inventory commands?
 - Should Slice 2 be LPN receiving or style-system consolidation?
+
+## Relay Coordinator Smoke
+
+2026-05-26 relay-coordinator dispatch proof: a bounded Mac mini worker launched on branch `codex/relay-coordinator-smoke-20260526T150503Z` with a docs-only write scope limited to this handoff file. The worker respected the no-backend, no-scripts, no-config, no-data, no-remote-action boundary and used local validation only, proving the coordinator can send a short Slice 0 handoff update through relay quota without touching runtime or release surfaces.
