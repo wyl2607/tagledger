@@ -4,6 +4,8 @@ import csv
 from io import BytesIO, StringIO
 from pathlib import Path
 
+from openpyxl import Workbook
+
 REQUIRED_COLUMNS = {"part_key", "location_code", "quantity"}
 OPTIONAL_COLUMNS = {"factory_id"}
 SUPPORTED_EXTENSIONS = {".csv", ".xlsx"}
@@ -110,3 +112,84 @@ def parse_inventory_file_rows(*, filename: str, content: bytes) -> list[dict[str
     if extension == ".csv":
         return _parse_csv(content)
     return _parse_xlsx(content)
+
+
+RECONCILE_EXPORT_HEADERS = [
+    "factory_id",
+    "part_key",
+    "location_code",
+    "quantity",
+    "excel_quantity",
+    "delta",
+    "category",
+    "note",
+]
+RECONCILE_EXPORT_CATEGORY_ORDER = [
+    "quantity_mismatch",
+    "excel_missing",
+    "excel_new",
+    "matched",
+]
+DANGEROUS_FORMULA_PREFIXES = {"=", "+", "-", "@"}
+
+
+def _safe_xlsx_text_cell(value: object) -> object:
+    if not isinstance(value, str) or not value:
+        return value
+    stripped = value.lstrip(" \t\r\n")
+    if stripped and stripped[0] in DANGEROUS_FORMULA_PREFIXES:
+        return f"'{value}"
+    return value
+
+
+def _reconcile_export_note(category: str, row: dict[str, object]) -> str:
+    if category == "quantity_mismatch":
+        delta = int(row.get("delta") or 0)
+        if delta > 0:
+            return f"Excel 数量比系统多 {delta},请人工确认后回填"
+        if delta < 0:
+            return f"Excel 数量比系统少 {abs(delta)},请人工确认后回填"
+        return "Excel 数量与系统不一致,请人工确认后回填"
+    if category == "excel_missing":
+        return "系统有库存但 Excel 缺失,请确认是否补回 Excel"
+    if category == "excel_new":
+        return "Excel 中存在系统未登记库存,请确认是否新增或更正"
+    return "系统数量与 Excel 数量一致"
+
+
+def render_reconcile_export_xlsx(preview_result: dict) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "reconcile_export"
+    sheet.append(RECONCILE_EXPORT_HEADERS)
+
+    for category in RECONCILE_EXPORT_CATEGORY_ORDER:
+        rows = list(preview_result.get(category) or [])
+        rows.sort(
+            key=lambda item: (
+                str(item.get("part_key") or ""),
+                str(item.get("location_code") or ""),
+            )
+        )
+        for row in rows:
+            quantity = 0 if category == "excel_new" else int(row.get("system_quantity") or 0)
+            excel_quantity = None if category == "excel_missing" else row.get("excel_quantity")
+            if excel_quantity is not None:
+                excel_quantity = int(excel_quantity)
+            delta = int(row.get("delta") or 0) if category == "quantity_mismatch" else None
+            sheet.append(
+                [
+                    _safe_xlsx_text_cell(str(row.get("factory_id") or "")),
+                    _safe_xlsx_text_cell(str(row.get("part_key") or "")),
+                    _safe_xlsx_text_cell(str(row.get("location_code") or "")),
+                    quantity,
+                    excel_quantity,
+                    delta,
+                    _safe_xlsx_text_cell(category),
+                    _safe_xlsx_text_cell(_reconcile_export_note(category, row)),
+                ]
+            )
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()

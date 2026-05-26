@@ -230,6 +230,42 @@ class InventoryMovement(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class InventoryReconcileSnapshot(SQLModel, table=True):
+    __tablename__ = "inventory_reconcile_snapshots"
+
+    id: int | None = Field(default=None, primary_key=True)
+    filename: str = Field(index=True)
+    file_hash: str = Field(index=True, unique=True)
+    uploaded_by: str = Field(index=True)
+    uploaded_by_user_id: int | None = Field(default=None, index=True)
+    parsed_row_count: int = Field(default=0)
+    summary_json: str
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class InventoryReconcileSnapshotItem(SQLModel, table=True):
+    __tablename__ = "inventory_reconcile_snapshot_items"
+    __table_args__ = (
+        Index(
+            "ix_inventory_reconcile_snapshot_items_lookup",
+            "factory_id",
+            "part_key",
+            "location_code",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    snapshot_id: int = Field(foreign_key="inventory_reconcile_snapshots.id", index=True)
+    factory_id: str = Field(default="factory_a", index=True)
+    part_key: str = Field(index=True)
+    location_code: str = Field(index=True)
+    system_quantity: int | None = None
+    excel_quantity: int | None = None
+    category: str = Field(index=True)
+    processing_status: str = Field(default="open", index=True)
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+
+
 class User(SQLModel, table=True):
     __tablename__ = "users"
 

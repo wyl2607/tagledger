@@ -209,8 +209,13 @@
           <span data-i18n="inventory.reconcile.file">库存文件（CSV / XLSX）</span>
           <input id="reconcileFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         </label>
+        <label id="reconcileRecordSnapshotControl" hidden class="reconcile-upload-option">
+          <input id="reconcileRecordSnapshotInput" type="checkbox">
+          <span data-i18n="inventory.reconcile.snapshot.record">记录本次 Excel snapshot</span>
+        </label>
         <div class="reconcile-upload-row">
           <button type="button" id="reconcileFilePreviewBtn" data-i18n="inventory.reconcile.action.previewFile">上传并预览文件</button>
+          <button type="button" id="reconcileExportFileBtn" hidden data-i18n="inventory.reconcile.action.exportFile">导出回填 XLSX</button>
           <span id="reconcileFileMeta" class="reconcile-upload-meta"></span>
         </div>
       </div>
@@ -570,6 +575,14 @@
         filename: meta.filename || '-',
         count: meta.parsed_row_count ?? 0,
       });
+      if (meta.snapshot) {
+        const snapshot = meta.snapshot;
+        target.textContent += ` · ${tr(snapshot.duplicate
+          ? 'inventory.reconcile.snapshot.duplicate'
+          : 'inventory.reconcile.snapshot.recorded', {
+          id: snapshot.id || '-',
+        })}`;
+      }
       syncReconcileSourceFilename();
     }
 
@@ -641,20 +654,88 @@
       }
       const formData = new FormData();
       formData.append('file', file);
+      const params = new URLSearchParams();
+      if (userCanManageInventory && document.querySelector('#reconcileRecordSnapshotInput')?.checked) {
+        params.set('record_snapshot', 'true');
+      }
+      const url = `/api/inventory/reconcile/preview-file${params.toString() ? `?${params}` : ''}`;
       try {
-        const payload = await AuthUI.fetchJson('/api/inventory/reconcile/preview-file', {
+        const payload = await AuthUI.fetchJson(url, {
           method: 'POST',
           body: formData,
         });
         renderReconcileFileMeta({
           filename: payload.filename || file.name,
           parsed_row_count: payload.parsed_row_count ?? 0,
+          snapshot: payload.snapshot,
         });
         renderReconcilePreview(payload);
       } catch (requestError) {
         error.textContent = reconcileFileErrorMessage(requestError?.message || '');
         renderReconcilePreview(null);
         renderReconcileFileMeta(null);
+      }
+    }
+
+    function filenameFromContentDisposition(headerValue) {
+      const text = String(headerValue || '');
+      const utf8Match = text.match(/filename\*=UTF-8''([^;]+)/i);
+      if (utf8Match) {
+        try {
+          return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ''));
+        } catch (_error) {
+          return utf8Match[1].trim().replace(/^"|"$/g, '');
+        }
+      }
+      const filenameMatch = text.match(/filename="?([^";]+)"?/i);
+      return filenameMatch ? filenameMatch[1].trim() : '';
+    }
+
+    async function exportReconcileFile() {
+      const error = document.querySelector('#reconcileError');
+      error.textContent = '';
+      if (!userCanManageInventory) {
+        error.textContent = tr('inventory.reconcile.error.exportForbidden');
+        return;
+      }
+      const input = document.querySelector('#reconcileFileInput');
+      const file = input.files?.[0];
+      if (!file) {
+        error.textContent = tr('inventory.reconcile.error.selectFile');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const response = await fetch('/api/inventory/reconcile/export-file', AuthUI.csrfHeaders({
+          method: 'POST',
+          body: formData,
+        }));
+        if (response.status === 401) {
+          AuthUI.redirectToLogin();
+          return;
+        }
+        if (!response.ok) {
+          error.textContent = response.status === 403
+            ? tr('inventory.reconcile.error.exportForbidden')
+            : tr('inventory.reconcile.error.exportFailed');
+          return;
+        }
+
+        const blob = await response.blob();
+        const filename = filenameFromContentDisposition(response.headers.get('Content-Disposition'))
+          || 'tagledger-reconcile-export.xlsx';
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (_requestError) {
+        error.textContent = tr('inventory.reconcile.error.exportFailed');
       }
     }
 
@@ -981,6 +1062,8 @@
       userCanManageInventory = AuthUI.hasCapability(user, 'can_manage_inventory');
       document.querySelector('#adjustmentPanel').hidden = !userCanManageInventory;
       document.querySelector('#exportInventoryBtn').hidden = !userCanManageInventory;
+      document.querySelector('#reconcileExportFileBtn').hidden = !userCanManageInventory;
+      document.querySelector('#reconcileRecordSnapshotControl').hidden = !userCanManageInventory;
       document.querySelector('#reconcileApplyPanel').hidden = !userCanManageInventory || !latestReconcilePreview;
       document.querySelector('#inventoryContent').hidden = false;
       await loadInventory();
@@ -998,6 +1081,7 @@
     document.querySelector('#pickRecommendationBtn').addEventListener('click', loadPickRecommendations);
     document.querySelector('#reconcilePreviewBtn').addEventListener('click', generateReconcilePreview);
     document.querySelector('#reconcileFilePreviewBtn').addEventListener('click', generateReconcilePreviewFromFile);
+    document.querySelector('#reconcileExportFileBtn').addEventListener('click', exportReconcileFile);
     document.querySelector('#reconcileApplyBtn').addEventListener('click', () => {
       applyReconcileDecisions().catch((error) => { document.querySelector('#reconcileApplyError').textContent = error.message; });
     });

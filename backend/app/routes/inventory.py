@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlmodel import Session
@@ -5,16 +7,23 @@ from sqlmodel import Session
 from backend.app.auth import require_login, require_supervisor
 from backend.app.database import get_session
 from backend.app.models import User
-from backend.app.services.inventory_excel import parse_inventory_file_rows
+from backend.app.services.auth_service import has_role
+from backend.app.services.inventory_excel import (
+    parse_inventory_file_rows,
+    render_reconcile_export_xlsx,
+)
 from backend.app.services.inventory_service import (
     InventoryPermissionError,
     adjust_inventory_location,
     apply_inventory_reconcile,
     export_inventory_locations_csv,
+    inventory_file_hash,
+    latest_inventory_reconcile_snapshot_item,
     list_inventory_locations,
     move_inventory_quantity,
     preview_inventory_reconcile,
     recommend_inventory_picks,
+    record_inventory_reconcile_snapshot,
 )
 from backend.app.services.location_map import build_inventory_location_map
 
@@ -208,24 +217,83 @@ def post_inventory_reconcile_apply(
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
-@router.post("/reconcile/preview-file")
-async def post_inventory_reconcile_preview_file(
+@router.post("/reconcile/export-file")
+async def post_inventory_reconcile_export_file(
     file: UploadFile = File(...),
-    _: User = Depends(require_login),
+    _: User = Depends(require_supervisor),
     session: Session = Depends(get_session),
-) -> dict[str, object]:
+) -> Response:
     try:
         rows = parse_inventory_file_rows(
             filename=file.filename or "",
             content=await file.read(),
         )
         payload = preview_inventory_reconcile(session=session, rows=rows)
+        xlsx_bytes = render_reconcile_export_xlsx(payload)
+        filename = f"tagledger-reconcile-export-{date.today():%Y%m%d}.xlsx"
+        return Response(
+            content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (UnicodeDecodeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="invalid inventory file") from exc
+
+
+@router.post("/reconcile/preview-file")
+async def post_inventory_reconcile_preview_file(
+    file: UploadFile = File(...),
+    record_snapshot: bool = Query(default=False),
+    user: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    try:
+        content = await file.read()
+        rows = parse_inventory_file_rows(
+            filename=file.filename or "",
+            content=content,
+        )
+        payload = preview_inventory_reconcile(session=session, rows=rows)
+        snapshot = None
+        if record_snapshot:
+            if not has_role(user, "supervisor"):
+                raise HTTPException(status_code=403, detail="permission denied")
+            snapshot = record_inventory_reconcile_snapshot(
+                session=session,
+                filename=file.filename or "",
+                file_hash=inventory_file_hash(content),
+                parsed_row_count=len(rows),
+                preview_result=payload,
+                operator=user,
+            )
         return {
             **payload,
             "filename": file.filename,
             "parsed_row_count": len(rows),
+            **({"snapshot": snapshot} if snapshot is not None else {}),
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (UnicodeDecodeError, ValueError, OSError) as exc:
         raise HTTPException(status_code=400, detail="invalid inventory file") from exc
+
+
+@router.get("/reconcile/latest")
+def get_inventory_reconcile_latest(
+    part_key: str = Query(min_length=1, max_length=80),
+    location_code: str = Query(min_length=1, max_length=80),
+    factory_id: str | None = Query(default=None),
+    _: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    try:
+        return latest_inventory_reconcile_snapshot_item(
+            session=session,
+            factory_id=factory_id,
+            part_key=part_key,
+            location_code=location_code,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
