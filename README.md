@@ -1,11 +1,18 @@
 # TagLedger
 
-![Status](https://img.shields.io/badge/Status-Factory%20Workbench-brightgreen)
+![Status](https://img.shields.io/badge/Status-Portfolio%20Demo-brightgreen)
 ![OS](https://img.shields.io/badge/OS-macOS%20%2F%20Windows-blue)
+![Stack](https://img.shields.io/badge/Stack-FastAPI%20%2B%20SQLite-blue)
 
-TagLedger 是面向工厂现场的局域网 Web 工作台：中心 Windows 电脑启动 FastAPI 服务，同事先进入中心入口，再选择手机捡货、出库核对、库存调拨、统计或账号权限页面。主线目标是把发货单扫码、OCR 标签录入、调拨、统计和账号权限收束到同一个本地优先系统。
+**Portfolio / open-source demo** of a local-first factory workbench: login & roles, mobile scan, outbound reconciliation, transfers, OCR label intake, and admin — all on one LAN box.
 
-当前已接入账号登录、角色化工作台、出库核对、移动扫码、真实 Tesseract OCR、条码识别和 Playwright/SaaS dry-run 提交骨架。旧桌面 OCR demo 保留为 `/capture` 子功能，不再作为产品首页。
+> This repository is maintained as a **generic showcase** that runs out of the box.
+> It is **not** an active production deployment for any specific company site.
+> Sample outbound data is synthetic (`scripts/generate_demo_outbound.py`).
+
+首页 `/` 中心入口：未初始化跳 `/setup`；初始化后显示所有工具和后续模块占位。
+
+Shipped capabilities: account login, role workbench, outbound check, mobile scan, Mock/Tesseract OCR, barcode helpers, Playwright/SaaS dry-run skeleton. 旧桌面 OCR demo 保留为 `/capture` 子功能，不再作为产品首页。
 
 ## 功能范围
 
@@ -31,7 +38,7 @@ TagLedger 是面向工厂现场的局域网 Web 工作台：中心 Windows 电�
 - Playwright/SaaS 提交骨架，默认 dry-run，不点击真实提交按钮
 - parser 和查重单元测试
 
-## 本机启动
+## 本机启动（展示用）
 
 ```bash
 cd /path/to/tagledger
@@ -40,7 +47,9 @@ cd /path/to/tagledger
 
 打开：`http://127.0.0.1:8000`
 
-首次安装会进入 `/setup` 创建管理员账号；之后访问 `/` 会进入中心入口，再选择 `/mobile`、`/outbound`、`/workbench` 或其他子页面。
+- 首次缺少出库样例时，脚本会自动生成通用 `data/outbound/outbound_today.xlsx`（本地 gitignore，不进仓库）。
+- 默认 `ocr_provider: mock`，不依赖本机 Tesseract。
+- 首次安装会进入 `/setup` 创建管理员；之后从 `/` 进入 `/mobile`、`/outbound`、`/workbench` 等页面。
 
 Finder 双击启动：`Start Mac Demo.command`
 

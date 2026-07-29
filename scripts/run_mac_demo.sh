@@ -82,7 +82,13 @@ fi
 
 "$VENV_PYTHON" -m pip install -e ".[dev]"
 
-echo "Starting TagLedger macOS demo"
+# Portfolio demo: ensure a generic outbound sample exists (gitignored data/).
+if [ ! -f "$ROOT_DIR/data/outbound/outbound_today.xlsx" ]; then
+  echo "Generating generic demo outbound workbook..."
+  "$VENV_PYTHON" "$ROOT_DIR/scripts/generate_demo_outbound.py"
+fi
+
+echo "Starting TagLedger macOS demo (portfolio / generic)"
 echo "Local demo: http://127.0.0.1:${PORT}"
 echo "API docs:   http://127.0.0.1:${PORT}/docs"
 echo "LAN demo:   HOST=0.0.0.0 PORT=${PORT} ./scripts/run_mac_demo.sh"
