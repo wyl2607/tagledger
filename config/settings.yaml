@@ -1,22 +1,21 @@
+# TagLedger — portfolio / generic demo settings
+# No site-specific factory paths. Demo sample data is generated on first run.
 app:
   database_url: sqlite:///data/app.db
   upload_dir: data/uploads
   screenshot_dir: data/screenshots
-  # OCR provider: mock or tesseract. Keep mock for dependency-free demos.
-  ocr_provider: tesseract
-  # Barcode detection uses optional pyzbar/zbar; if unavailable it is skipped.
+  # mock = zero-dependency demo; switch to tesseract for real OCR.
+  ocr_provider: mock
   enable_barcode: true
-  # Keep local/mobile tests focused on OCR + local intake. Turn on only after SaaS selectors are verified.
+  # SaaS submit stays off for the public demo.
   enable_saas_submit: false
   dry_run: true
   submission_retries: 3
   outbound_workbook_path: data/outbound/outbound_today.xlsx
-  outbound_shipping_sheet: 出库单明细2
-  outbound_cutting_sheet: 96单小单
-  # Fail outbound load when workbook mtime is older than N days (0 = disable).
-  outbound_workbook_max_age_days: 3
-  # Material mapping sheet is slower-changing; 14d default.
-  material_mapping_max_age_days: 14
+  outbound_shipping_sheet: shipping
+  outbound_cutting_sheet: cutting
+  # 0 = disabled (static portfolio sample). Set e.g. 3 for live shop floors.
+  outbound_workbook_max_age_days: 0
+  material_mapping_max_age_days: 0
 metrics:
-  # Estimated manual entry baseline for contribution reporting.
   manual_seconds: 90
