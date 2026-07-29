@@ -64,11 +64,15 @@ class Settings(BaseModel):
     playwright_log: str = "logs/playwright.log"
     metrics_manual_seconds_per_entry: int = 90
     material_mapping_path: str = "data/material_mapping.xlsx"
-    outbound_workbook_path: str = "data/outbound/发货0422.xlsx"
-    outbound_shipping_sheet: str = "21单830个物料发货单-多物料订单"
-    outbound_cutting_sheet: str = "拣货单-多物料订单"
+    # Defaults must match config/settings.yaml (the file operators edit).
+    outbound_workbook_path: str = "data/outbound/outbound_today.xlsx"
+    outbound_shipping_sheet: str = "出库单明细2"
+    outbound_cutting_sheet: str = "96单小单"
     outbound_cutting_text_path: str = "data/outbound/cutting.txt"
     outbound_shipping_text_path: str = "data/outbound/shipping.txt"
+    # Age gates (days). 0 disables. Operators replace outbound_today.xlsx each shift.
+    outbound_workbook_max_age_days: int = 3
+    material_mapping_max_age_days: int = 14
     cookie_secure: bool = False
     csrf_protection: bool = True
     lan_guard_enabled: bool = True

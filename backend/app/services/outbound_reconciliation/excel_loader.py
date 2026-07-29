@@ -190,10 +190,30 @@ def _fail_outbound_config(message: str) -> NoReturn:
     raise RuntimeError(message)
 
 
+def assert_file_not_stale(path, max_age_days: int, label: str) -> None:
+    """Fail closed when an operator workbook is older than the policy window."""
+    if max_age_days is None or int(max_age_days) <= 0:
+        return
+    import time
+
+    age_seconds = time.time() - path.stat().st_mtime
+    age_days = age_seconds / 86400.0
+    if age_days > float(max_age_days):
+        _fail_outbound_config(
+            f"{label} is stale: {path} age={age_days:.1f}d "
+            f"max={max_age_days}d — replace with today's export before outbound"
+        )
+
+
 def load_outbound_items() -> tuple[list[OutboundItem], list[OutboundItem]]:
     settings = get_settings()
     if not settings.outbound_workbook_file.exists():
         _fail_outbound_config(f"outbound workbook not found: {settings.outbound_workbook_file}")
+    assert_file_not_stale(
+        settings.outbound_workbook_file,
+        getattr(settings, "outbound_workbook_max_age_days", 0),
+        "outbound workbook",
+    )
     cutting = _load_cutting_sheet(settings.outbound_workbook_file, settings.outbound_cutting_sheet)
     shipping = _load_shipping_sheet(
         settings.outbound_workbook_file, settings.outbound_shipping_sheet
