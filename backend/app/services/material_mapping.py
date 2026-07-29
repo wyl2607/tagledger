@@ -118,6 +118,19 @@ def material_catalog() -> list[MaterialMatch]:
         stat = path.stat()
     except OSError:
         return []
+    max_age = int(getattr(get_settings(), "material_mapping_max_age_days", 0) or 0)
+    if max_age > 0:
+        import logging
+        import time
+
+        age_days = (time.time() - stat.st_mtime) / 86400.0
+        if age_days > max_age:
+            logging.getLogger(__name__).warning(
+                "material mapping is stale: %s age=%.1fd max=%sd — refresh mapping workbook",
+                path,
+                age_days,
+                max_age,
+            )
     return list(_cached_material_matches(str(path), stat.st_mtime_ns, stat.st_size))
 
 
