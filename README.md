@@ -10,7 +10,9 @@
 > It is **not** an active production deployment for any specific company site.
 > Sample outbound data is synthetic (`scripts/generate_demo_outbound.py`).
 
-Shipped capabilities: account login, role workbench, outbound check, mobile scan, Mock/Tesseract OCR, barcode helpers, Playwright/SaaS dry-run skeleton. Legacy desktop OCR demo remains at `/capture`.
+首页 `/` 中心入口：未初始化跳 `/setup`；初始化后显示所有工具和后续模块占位。
+
+Shipped capabilities: account login, role workbench, outbound check, mobile scan, Mock/Tesseract OCR, barcode helpers, Playwright/SaaS dry-run skeleton. 旧桌面 OCR demo 保留为 `/capture` 子功能，不再作为产品首页。
 
 ## 功能范围
 
