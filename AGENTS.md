@@ -154,3 +154,21 @@ Windows 对应：
 ```powershell
 .\scripts\run_preflight.ps1
 ```
+
+## Portfolio maintenance mode (2026-07-30)
+
+After the portfolio optim campaign: **product development is the default**;
+maintenance runs on a clock. Do not reopen whole-portfolio scan/reshape work
+unless the user asks.
+
+| Mode | When | What |
+|------|------|------|
+| **Develop** | Default | Ship features for this repo only; touch only task-needed files |
+| **Code quality** | Blocks delivery, or explicit debt slice | Bounded refactor — no full-repo reshape campaigns |
+| **Data sources** | Schedule / failing gate / product need | Use existing freshness gates and pipelines; no ad-hoc full re-audit |
+| **Review** | Weekly digest + before merge | Read `wyl2607/automation` issue *Portfolio digest*; do not manually re-scan all repos |
+
+Cross-repo weekly scan: `wyl2607/automation` workflow **Portfolio scan** (secret `PORTFOLIO_SCAN_TOKEN`).
+Deferred majors (product-driven only): Tailwind 4, eslint 10, fastapi+pydantic co-upgrade, ruff 0.16 modernization.
+Shared rules: Obsidian `Codex记忆/决策/portfolio-post-optim-operating-mode-2026-07-30.md`.
+
