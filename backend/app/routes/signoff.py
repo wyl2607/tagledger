@@ -60,7 +60,7 @@ def _payload_hash(payload: dict[str, object]) -> str:
 
 
 def _utc_now_for_db() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    return datetime.now(UTC)
 
 
 def _candidate_payload(candidate: ReturnSignoffCandidate) -> dict[str, object]:

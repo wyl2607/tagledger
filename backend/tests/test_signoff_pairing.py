@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -247,7 +247,7 @@ def test_pairing_preview_rejects_expired_or_unknown_token(
         SignoffPairingKey(
             candidate_id=candidate_id,
             token_hash=_hash_token(token),
-            expires_at=datetime(2000, 1, 1),
+            expires_at=datetime(2000, 1, 1, tzinfo=UTC),
         )
     )
     session.commit()
