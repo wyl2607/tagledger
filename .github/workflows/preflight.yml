@@ -36,5 +36,21 @@ jobs:
       - name: Ruff
         run: ruff check backend scripts
 
+      - name: UI contracts
+        run: bash scripts/check_ui_contracts.sh
+
       - name: Pytest
         run: python -m pytest backend/tests -q
+
+      - name: Import check
+        run: |
+          python -c "
+          from backend.app.main import app
+          from backend.app.models import Record, RecordStatus, Category
+          from backend.app.schemas import (
+              UploadResponse, ConfirmRequest, ConfirmResponse,
+              RecordRead, RecordListItem, RetryResponse,
+          )
+          print('All imports OK')
+          print(f'Routes: {len(app.routes)} registered')
+          "
